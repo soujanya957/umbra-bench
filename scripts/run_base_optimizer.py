@@ -198,6 +198,12 @@ def main():
     p.add_argument("--out", default=None)
     a = p.parse_args()
 
+    # Resolve paths against the launch directory before chdir'ing away from it, or a
+    # relative --out silently lands under the package root instead of the benchmark.
+    a.bench = os.path.abspath(a.bench)
+    if a.out:
+        a.out = os.path.abspath(a.out)
+
     ms = os.path.join(a.repo, "motion-aware-shadow")
     sys.path.insert(0, ms)
     sys.path.insert(0, os.path.join(ms, "targets"))
