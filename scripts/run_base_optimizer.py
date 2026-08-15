@@ -59,6 +59,96 @@ def save_mask(mask: np.ndarray, path: str):
     Image.fromarray(((1 - m) * 255).astype(np.uint8), "L").convert("1").save(path)
 
 
+def write_budget_md(
+    path: str, a, cfg: dict, rig: dict, n_targets: int, repo: str, note: str = ""
+):
+    """Record what this sweep actually cost, next to its results.
+
+    A results folder whose settings live only in a shell history is not comparable
+    against anything later. The render count is derived from the same numbers the
+    optimizer uses, so the estimate moves whenever the config does.
+    """
+    n_arm = 6
+    n_rob = rig["n_robots"]
+    ph_pop = max(32, cfg["popsize"])
+    hung = n_rob * n_rob * 8
+    init = 16 * n_rob
+    ph1 = a.phase1_iters * n_rob * ph_pop
+    ph2 = a.phase2_iters * n_rob * ph_pop if n_rob > 1 else 0
+    fin_iters = a.final_iters if a.adaptive_final is False else max(12, round(a.final_iters * 0.55))
+    fin = fin_iters * cfg["popsize"]
+    fd = 180
+    total = hung + init + ph1 + ph2 + fin + fd
+
+    import subprocess
+
+    try:
+        sha = subprocess.check_output(
+            ["git", "-C", repo, "rev-parse", "--short", "HEAD"], text=True
+        ).strip()
+    except Exception:
+        sha = "unknown"
+
+    with open(path, "w") as f:
+        f.write(
+            f"""# Budget — `{os.path.basename(os.path.dirname(path))}`
+
+Generated {time.strftime("%Y-%m-%d %H:%M:%S %Z")} on `{os.uname().nodename}`,
+fleet-shadow-art @ `{sha}`.
+{note}
+## Optimizer
+
+| setting | value |
+|---|---|
+| popsize | {cfg["popsize"]} |
+| phase1_iters (per robot, {n_arm}-D) | {a.phase1_iters} |
+| phase2_iters (per robot, {n_arm}-D) | {a.phase2_iters} |
+| final_iters (joint, {n_rob * n_arm}-D) | {a.final_iters} |
+| adaptive_final | {a.adaptive_final} |
+| floor / collision / self-collision penalty | {a.floor_penalty} / {a.collision_penalty} / {a.self_collision_penalty} |
+| n_workers per process | {a.n_workers} |
+
+## Renders per solve (derived)
+
+| stage | renders |
+|---|---|
+| Hungarian pre-assignment | {hung:,} |
+| init sampling | {init:,} |
+| phase 1 — forward greedy | {ph1:,} |
+| phase 2 — backward pass | {ph2:,} |
+| final — joint refinement ({fin_iters} iters) | {fin:,} |
+| FD refinement | ~{fd:,} |
+| **total** | **~{total:,}** |
+
+## Sampling
+
+- {a.runs} independent solves per target, seeds `0…{a.runs - 1}`.
+- Targets finishing below **IoU {a.extra_below}** get **{a.extra_runs} extra** solves
+  (seeds `{a.runs}…{a.runs + a.extra_runs - 1}`), all of them, not stopping at the first
+  to clear the bar. `results.json` marks these with `"extra": true`.
+- Reported statistic is best-of-N. Within-target seed spread on this rig is
+  σ ≈ 0.022 IoU, so a single solve is a sample, not a measurement.
+
+## Rig
+
+| setting | value |
+|---|---|
+| robots | {n_rob} × SO-101 |
+| arm gap | {rig["arm_gap_m"]} m |
+| light-to-front / back-to-wall | {rig["light_to_front_m"]} / {rig["back_to_wall_m"]} (None = default) |
+| render size | {rig["render_size"]} px |
+| target deformation | {rig["distortion"]} |
+
+## Scale
+
+{n_targets} targets × {a.runs} runs ≈ **{n_targets * a.runs * total / 1e6:.1f}M renders**
+before extras.
+
+Subsets: {", ".join(a.subsets)}
+"""
+        )
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--repo", default=os.path.expanduser("~/dev/fleet-shadow-art"))
@@ -88,6 +178,22 @@ def main():
         help="Optimizer threads per process (0 = auto, which picks 8). Running S "
         "shards at W workers oversubscribes above S*W = core count",
     )
+    p.add_argument(
+        "--no-adaptive-final",
+        dest="adaptive_final",
+        action="store_false",
+        help="Spend the full --final-iters on the joint pass. By default the optimizer "
+        "shrinks it once a frame looks solved, which is right for sequences but caps "
+        "the one stage that searches all robots together — the thin part of a big budget",
+    )
+    p.add_argument(
+        "--extra-runs",
+        type=int,
+        default=0,
+        help="Extra solves granted to targets that finish below --extra-below. Restarts "
+        "are the only lever a fixed budget has on a target the search keeps missing",
+    )
+    p.add_argument("--extra-below", type=float, default=0.50)
     p.add_argument("--force", action="store_true")
     p.add_argument("--out", default=None)
     a = p.parse_args()
@@ -137,6 +243,7 @@ def main():
         collision_penalty=a.collision_penalty,
         self_collision_penalty=a.self_collision_penalty,
         n_workers=a.n_workers,
+        adaptive_final=a.adaptive_final,
     )
     rig = {
         "n_robots": n_robots,
@@ -146,6 +253,19 @@ def main():
         "render_size": a.size,
         "distortion": False,
     }
+
+    # One shard writes it, so parallel shards don't race on the same file.
+    if a.shard == 0:
+        os.makedirs(outroot, exist_ok=True)
+        n_all = sum(
+            len([f for f in os.listdir(os.path.join(a.bench, "targets", s)) if f.lower().endswith(".png")])
+            for s in a.subsets
+            if os.path.isdir(os.path.join(a.bench, "targets", s))
+        )
+        write_budget_md(
+            os.path.join(outroot, "BUDGET.md"), a, cfg_common, rig, n_all, a.repo
+        )
+        print(f"[shard 0] wrote {os.path.join(outroot, 'BUDGET.md')}", flush=True)
 
     t_start = time.time()
     done = 0
@@ -166,10 +286,10 @@ def main():
 
         runs, best_i, best_iou = [], -1, -1.0
         t0 = time.time()
-        for k in range(a.runs):
-            res = optimize_staged(
-                renderer, T, OptimizerConfig(seed=k, **cfg_common)
-            )
+
+        def do_run(k: int, extra: bool = False):
+            nonlocal best_i, best_iou
+            res = optimize_staged(renderer, T, OptimizerConfig(seed=k, **cfg_common))
             shadow = renderer.get_shadow_mask(res.best_q)
             iou = float(compute_iou(shadow, T))
             save_mask(shadow, os.path.join(odir, f"{stem}_run{k:02d}.png"))
@@ -180,12 +300,31 @@ def main():
                     "iou": round(iou, 4),
                     "loss": round(float(res.best_loss), 4),
                     "n_evals": int(res.n_evals),
+                    "extra": extra,
                     "q_rad": [round(float(v), 6) for v in res.best_q],
                 }
             )
             if iou > best_iou:
                 best_iou, best_i = iou, k
                 save_mask(shadow, os.path.join(odir, f"{stem}_best.png"))
+
+        for k in range(a.runs):
+            do_run(k)
+
+        # Targets the search keeps missing get more restarts. All granted extras are
+        # run, rather than stopping at the first one to clear the bar: stopping early
+        # would pile the reported scores up just above the threshold and make the
+        # low tail look like a cliff that is really an artefact of when we quit.
+        n_extra = 0
+        if a.extra_runs > 0 and best_iou < a.extra_below:
+            print(
+                f"[shard {a.shard}] {sub}/{stem} best={best_iou:.3f} "
+                f"< {a.extra_below} → {a.extra_runs} extra runs",
+                flush=True,
+            )
+            for k in range(a.runs, a.runs + a.extra_runs):
+                do_run(k, extra=True)
+                n_extra += 1
 
         ious = [r["iou"] for r in runs]
         with open(rjson, "w") as f:
@@ -197,7 +336,10 @@ def main():
                     "method": "base-optimizer",
                     "rig": rig,
                     "optimizer": cfg_common,
-                    "n_runs": a.runs,
+                    "n_runs": len(runs),
+                    "n_base_runs": a.runs,
+                    "n_extra_runs": n_extra,
+                    "extra_below": a.extra_below if a.extra_runs else None,
                     "best_run": best_i,
                     "best_iou": round(best_iou, 4),
                     "mean_iou": round(float(np.mean(ious)), 4),

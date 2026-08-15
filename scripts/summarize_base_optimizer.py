@@ -122,24 +122,27 @@ def main():
         print(f"    {s:<16} n={len(v):>4}  best_iou mean {v.mean():.3f}  "
               f"min {v.min():.3f}  max {v.max():.3f}")
 
-    if a.no_gallery:
-        return
-
-    gdir = os.path.join(out, "gallery")
-    os.makedirs(gdir, exist_ok=True)
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    made = []
-    for r in rows:
-        tgt_p = os.path.join(a.bench, r["target"])
-        sh_p = os.path.join(root, r["best_shadow_png"])
-        if not (os.path.exists(tgt_p) and os.path.exists(sh_p)):
-            continue
-        T = load_mask(tgt_p, a.size)
-        S = load_mask(sh_p, a.size)
+    # Rows whose images are actually on disk. Sheets are built from these directly, so
+    # `--no-gallery` skips only the per-target triptychs — those duplicate what
+    # make_best_runs.py writes, while the sheets have no equivalent there.
+    made = [
+        r
+        for r in rows
+        if os.path.exists(os.path.join(a.bench, r["target"]))
+        and os.path.exists(os.path.join(root, r["best_shadow_png"]))
+    ]
+
+    gdir = os.path.join(out, "gallery")
+    if not a.no_gallery:
+        os.makedirs(gdir, exist_ok=True)
+    for r in [] if a.no_gallery else made:
+        T = load_mask(os.path.join(a.bench, r["target"]), a.size)
+        S = load_mask(os.path.join(root, r["best_shadow_png"]), a.size)
         fig, ax = plt.subplots(1, 3, figsize=(6.6, 2.5))
         ax[0].imshow(T, cmap="gray_r")
         ax[0].set_title("target", fontsize=8)
@@ -161,14 +164,14 @@ def main():
         gp = os.path.join(gdir, f"{r['subset']}__{os.path.basename(r['shadow_name'])}.png")
         fig.savefig(gp, dpi=100)
         plt.close(fig)
-        made.append((r, gp))
-    print(f"\n[gallery] {len(made)} triptychs → {gdir}/")
+    if not a.no_gallery:
+        print(f"\n[gallery] {len(made)} triptychs → {gdir}/")
 
     # Contact sheets, sorted by IoU: the fast way to find where quality falls off.
     sdir = os.path.join(out, "sheets")
     os.makedirs(sdir, exist_ok=True)
-    for s in sorted({r["subset"] for r, _ in made}):
-        items = [(r, g) for r, g in made if r["subset"] == s]
+    for s in sorted({r["subset"] for r in made}):
+        items = [r for r in made if r["subset"] == s]
         cols = a.sheet_cols
         n = len(items)
         rws = (n + cols - 1) // cols
@@ -180,7 +183,7 @@ def main():
             if k >= n:
                 ax.axis("off")
                 continue
-            r, _ = items[k]
+            r = items[k]
             T = load_mask(os.path.join(a.bench, r["target"]), a.size)
             S = load_mask(os.path.join(root, r["best_shadow_png"]), a.size)
             ov = np.zeros((*T.shape, 3), np.float32)
