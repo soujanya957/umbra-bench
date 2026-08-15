@@ -276,8 +276,13 @@ def compose(size: tuple[int, int], head: Image.Image, body: list[Image.Image],
     flicker in a loop.
     """
     width, height = size
-    f = _font(max(11, round(width * 0.017)))
-    line = round(f.size * 1.6)
+    base = _font(max(11, round(width * 0.017)))
+    # The reserved height comes from the base size and the drawn size may be smaller:
+    # a caption that has to shrink to fit must not also move the filmstrip up.
+    line = round(base.size * 1.6)
+    f = base
+    while f.size > 9 and f.getlength(caption) > width - 2 * pad:
+        f = _font(f.size - 1)
     img = Image.new("RGB", size, BG)
     img.paste(head, (0, 0))
 
