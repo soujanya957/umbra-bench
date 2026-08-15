@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Run the base UMBRA optimizer over the benchmark: N independent solves per target.
 
-"Base" means the optimizer as it stands — staged CMA-ES, no target deformation. Each
+"Base" means the optimizer as it stands — staged CMA-ES, target dropped in at canvas
+scale, dead centre. `--fit-target` adds the one intervention that survived the
+distortion study: a similarity transform (uniform scale + translation) placing the
+target where the rig can actually cast it. Proportions never change, so recognizability
+is preserved by construction. It is a separate condition and must go to its own --out;
+IoU is then recorded against both the shown and the authored target. Each
 target is solved `--runs` times from different seeds, because a single CMA-ES run is
 a sample, not a measurement: on this rig the same target with the same budget spans
 ~0.09 IoU across three seeds. Reporting one number per target would be reporting
@@ -137,7 +142,8 @@ fleet-shadow-art @ `{sha}`.
 | arm gap | {rig["arm_gap_m"]} m |
 | light-to-front / back-to-wall | {rig["light_to_front_m"]} / {rig["back_to_wall_m"]} (None = default) |
 | render size | {rig["render_size"]} px |
-| target deformation | {rig["distortion"]} |
+| target deformation (free-form warp) | {rig["distortion"]} |
+| target fit (similarity transform) | {rig["target_fit"]} |
 
 ## Scale
 
@@ -194,9 +200,37 @@ def main():
         "are the only lever a fixed budget has on a target the search keeps missing",
     )
     p.add_argument("--extra-below", type=float, default=0.50)
+    p.add_argument(
+        "--fit-target",
+        action="store_true",
+        help="Place each target with a similarity transform (uniform scale + shift) "
+        "into the rig's reachable support before solving. Proportions never change, "
+        "so a smaller, higher 'B' is still a 'B' — unlike the free-form warp in "
+        "target_warp.py there is no fidelity traded away. Writes to a SEPARATE --out",
+    )
+    p.add_argument("--fit-scale-min", type=float, default=0.35)
+    p.add_argument("--fit-scale-max", type=float, default=1.60)
+    p.add_argument("--fit-max-shift", type=float, default=0.22)
+    p.add_argument("--fit-scale-penalty", type=float, default=0.0)
+    p.add_argument("--fit-n-scales", type=int, default=14)
+    p.add_argument("--fit-n-shifts", type=int, default=15)
+    p.add_argument(
+        "--reach-samples",
+        type=int,
+        default=300,
+        help="Forward-kinematics samples used to build the reachability map. A property "
+        "of the rig, not of any target, so it is built once per process",
+    )
     p.add_argument("--force", action="store_true")
     p.add_argument("--out", default=None)
     a = p.parse_args()
+
+    # The fit runs are a different experimental condition, not more rows of the same
+    # one. Sharing an output folder would silently mix them and make the resume check
+    # skip fit targets because the no-fit results.json already exists.
+    if a.fit_target and not a.out:
+        p.error("--fit-target changes the condition; pass an explicit --out so it "
+                "does not land on top of the no-fit results")
 
     # Resolve paths against the launch directory before chdir'ing away from it, or a
     # relative --out silently lands under the package root instead of the benchmark.
@@ -240,6 +274,15 @@ def main():
     renderer = ShadowRenderer(model, data, size=a.size, n_robots=n_robots)
     print(f"[shard {a.shard}] n_dof={renderer.n_dof} arm_gap={a.arm_gap}", flush=True)
 
+    reach = support = None
+    if a.fit_target:
+        from reachability import build_reachability_map, uncastable_fraction
+        from target_fit import fit_target
+
+        reach = build_reachability_map(renderer, n_samples=a.reach_samples)
+        support = reach.support()
+        print(f"[shard {a.shard}] reach map ready ({a.reach_samples} samples)", flush=True)
+
     cfg_common = dict(
         popsize=a.popsize,
         phase1_iters=a.phase1_iters,
@@ -258,6 +301,18 @@ def main():
         "back_to_wall_m": a.back_to_wall,
         "render_size": a.size,
         "distortion": False,
+        "target_fit": (
+            {
+                "scale_range": [a.fit_scale_min, a.fit_scale_max],
+                "max_shift_frac": a.fit_max_shift,
+                "scale_penalty": a.fit_scale_penalty,
+                "n_scales": a.fit_n_scales,
+                "n_shifts": a.fit_n_shifts,
+                "reach_samples": a.reach_samples,
+            }
+            if a.fit_target
+            else False
+        ),
     }
 
     # One shard writes it, so parallel shards don't race on the same file.
@@ -285,10 +340,35 @@ def main():
         os.makedirs(odir, exist_ok=True)
 
         try:
-            T = load_target(tpath, a.size)
+            T0 = load_target(tpath, a.size)
         except Exception as e:
             print(f"[shard {a.shard}] SKIP {sub}/{stem}: {e}", flush=True)
             continue
+
+        # T is what the solver is shown; T0 is the target as authored. With --fit-target
+        # they differ by a similarity transform, so IoU is recorded against both: vs
+        # shown is what the rig was asked to reproduce, vs original keeps the placement
+        # visible instead of hiding it inside the headline number.
+        T, fit_info = T0, None
+        if a.fit_target:
+            fit = fit_target(
+                T0, reach,
+                scale_range=(a.fit_scale_min, a.fit_scale_max),
+                n_scales=a.fit_n_scales,
+                max_shift_frac=a.fit_max_shift,
+                n_shifts=a.fit_n_shifts,
+                scale_penalty=a.fit_scale_penalty,
+                verbose=False,
+            )
+            T = fit.target
+            fit_info = dict(fit.as_dict())
+            fit_info["uncastable_before"] = round(
+                float(uncastable_fraction(T0, support)), 5
+            )
+            fit_info["uncastable_after"] = round(
+                float(uncastable_fraction(T, support)), 5
+            )
+            save_mask(T, os.path.join(odir, f"{stem}_shown.png"))
 
         runs, best_i, best_iou = [], -1, -1.0
         t0 = time.time()
@@ -304,6 +384,7 @@ def main():
                     "run": k,
                     "seed": k,
                     "iou": round(iou, 4),
+                    "iou_vs_original": round(float(compute_iou(shadow, T0)), 4),
                     "loss": round(float(res.best_loss), 4),
                     "n_evals": int(res.n_evals),
                     "extra": extra,
@@ -339,8 +420,9 @@ def main():
                     "id": f"{sub}_{stem}",
                     "subset": sub,
                     "target": os.path.relpath(tpath, a.bench),
-                    "method": "base-optimizer",
+                    "method": "base-optimizer" + ("+fit" if a.fit_target else ""),
                     "rig": rig,
+                    "fit": fit_info,
                     "optimizer": cfg_common,
                     "n_runs": len(runs),
                     "n_base_runs": a.runs,
@@ -348,7 +430,13 @@ def main():
                     "extra_below": a.extra_below if a.extra_runs else None,
                     "best_run": best_i,
                     "best_iou": round(best_iou, 4),
+                    "best_iou_vs_original": round(
+                        float(max(r["iou_vs_original"] for r in runs)), 4
+                    ),
                     "mean_iou": round(float(np.mean(ious)), 4),
+                    "mean_iou_vs_original": round(
+                        float(np.mean([r["iou_vs_original"] for r in runs])), 4
+                    ),
                     "std_iou": round(float(np.std(ious)), 4),
                     "min_iou": round(float(np.min(ious)), 4),
                     "seconds": round(time.time() - t0, 1),
@@ -363,7 +451,14 @@ def main():
         print(
             f"[shard {a.shard}] {done}/{len(jobs)} {sub}/{stem}  "
             f"best={best_iou:.3f} mean={np.mean(ious):.3f}±{np.std(ious):.3f}  "
-            f"{time.time() - t0:.0f}s  eta {eta / 3600:.1f}h",
+            + (
+                f"fit(s={fit_info.get('scale')}, unc "
+                f"{100 * fit_info['uncastable_before']:.0f}%→"
+                f"{100 * fit_info['uncastable_after']:.0f}%)  "
+                if fit_info
+                else ""
+            )
+            + f"{time.time() - t0:.0f}s  eta {eta / 3600:.1f}h",
             flush=True,
         )
 

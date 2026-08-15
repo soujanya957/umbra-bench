@@ -96,6 +96,15 @@ def main():
             "n_robots": r["rig"]["n_robots"],
             "arm_gap_m": r["rig"]["arm_gap_m"],
             "seconds": r.get("seconds"),
+            # Present only for --fit-target runs; blank elsewhere so the two conditions
+            # produce the same columns and can be joined on shadow_name.
+            "best_iou_vs_original": r.get("best_iou_vs_original", ""),
+            "mean_iou_vs_original": r.get("mean_iou_vs_original", ""),
+            "fit_scale": (r.get("fit") or {}).get("scale", ""),
+            "fit_dx": (r.get("fit") or {}).get("dx", ""),
+            "fit_dy": (r.get("fit") or {}).get("dy", ""),
+            "uncastable_before": (r.get("fit") or {}).get("uncastable_before", ""),
+            "uncastable_after": (r.get("fit") or {}).get("uncastable_after", ""),
             "best_shadow_png": os.path.join(r["subset"], stem, stem + "_best.png"),
             "q_rad_json": json.dumps([round(float(v), 6) for v in q]),
         }
