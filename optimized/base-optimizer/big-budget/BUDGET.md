@@ -1,6 +1,6 @@
 # Budget — `big-budget`
 
-Generated 2026-08-15 10:54:28 EDT on `dutchman`,
+Generated 2026-08-15 15:45:01 EDT on `dutchman`,
 fleet-shadow-art @ `d964173`.
 
 ## Optimizer
