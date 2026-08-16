@@ -27,7 +27,7 @@ from PIL import Image, ImageDraw
 import make_phrase_gif as P
 from make_phrase_gif import (BG, ACCENT, MUTED, _font, banner, choose_results, compose,
                              filmstrip, find_glyph, load_mask, overlay_panel, panel,
-                             save_gif)
+                             resolve_sweep, save_gif)
 
 _BENCH = P._BENCH
 
@@ -95,14 +95,13 @@ def main():
     a = p.parse_args()
 
     letters = a.letters
-    root = os.path.join(_BENCH, "optimized", "base-optimizer")
     if a.results:
-        results = a.results
+        results = resolve_sweep(a.results)
     else:
         # Both cases of every letter must be present, so the probe phrase is both cases.
-        results = choose_results([os.path.join(root, s) for s in a.prefer],
+        results = choose_results([resolve_sweep(s) for s in a.prefer],
                                  letters + letters.upper(), a.font, a.best_font)
-        print(f"[sweep] {os.path.relpath(results, _BENCH)}")
+    print(f"[sweep] {os.path.relpath(results, _BENCH)}")
     out_dir = a.out_dir or os.path.join(results, "phrases")
     os.makedirs(out_dir, exist_ok=True)
 
@@ -114,12 +113,20 @@ def main():
         print(f"[pair] {ch}{ch.upper()}  {l['iou']:.3f} / {u['iou']:.3f}")
     print(f"[mean] lowercase {lo:.3f}  uppercase {up:.3f}")
 
+    flat = [g for pair in pairs for g in pair]
+    fitted = any(g["fitted"] for g in flat)
+    third = (f"{2 * len(pairs)} glyphs · {a.font} · mean best-of-N IoU"
+             f" — lowercase {lo:.3f} · uppercase {up:.3f}")
+    if fitted:
+        # Same caveat the phrase banner carries: on a fitted sweep the number is against
+        # a target that was moved, and the move is the experiment.
+        s = [g["scale"] for g in flat if g["scale"]]
+        third += f" · targets placed into reach (×{min(s):.2f}–×{max(s):.2f})"
     head_lines = [
         f"UMBRA — {letters[0]}{letters[0].upper()} … {letters[-1]}{letters[-1].upper()},"
         " every letter in both cases, cast by 3× SO-101",
         P.budget_caption(results)[1],
-        f"{2 * len(pairs)} glyphs · {a.font} · mean best-of-N IoU"
-        f" — lowercase {lo:.3f} · uppercase {up:.3f}",
+        third,
     ]
 
     # The index strip is the alphabet as targets, not as shadows: it is there to say
@@ -175,7 +182,8 @@ def main():
                     panels = [label_over(im, t, lf) for im, t in
                               zip(panels, ["target", "robot shadow", "overlay"])]
                 rows.append(row(panels, labels[g["char"]], cf, label_w, gap))
-            cap = (f"{l['subset']}/{l['stem']}   ·   {u['subset']}/{u['stem']}"
+            placed = f"      placed ×{l['scale']:.2f} / ×{u['scale']:.2f}" if fitted else ""
+            cap = (f"{l['subset']}/{l['stem']}   ·   {u['subset']}/{u['stem']}{placed}"
                    "      cyan missed · magenta spill · blue agreement")
             frames.append(compose(size, head, [stack(rows, gap)],
                                   filmstrip(items, idx, a.cell, i), cap, pad))

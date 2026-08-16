@@ -89,7 +89,15 @@ def main():
         if a.min_iou is not None and iou < a.min_iou:
             continue
         src = os.path.join(root, sub, stem, f"{stem}_best.png")
-        tgt_p = os.path.join(a.bench, r["target"])
+        # A fitted sweep solves for a placed copy of the target — same proportions,
+        # moved and scaled into the rig's reach — and scores against that copy. The
+        # runner writes it as <stem>_shown.png, and it is the only honest thing to put
+        # a shadow next to: pairing the shadow with the unplaced original would show a
+        # mismatch the optimizer was never asked to close, under a score that measured
+        # something else.
+        shown = os.path.join(root, sub, stem, f"{stem}_shown.png")
+        fitted = os.path.exists(shown)
+        tgt_p = shown if fitted else os.path.join(a.bench, r["target"])
         if not (os.path.exists(src) and os.path.exists(tgt_p)):
             print(f"[skip] {sub}/{stem}: missing shadow or target")
             continue
@@ -99,7 +107,10 @@ def main():
         T, S = load_mask(tgt_p, a.size), load_mask(src, a.size)
         fig, ax = plt.subplots(1, 3, figsize=(6.6, 2.6))
         ax[0].imshow(T, cmap="gray_r")
-        ax[0].set_title("target", fontsize=8)
+        f = r.get("fit") or {}
+        ax[0].set_title(
+            f"target — fitted ×{f['scale']:.2f}" if fitted else "target", fontsize=8
+        )
         ax[1].imshow(S, cmap="gray_r")
         ax[1].set_title("robot silhouette", fontsize=8)
         ov = np.zeros((*T.shape, 3), np.float32)
@@ -109,13 +120,22 @@ def main():
         for x in ax:
             x.set_xticks([])
             x.set_yticks([])
-        fig.suptitle(
+        # On a fitted sweep the headline IoU is against the placed target, so the
+        # unplaced score rides along in the title: without it the two conditions look
+        # directly comparable in a folder listing, and they are not.
+        title = (
             f"{sub}/{stem}      IoU {iou:.3f}"
-            f"      (10 runs: mean {r['mean_iou']:.3f} ± {r['std_iou']:.3f},"
-            f" min {r['min_iou']:.3f})",
-            fontsize=9,
+            f"      ({r['n_runs']} runs: mean {r['mean_iou']:.3f} ± {r['std_iou']:.3f},"
+            f" min {r['min_iou']:.3f})"
         )
-        fig.tight_layout(rect=[0, 0, 1, 0.93])
+        # A second line rather than a longer one: the fitted note runs the single-line
+        # title past the figure width, and a clipped title loses the sample size at one
+        # end and the caveat at the other.
+        if fitted and r.get("best_iou_vs_original") is not None:
+            title += (f"\nplaced ×{f['scale']:.2f}, shift ({f['dx']:+.0f}, {f['dy']:+.0f}) px"
+                      f"  —  IoU against the unplaced target {r['best_iou_vs_original']:.3f}")
+        fig.suptitle(title, fontsize=9 if not fitted else 8)
+        fig.tight_layout(rect=[0, 0, 1, 0.93 if not fitted else 0.88])
         # IoU-first, zero-padded: filename sort == quality sort.
         name = f"iou{int(round(iou * 1000)):04d}__{sub}__{stem}.png"
         fig.savefig(os.path.join(out, name), dpi=a.dpi)

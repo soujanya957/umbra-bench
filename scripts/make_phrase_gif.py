@@ -89,6 +89,20 @@ def covers(results: str, phrase: str, font: str, best_font: bool) -> bool:
     return True
 
 
+def resolve_sweep(name: str) -> str:
+    """A sweep given by name or by path.
+
+    Sweeps have landed in two places — `optimized/base-optimizer/<name>` for the budget
+    series and `optimized/<name>` for later conditions — so a bare name is searched for
+    in both rather than requiring the caller to know which run went where.
+    """
+    for cand in (name, os.path.join(_BENCH, "optimized", "base-optimizer", name),
+                 os.path.join(_BENCH, "optimized", name)):
+        if os.path.isdir(cand):
+            return cand
+    return name
+
+
 def choose_results(prefer: list[str], phrase: str, font: str, best_font: bool) -> str:
     """The first sweep in `prefer` that can spell the phrase.
 
@@ -126,13 +140,24 @@ def find_glyph(results: str, ch: str, font: str, best_font: bool) -> dict:
     else:
         stem, r = exact[0]
 
+    # A fitted sweep scores against a placed copy of the target — same proportions,
+    # scaled and shifted into the rig's reach — which the runner saves as
+    # <stem>_shown.png. That copy is what the reported IoU measures and what the shadow
+    # was aimed at, so it is the target these frames must show; pairing the shadow with
+    # the unplaced original would put a headline number next to a comparison it did not
+    # come from.
+    shown = os.path.join(d, stem, f"{stem}_shown.png")
+    fit = r.get("fit") or {}
     return {
         "char": ch,
         "subset": sub,
         "stem": stem,
         "iou": r["best_iou"],
         "shadow": os.path.join(d, stem, f"{stem}_best.png"),
-        "target": os.path.join(_BENCH, r["target"]),
+        "target": shown if os.path.exists(shown) else os.path.join(_BENCH, r["target"]),
+        "fitted": os.path.exists(shown),
+        "scale": fit.get("scale"),
+        "iou_unplaced": r.get("best_iou_vs_original"),
     }
 
 
@@ -173,11 +198,17 @@ def framed(img: Image.Image, color, width: int) -> Image.Image:
 def caption_lines(results: str, phrase: str, glyphs: list[dict], font: str, best_font: bool):
     mean = sum(g["iou"] for g in glyphs) / len(glyphs)
     face = "best-scoring variant per glyph" if best_font else font
-    return [
-        f"UMBRA — “{phrase}” cast by 3× SO-101",
-        budget_caption(results)[1],
-        f"{len(glyphs)} glyphs · {face} · mean best-of-N IoU {mean:.3f}",
-    ]
+    third = f"{len(glyphs)} glyphs · {face} · mean best-of-N IoU {mean:.3f}"
+    # On a fitted sweep the headline mean is against placed targets, and the placement
+    # is the experiment — a banner that only quoted the higher number would read as the
+    # optimizer having improved, when what changed is where the letter was asked to go.
+    if any(g["fitted"] for g in glyphs):
+        s = [g["scale"] for g in glyphs if g["scale"]]
+        unplaced = [g["iou_unplaced"] for g in glyphs if g["iou_unplaced"] is not None]
+        third += f" against targets placed into reach (×{min(s):.2f}–×{max(s):.2f})"
+        if unplaced:
+            third += f" · {sum(unplaced) / len(unplaced):.3f} against the unplaced targets"
+    return [f"UMBRA — “{phrase}” cast by 3× SO-101", budget_caption(results)[1], third]
 
 
 def banner(width: int, lines: list[str]) -> Image.Image:
@@ -188,11 +219,15 @@ def banner(width: int, lines: list[str]) -> Image.Image:
     size = max(9, round(width * 0.018))
     pad = max(4, size // 2)
     fonts = [_font(round(size * 1.3)), _font(size), _font(size)]
+    # Heights come from the base sizes and stay put; only the drawn size gives way, so
+    # a long line shrinks instead of running off the edge and taking its caveat with it.
     heights = [round(f.size * 1.5) for f in fonts]
     img = Image.new("RGB", (width, sum(heights) + 2 * pad), BG)
     d = ImageDraw.Draw(img)
     y = pad
     for text, f, h, color in zip(lines, fonts, heights, [(255, 255, 255), ACCENT, MUTED]):
+        while f.size > 8 and f.getlength(text) > width - 4 * pad:
+            f = _font(f.size - 1)
         d.text((pad * 2, y), text, font=f, fill=color)
         y += h
     return img
@@ -332,13 +367,12 @@ def main():
     p.add_argument("--only", choices=["shadows", "overlay"], default=None)
     a = p.parse_args()
 
-    root = os.path.join(_BENCH, "optimized", "base-optimizer")
     if a.results:
-        results = a.results
+        results = resolve_sweep(a.results)
     else:
-        results = choose_results([os.path.join(root, s) for s in a.prefer],
+        results = choose_results([resolve_sweep(s) for s in a.prefer],
                                  a.phrase, a.font, a.best_font)
-        print(f"[sweep] {os.path.relpath(results, _BENCH)}")
+    print(f"[sweep] {os.path.relpath(results, _BENCH)}")
     out_dir = a.out_dir or os.path.join(results, "phrases")
     os.makedirs(out_dir, exist_ok=True)
     slug = "".join(c if c.isalnum() else "-" for c in a.phrase).strip("-").lower()
@@ -393,8 +427,9 @@ def main():
         for i, g in zip(idx, glyphs):
             T, Sh = load_mask(g["target"], P), load_mask(g["shadow"], P)
             body = []
+            tlabel = f"target — placed ×{g['scale']:.2f}" if g["fitted"] else "target"
             for img, text in zip([panel(T), panel(Sh), overlay_panel(T, Sh)],
-                                 ["target", "robot shadow", "overlay"]):
+                                 [tlabel, "robot shadow", "overlay"]):
                 b = Image.new("RGB", (img.width, img.height + label_h), BG)
                 ImageDraw.Draw(b).text((img.width // 2, 0), text, font=lf, fill=ACCENT, anchor="ma")
                 b.paste(img, (0, label_h))
