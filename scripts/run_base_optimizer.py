@@ -368,6 +368,11 @@ def main():
             fit_info["uncastable_after"] = round(
                 float(uncastable_fraction(T, support)), 5
             )
+            # All three masks live together so a folder is self-contained: what was
+            # authored, what the solver was actually shown, and what the rig cast.
+            # Comparing a shadow against the wrong one of the first two is the easiest
+            # way to misread this experiment.
+            save_mask(T0, os.path.join(odir, f"{stem}_original.png"))
             save_mask(T, os.path.join(odir, f"{stem}_shown.png"))
 
         runs, best_i, best_iou = [], -1, -1.0
