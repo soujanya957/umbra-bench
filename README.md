@@ -59,14 +59,57 @@ external/             raw third-party downloads (gitignored; see its README)
 
 All targets are 1-bit PNGs, **black shape on white background**, 512×512,
 centered with 10% margin. Every target has a record in `metadata.jsonl` with its
-prompt, auto-computed shape attributes (holes, stroke width, solidity, ...), and
-slots for the three shadow captures — `null` until captured. Full schema and
-workflow: [DATASET.md](DATASET.md). Credits for third-party data: [CITATIONS.md](CITATIONS.md).
+prompt, auto-computed shape attributes, and slots for the three shadow captures —
+`null` until captured. Full schema and workflow: [DATASET.md](DATASET.md).
+Credits for third-party data: [CITATIONS.md](CITATIONS.md).
 
 To find a specific target: filenames are `<class>_<variant>.png` under
 `targets/<subset>/`, and each metadata record's `target` field holds the
 repo-relative path.
 
+## Shape attributes
+
+Each target carries 33 auto-computed attributes in four groups. Full definitions,
+ranges and the reason each one exists: [METRICS.md](METRICS.md), Part A.
+
+| group | attributes | what it captures |
+| --- | --- | --- |
+| scale & geometry | `area_frac` `aspect_ratio` `solidity` `compactness` `convexity_defect_depth_rel` | size and concavity |
+| thinness | `min_stroke_width_rel` `median_stroke_width_rel` `stroke_width_ratio` `thin_mass_frac` `elongation` `skel_len_rel` `neck_width_rel` `closed_region` | how much of the shape is thin — the dominant difficulty axis, and most of what IoU is actually measuring |
+| topology | `n_components` `n_holes` `n_holes_signif` `euler_number` `hole_area_frac` `hole_area_frac_max` `ph_n_holes_robust` `ph_hole_max_size` `ph_holes_total_size` `ph_n_pockets_robust` `ph_pocket_max_mouth` `ph_h0_total` `ph_n_parts_robust` `ph_entropy` | holes, parts and pockets — counted discretely *and* by persistent homology, so a one-pixel flip cannot change the answer |
+| structure | `n_limbs` `n_junctions` `n_concave_extrema` `sym_h` `sym_v` `contour_hf_energy` | protrusions, branching, symmetry, boundary detail |
+
+Discrete counts come with area-thresholded companions because the raw ones are
+noisy on curated third-party silhouettes — the MPEG-7 `horse` target has 18 holes,
+all of them binarization litter under 0.06% of its area (`n_holes_signif` = 0).
+
+The same function runs on shadow masks, so target-minus-shadow deltas
+(`d_n_holes_signif`, `d_n_limbs`, `d_median_stroke_width_rel`, …) are directly
+interpretable error metrics.
+
+## Evaluation
+
+IoU alone is misleading here: across the 546-target big-budget sweep it correlates
+ρ = +0.64 with median stroke width and +0.51 with area fraction, so it largely
+measures **how fat the target is**. The top-scoring samples are `hcircle`, `jar`
+and `bell` — convex blobs, the first from the subset defined by having *no*
+semantic content — while `vehicles` peaks at 0.686 because wheels are thin. Hole
+count barely moves it (ρ = −0.15), so filling both eyes of an `8` is nearly free.
+
+[METRICS.md](METRICS.md) defines the full metric set and what each one answers:
+overlap, boundary (`boundary_iou`, `nsd`, `chamfer`, `hd95`), thin structure
+(`cldice`), topology (`betti_error`, persistence-diagram Wasserstein), limb
+placement, classical shape descriptors, recognizability (CLIP retrieval, VLM
+naming, human study), and physical-world metrics.
+
+```
+python scripts/compute_metrics.py --results optimized/base-optimizer/big-budget
+```
+
+writes `results/metrics_<sweep>.csv` — one row per sample with target attributes,
+shadow attributes, their deltas and every pairwise metric side by side.
+
 ## Status
 
-Early. Targets + metadata done (546 samples). Collecting shadow captures.
+Early. Targets + metadata done (546 samples). Attribute and metric definitions
+done ([METRICS.md](METRICS.md)). Collecting shadow captures.
