@@ -221,6 +221,14 @@ def main():
         help="Forward-kinematics samples used to build the reachability map. A property "
         "of the rig, not of any target, so it is built once per process",
     )
+    p.add_argument(
+        "--only-file",
+        default=None,
+        help="Restrict to the targets listed in this file, one 'subset/stem' per "
+        "line ('#' comments ignored) -- e.g. splits/bench40.txt. Ablations that "
+        "cannot afford all 546 should share one named split rather than each "
+        "sampling its own, so their numbers stay comparable",
+    )
     p.add_argument("--force", action="store_true")
     p.add_argument("--out", default=None)
     a = p.parse_args()
@@ -250,6 +258,17 @@ def main():
     outroot = a.out or os.path.join(a.bench, "optimized", "base-optimizer")
 
     # ── Collect work ─────────────────────────────────────────────────────────
+    only = None
+    if a.only_file:
+        only = set()
+        for line in open(a.only_file):
+            line = line.split("#", 1)[0].strip()
+            if line:
+                only.add(line)
+        # A split names targets, not subsets; honour it over --subsets rather
+        # than intersecting, or a default --subsets silently truncates the split.
+        a.subsets = sorted({x.split("/", 1)[0] for x in only})
+
     jobs = []
     for sub in a.subsets:
         d = os.path.join(a.bench, "targets", sub)
@@ -257,8 +276,14 @@ def main():
             print(f"[!] missing subset {d}", flush=True)
             continue
         for fn in sorted(os.listdir(d)):
-            if fn.lower().endswith(".png"):
-                jobs.append((sub, os.path.join(d, fn)))
+            if not fn.lower().endswith(".png"):
+                continue
+            if only is not None and f"{sub}/{os.path.splitext(fn)[0]}" not in only:
+                continue
+            jobs.append((sub, os.path.join(d, fn)))
+    if only is not None and len(jobs) != len(only):
+        print(f"[!] split lists {len(only)} targets but {len(jobs)} resolved on disk",
+              flush=True)
     jobs = [j for i, j in enumerate(jobs) if i % a.num_shards == a.shard]
     print(f"[shard {a.shard}/{a.num_shards}] {len(jobs)} targets × {a.runs} runs", flush=True)
 
