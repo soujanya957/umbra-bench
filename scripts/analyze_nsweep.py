@@ -91,6 +91,8 @@ def main():
 
 
 def make_fig(by, ns, outdir):
+    """Three panels, because the headline is a disagreement between two metrics
+    and the disagreement has a mechanism worth showing."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -101,43 +103,62 @@ def make_fig(by, ns, outdir):
         "figure.dpi": 200, "savefig.bbox": "tight", "savefig.pad_inches": 0.02,
         "axes.linewidth": 0.6, "font.family": "sans-serif",
     })
-    C_IOU, C_SEC, C_ORIG = "#0072B2", "#D55E00", "#009E73"
+    C_FIT, C_ORIG, C_SC = "#0072B2", "#009E73", "#D55E00"
 
-    fig, axes = plt.subplots(1, 2, figsize=(7.16, 2.0),
-                             gridspec_kw=dict(width_ratios=[1.0, 1.0], wspace=0.55))
+    fig, axes = plt.subplots(1, 3, figsize=(7.16, 2.05),
+                             gridspec_kw=dict(width_ratios=[1.05, 0.85, 1.05],
+                                              wspace=0.62))
     x = np.arange(len(ns))
 
+    # (a) the two metrics disagree about where arms stop paying
     ax = axes[0]
     b = [np.mean([r["best_iou"] for r in by[n]]) for n in ns]
     be = [sem([r["best_iou"] for r in by[n]]) for n in ns]
-    ax.errorbar(x, b, yerr=be, fmt="o-", color=C_IOU, lw=1.3, ms=4, capsize=2.5,
+    ax.errorbar(x, b, yerr=be, fmt="o-", color=C_FIT, lw=1.3, ms=4, capsize=2.5,
                 label="vs fitted target")
     o = [np.mean([r["best_vs_original"] for r in by[n]]) for n in ns]
     oe = [sem([r["best_vs_original"] for r in by[n]]) for n in ns]
     ax.errorbar(x, o, yerr=oe, fmt="s--", color=C_ORIG, lw=1.2, ms=3.5, capsize=2.5,
-                label="vs original target")
-    ax.set_xticks(x); ax.set_xticklabels([f"{n}" for n in ns])
+                label="vs target as authored")
+    ax.set_xticks(x); ax.set_xticklabels([str(n) for n in ns])
     ax.set_xlabel("arms $N$"); ax.set_ylabel("best IoU")
     ax.set_ylim(0, 1.0)
-    ax.legend(frameon=False, loc="center right", handletextpad=0.4)
-    ax.set_title("(a) quality saturates by $N{=}3$", loc="left")
+    ax.legend(frameon=False, loc="upper left", handletextpad=0.4, fontsize=6.0)
+    ax.set_title("(a) saturation is a property\nof the metric, not the fleet",
+                 loc="left")
 
+    # (b) mechanism: a bigger fleet is allowed to keep the target bigger
     ax = axes[1]
+    sc = [np.mean([r["fit_scale"] for r in by[n] if r["fit_scale"]]) for n in ns]
+    sce = [sem([r["fit_scale"] for r in by[n] if r["fit_scale"]]) for n in ns]
+    ax.errorbar(x, sc, yerr=sce, fmt="D-", color=C_SC, lw=1.3, ms=3.5, capsize=2.5)
+    ax.axhline(1.0, color="k", lw=0.7, ls=":")
+    ax.text(0.05, 1.01, "target kept at\nauthored size", fontsize=5.6, va="bottom")
+    ax.set_xticks(x); ax.set_xticklabels([str(n) for n in ns])
+    ax.set_xlabel("arms $N$"); ax.set_ylabel("fit scale")
+    ax.set_title("(b) small fleets shrink\nthe target to fit", loc="left")
+
+    # (c) per-target marginal value, both metrics
+    ax = axes[2]
     ids = sorted({r["id"] for n in ns for r in by[n]})
-    for i in range(1, len(ns)):
-        lo, hi = ns[i - 1], ns[i]
-        dl = {r["id"]: r["best_iou"] for r in by[lo]}
-        dh = {r["id"]: r["best_iou"] for r in by[hi]}
-        d = [dh[k] - dl[k] for k in ids if k in dl and k in dh]
-        ax.scatter(np.full(len(d), i - 1) + np.random.default_rng(i).normal(0, .06, len(d)),
-                   d, s=6, color="0.3", alpha=0.55, lw=0)
-        ax.errorbar(i - 1, np.mean(d), yerr=sem(d), fmt="o", color=C_SEC, ms=5,
-                    capsize=3, zorder=5)
-    ax.axhline(0, color="k", lw=0.7, ls="--")
+    w = 0.36
+    for j, (key, col, lab) in enumerate((("best_iou", C_FIT, "vs fitted"),
+                                         ("best_vs_original", C_ORIG, "vs authored"))):
+        mu, er = [], []
+        for i in range(1, len(ns)):
+            dl = {r["id"]: r[key] for r in by[ns[i - 1]]}
+            dh = {r["id"]: r[key] for r in by[ns[i]]}
+            d = [dh[k] - dl[k] for k in ids if k in dl and k in dh]
+            mu.append(np.mean(d)); er.append(sem(d))
+        ax.bar(np.arange(len(mu)) + (j - 0.5) * w, mu, yerr=er, width=w, color=col,
+               edgecolor="black", linewidth=0.4, capsize=2, label=lab)
+    ax.axhline(0, color="k", lw=0.7)
     ax.set_xticks(np.arange(len(ns) - 1))
-    ax.set_xticklabels([f"{ns[i-1]}$\\to${ns[i]}" for i in range(1, len(ns))])
-    ax.set_xlabel("arms added"); ax.set_ylabel(r"$\Delta$ best IoU per target")
-    ax.set_title("(b) past $N{=}3$ an added arm\nhelps and hurts about equally", loc="left")
+    ax.set_xticklabels([f"{ns[i-1]}$\\to${ns[i]}" for i in range(1, len(ns))],
+                       fontsize=6.4)
+    ax.set_xlabel("arms added"); ax.set_ylabel(r"$\Delta$ best IoU")
+    ax.legend(frameon=False, loc="upper right", fontsize=6.0, handlelength=1.0)
+    ax.set_title("(c) the 4th arm pays only\non the authored target", loc="left")
 
     for ext in ("pdf", "png"):
         fig.savefig(os.path.join(outdir, f"fig_nsweep.{ext}"))
