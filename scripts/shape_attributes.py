@@ -343,8 +343,10 @@ def compute_attributes(mask: np.ndarray, with_persistence: bool = True) -> dict:
                 d = cv2.convexityDefects(c, hi)
             except cv2.error:
                 continue
-            if d is not None:
-                max_defect = max(max_defect, float(d[:, 0, 3].max()) / 256.0)
+            if d is not None and len(d):
+                # OpenCV >= 5 returns (N, 4); OpenCV 4 returns (N, 1, 4).
+                dd = d.reshape(-1, 4)
+                max_defect = max(max_defect, float(dd[:, 3].max()) / 256.0)
 
     perimeter = float(sum(cv2.arcLength(c, True) for c in contours))
     compactness = perimeter ** 2 / (4 * np.pi * area)
