@@ -51,7 +51,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from semantic_metrics import clip_retrieval, render_shadow  # noqa: E402
+from semantic_metrics import (clip_retrieval, recognizability_ratio,  # noqa: E402
+                              render_shadow)
 
 # Simin's glyph class design: low-confidence lowercase folded to uppercase,
 # visual equivalents collapsed (I/l/1, O/o/0, q/9). Imported rather than copied.
@@ -221,8 +222,18 @@ def main() -> None:
                 "top1": round(res["top1"], 4), "top5": round(res["top5"], 4),
                 "mrr": round(res["mrr"], 4),
                 "top1_over_chance": round(res["top1"] / ch, 3) if ch else None,
-                "ratio_vs_target": (round(res["top1"] / base["top1"], 4)
+                # Through recognizability_ratio() rather than reimplemented: it
+                # is the repo's definition of this number and predates all of
+                # this. `top1` is its default and the strict reading -- how often
+                # the shadow wins outright. `mrr` is the graded one, and it is
+                # the aggregate counterpart of the per-item clip_rr ratio the
+                # atlas card shows, since mean(1/rank) is MRR. Reporting both is
+                # what stops "the ratio" meaning two things: hand_shadow is 0.000
+                # by top1 and 0.576 by rank, and each is true.
+                "ratio_vs_target": (round(recognizability_ratio(res, base, "top1"), 4)
                                     if base and base["top1"] else None),
+                "mrr_ratio_vs_target": (round(recognizability_ratio(res, base, "mrr"), 4)
+                                        if base and base["mrr"] else None),
             })
 
     out_dir.mkdir(parents=True, exist_ok=True)
