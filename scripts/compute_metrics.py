@@ -52,7 +52,7 @@ def _one(job):
         return dict(stub, error=f"{type(e).__name__}: {e}")
 
 
-def jobs_from_sweep(bench, results, size, align):
+def jobs_from_sweep(bench, results, size, align, targets_dir="targets"):
     """One job per (sample, reference).
 
     `--fit-target` sweeps solve for a *placed* target -- rescaled and shifted into
@@ -74,7 +74,7 @@ def jobs_from_sweep(bench, results, size, align):
             continue
         for stem in sorted(os.listdir(sd)):
             shadow = os.path.join(sd, stem, f"{stem}_best.png")
-            target = os.path.join(bench, "targets", sub, f"{stem}.png")
+            target = os.path.join(bench, targets_dir, sub, f"{stem}.png")
             shown = os.path.join(sd, stem, f"{stem}_shown.png")
             rj = os.path.join(sd, stem, "results.json")
             if not (os.path.exists(shadow) and os.path.exists(target)):
@@ -127,6 +127,10 @@ def main():
     p.add_argument("--results", default=os.path.join(
         _BENCH, "optimized", "base-optimizer", "big-budget"),
         help="optimizer sweep root (<subset>/<stem>/<stem>_best.png)")
+    p.add_argument("--targets-dir", default="targets",
+                   help="target tree the sweep was solved against; must match the "
+                        "run's --targets-dir or ref=original compares to the wrong "
+                        "shape (see targets_dir in the sweep's BUDGET.md)")
     p.add_argument("--shadows", action="store_true",
                    help="read captures from metadata.jsonl instead of a sweep")
     p.add_argument("--sources", nargs="+", default=["hand", "teleop", "optimizer"])
@@ -140,7 +144,8 @@ def main():
     a = p.parse_args()
 
     jobs = list(jobs_from_shadows(a.bench, a.sources, a.size, a.align) if a.shadows
-                else jobs_from_sweep(a.bench, a.results, a.size, a.align))
+                else jobs_from_sweep(a.bench, a.results, a.size, a.align,
+                                     a.targets_dir))
     if not jobs:
         print("[!] nothing to do")
         return

@@ -189,6 +189,14 @@ def main():
     p.add_argument("--repo", default=_default_repo())
     p.add_argument("--bench", default=_BENCH)
     p.add_argument(
+        "--targets-dir",
+        default="targets",
+        help="target tree to solve, relative to --bench. `targets_grounded` is the "
+        "same shapes translated to rest on the bottom of the frame (see "
+        "scripts/ground_targets.py). A different tree is a different experimental "
+        "condition, so give it its own --out",
+    )
+    p.add_argument(
         "--subsets", nargs="+", default=["letters_upper", "digits", "animals", "abstract"]
     )
     p.add_argument("--runs", type=int, default=10)
@@ -311,7 +319,7 @@ def main():
     # ── Collect work ─────────────────────────────────────────────────────────
     jobs = []
     for sub in a.subsets:
-        d = os.path.join(a.bench, "targets", sub)
+        d = os.path.join(a.bench, a.targets_dir, sub)
         if not os.path.isdir(d):
             print(f"[!] missing subset {d}", flush=True)
             continue
@@ -359,6 +367,7 @@ def main():
         "light_to_front_m": a.light_to_front,
         "back_to_wall_m": a.back_to_wall,
         "render_size": a.size,
+        "targets_dir": a.targets_dir,
         "distortion": False,
         "target_fit": (
             {
