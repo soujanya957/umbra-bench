@@ -101,7 +101,17 @@ def main() -> None:
         shadows = rec.get("shadows") or json.loads(json.dumps(EMPTY_SHADOWS))
         for src in SOURCES:
             p = ROOT / "shadows" / sid / f"{src}.png"
-            shadows[src]["path"] = str(p.relative_to(ROOT)) if p.exists() else None
+            if p.exists():
+                shadows[src]["path"] = p.relative_to(ROOT).as_posix()
+                continue
+            # Only clear a link whose file is actually gone. This used to assign
+            # None unconditionally, which wiped what link_teleop.py had written
+            # on all 28 captured rows -- those point at Teleops/masks/..., not at
+            # shadows/<sid>/teleop.png, so "not in the canonical place" was being
+            # read as "does not exist".
+            cur = shadows[src].get("path")
+            if cur and not (ROOT / cur).exists():
+                shadows[src]["path"] = None
 
         merged = {
             "id": sid,

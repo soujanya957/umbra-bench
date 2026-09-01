@@ -364,7 +364,7 @@ button.act:hover{border-color:var(--accent); color:var(--accent-ink)}
   <aside class="rail">
     <div class="brand">
       <h1>Umbra Bench Atlas</h1>
-      <p>542 targets &middot; base-optimizer, 10 seeds each &middot; the four-metric panel. 64 v2 targets await the re-run. Star frames to build a sequence.</p>
+      <p id="brandline">the four-metric panel. Star frames to build a sequence.</p>
     </div>
 
     <div class="grp">
@@ -387,7 +387,8 @@ button.act:hover{border-color:var(--accent); color:var(--accent-ink)}
     <div class="grp" data-only="atlas">
       <div class="lbl">Plate</div>
       <div class="seg" id="segView">
-        <button data-v="overlay" aria-pressed="true">overlay</button>
+        <button data-v="overlay" aria-pressed="true" title="shadow against the target as authored — includes whatever --fit-target moved">overlay</button>
+        <button data-v="fit" aria-pressed="false" title="shadow against the shape the optimizer was actually asked to cast (the target after --fit-target). This is the aligned comparison">vs&nbsp;fit</button>
         <button data-v="shadow" aria-pressed="false">shadow</button>
         <button data-v="target" aria-pressed="false">target</button>
         <button data-v="trip" aria-pressed="false">all&nbsp;3</button>
@@ -534,13 +535,52 @@ const st = {
   page:  (p => PAGES.includes(p) ? p : "atlas")(store.get("page", "atlas")),
   telOnly: store.get("telOnly", false),
   sweep: store.get("sweep","big"),
-  view:  store.get("view","overlay"),
-  subs:  new Set(store.get("subs", DATA.subsets)),
+  // Default the plate to whichever comparison the numbers on the card report,
+  // so the picture and the metric are never describing different things. On a
+  // fitted sweep (ref=shown) that is `fit`; on an unfitted one the target was
+  // cast as authored and `overlay` already is the aligned view.
+  view:  store.get("view", DATA.ref === "shown" ? "fit" : "overlay"),
+  // Reconcile the remembered selection with the payload instead of trusting it.
+  // A subset added since the last visit (teleop) is not in the stored list, so a
+  // plain restore renders its chip unpressed and hides all of its samples -- new
+  // data looks missing rather than deselected.
+  //
+  // `subs` records only what is SELECTED, which cannot distinguish "the reader
+  // turned this off" from "this did not exist yet", so `subsKnown` records what
+  // the payload offered at the time. A reader with no `subsKnown` predates this
+  // and gets everything selected once.
+  subs:  (() => {
+    const known = new Set(DATA.subsets);
+    const stored = store.get("subs", null), before = store.get("subsKnown", null);
+    if(!Array.isArray(stored) || !Array.isArray(before)) return new Set(DATA.subsets);
+    const seenBefore = new Set(before);
+    const out = new Set([...stored.filter(s => known.has(s)),
+                         ...DATA.subsets.filter(s => !seenBefore.has(s))]);
+    return out.size ? out : new Set(DATA.subsets);
+  })(),
   sort:  store.get("sort","iou-desc"),
   q:     "",
   lo: null, hi: null,      // null = full range, in the active metric's units
   picks: store.get("picks", [])
 };
+// What this payload offered, so the next visit can tell a newly-added subset
+// from one the reader turned off. Written once per load, not per click.
+store.set("subsKnown", DATA.subsets);
+
+// The masthead used to be a hand-written sentence ("542 targets - base-optimizer
+// ... 64 v2 targets await the re-run"). Every clause of it went stale the moment
+// the sweeps were re-run, and a dashboard that misreports its own provenance is
+// worse than one that says nothing. Derive it from the payload instead.
+(function brandline(){
+  const el = document.getElementById("brandline");
+  if(!el || !DATA.sweep_dirs) return;
+  const dirs = [...new Set(Object.values(DATA.sweep_dirs))].join(" / ");
+  const cmp = DATA.ref === "shown"
+    ? "metrics vs the fitted target (aligned)"
+    : "metrics vs the target as authored (fit counted as error)";
+  el.textContent = `${DATA.n} targets · ${dirs} · ${DATA.targets_dir} · ${cmp}. `
+                 + el.textContent.trim();
+})();
 const byId = new Map(S.map(s => [s.id, s]));
 
 /* ── derived helpers ─────────────────────────────────────────────────── */
@@ -682,6 +722,12 @@ function plate(s){
   const tel = TELBY.get(s.id);
   const mk = { target: () => imgEl(s.t), shadow: () => e && e.s ? imgEl(e.s) : blankEl(),
                overlay: () => e && e.s ? cvEl(s.t, e.s) : blankEl(),
+               // `overlay` compares the shadow with the target as authored, so it
+               // shows the fit's scale+shift as apparent mis-registration on top
+               // of any real solver error -- the two are not separable by eye.
+               // `fit` compares it with what the optimizer was actually given.
+               fit: () => e && e.s && e.w ? cvEl(e.w, e.s)
+                        : blankEl(e && e.s ? "no fitted target recorded" : ""),
                human: () => tel ? imgEl(tel.mask) : blankEl("no hand-cast shadow") };
   if(st.view === "trip"){ wrap.append(mk.target(), mk.shadow(), mk.overlay()); }
   else { wrap.append(mk[st.view]()); }
@@ -924,7 +970,7 @@ function seg(sel, key, after){
   });
 }
 seg("#segSweep", "sweep", () => { renderHist(); renderGrid(); renderReel(); });
-seg("#segView",  "view",  () => { renderGrid(); $("#legend").style.display = st.view === "overlay" || st.view === "trip" ? "" : "none"; });
+seg("#segView",  "view",  () => { renderGrid(); $("#legend").style.display = ["overlay","fit","trip"].includes(st.view) ? "" : "none"; });
 
 (function themeSeg(){
   const box = $("#segTheme"), cur = store.get("theme", "auto");

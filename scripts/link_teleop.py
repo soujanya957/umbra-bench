@@ -50,7 +50,10 @@ for rec in man["records"]:
         orphan.append((rec["capture"], rec.get("sample_id")))
         continue
     row = index[sid]
-    cap = os.path.join("Teleops", rec["capture"])
+    # Forward slash, not os.path.join: this string is written into the committed
+    # metadata.jsonl, so a Windows run would store "Teleops\..." where every
+    # other path in the file -- and the manifest's own `rectified` -- is posix.
+    cap = "Teleops/" + rec["capture"]
     # The slot is rebuilt from the manifest on every run, never added to. Appending
     # would make the script's output depend on how many times it had been run
     # before, and a second --write would silently duplicate all 29 captures.

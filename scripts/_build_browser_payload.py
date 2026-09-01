@@ -79,6 +79,14 @@ def main() -> None:
                     help="sweep directory under optimized/ for the `big` slot")
     ap.add_argument("--small", default="small-budget-grounded",
                     help="sweep directory under optimized/ for the `small` slot")
+    ap.add_argument("--ref", default="shown", choices=("shown", "original"),
+                    help="which comparison the card metrics report. `shown` is "
+                         "the shadow against the shape the optimizer was given, "
+                         "i.e. after --fit-target has scaled and shifted it -- "
+                         "the aligned comparison, and the one that matches the "
+                         "`vs fit` plate. `original` is against the target as "
+                         "authored, which folds the fit's scale and shift in as "
+                         "error and is the end-to-end number.")
     ap.add_argument("--out", default=os.path.join(BENCH, "results", "browser_payload.json"))
     ap.add_argument("--list", action="store_true",
                     help="show the sweeps and target trees on disk, then exit")
@@ -115,7 +123,7 @@ def main() -> None:
                          "run scripts/make_master_table.py (which reads the "
                          "metrics_*.csv that compute_metrics.py writes).")
     df = pd.read_csv(master, low_memory=False)
-    df = df[df["ref"] == "original"]
+    df = df[df["ref"] == a.ref]
     rows = {slot: df[df["sweep"] == name].set_index("sample_id")
             for slot, name in sweeps.items()}
     for slot, name in sweeps.items():
@@ -142,6 +150,15 @@ def main() -> None:
                 missing_shadow[slot] += 1
                 continue
             e = {"s": thumb(sp, a.px)}
+            # `_shown.png` is the target AFTER --fit-target scaled and shifted it
+            # -- the shape the optimizer was actually asked to cast. Overlaying
+            # the shadow on the authored target instead compares against
+            # something nobody solved for: the fit is scale 0.83 and ~14px of
+            # shift on average, so every card looks mis-registered. Carry both,
+            # and let the plate choose which comparison it is making.
+            wp = os.path.join(OPTIMIZED, name, d["subset"], stem, f"{stem}_shown.png")
+            if os.path.exists(wp):
+                e["w"] = thumb(wp, a.px)
             if sid in rows[slot].index:
                 r = rows[slot].loc[sid]
                 if isinstance(r, pd.DataFrame):        # duplicate sample_id
@@ -157,13 +174,13 @@ def main() -> None:
         samples.append(rec)
 
     payload = {"px": a.px, "n": len(samples), "metrics": METRICS, "attrs": ATTRS,
-               "targets_dir": a.targets_dir, "sweep_dirs": sweeps,
+               "targets_dir": a.targets_dir, "sweep_dirs": sweeps, "ref": a.ref,
                "subsets": sorted({s["subset"] for s in samples}), "samples": samples}
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     with open(a.out, "w", encoding="utf-8") as f:
         json.dump(payload, f, separators=(",", ":"))
 
-    print(f"samples={len(samples)}  px={a.px}  targets={a.targets_dir}")
+    print(f"samples={len(samples)}  px={a.px}  targets={a.targets_dir}  ref={a.ref}")
     print(f"  subsets: {', '.join(payload['subsets'])}")
     for slot, name in sweeps.items():
         print(f"  {slot:<6} -> {name:<26} missing shadow: {missing_shadow[slot]}")
