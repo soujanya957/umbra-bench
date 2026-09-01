@@ -165,6 +165,62 @@ placement", not "purely placement".
    0.299 — the topology metrics move the same way as IoU, so the result is not
    an IoU artefact. Worth a line in the writeup.
 
+## 4c. Both budgets, and what compute cannot buy
+
+`big-budget-grounded` finished 2026-09-01 03:22, 542/542, in **1.96 h**. All four
+sweeps are now scored; the CSVs are in `results/`.
+
+**The grounding effect replicates across budgets, to three decimals.** Paired on
+the 478 shared target ids:
+
+| budget | ref | grounded | centred | delta | better |
+| --- | --- | --- | --- | --- | --- |
+| small | `original` | 0.3504 | 0.1999 | **+0.1506** | 441/478 |
+| big | `original` | 0.3483 | 0.2000 | **+0.1483** | 435/478 |
+| small | `shown` | 0.7523 | 0.7345 | +0.0179 | 285/478 |
+| big | `shown` | 0.7833 | 0.7677 | +0.0156 | 279/478 |
+
+The per-subset ordering is essentially identical at both budgets — vehicles
++0.407 vs +0.412 (30/30 both), objects +0.2188 vs +0.2190, animals +0.2057 vs
++0.2058. An effect that reproduces this closely under a 2.1x change in optimizer
+budget is not an artefact of either budget.
+
+### The interaction is the finding
+
+Within the grounded tree, 542 shared targets, small budget → big budget:
+
+| ref | small | big | delta | better |
+| --- | --- | --- | --- | --- |
+| `shown` | 0.7489 | 0.7793 | **+0.0303** | **522/542** |
+| `original` | 0.3481 | 0.3465 | **−0.0017** | 269/542 |
+
+**2.1x the compute buys +0.030 against the shown target and nothing at all
+against the authored one** — 269/542 is exactly chance, so the `ref=original`
+difference is noise, not a small gain. Meanwhile grounding buys **+0.15** against
+the authored target at either budget.
+
+The two act on different axes and do not substitute:
+
+- **optimizer budget** improves how well the rig hits *what it was asked to
+  cast*. It is bounded by the solver.
+- **target placement** improves *what it is possible to ask for*. It is bounded
+  by where the rig can throw a shadow at all.
+
+A target placed where the rig cannot reach cannot be rescued by more search, and
+the numbers say so directly: placement is worth ~5x a doubling of the budget on
+the metric that measures fidelity to the authored shape, and the budget is worth
+~0 on it. This is the argument for treating placement as a dataset property
+rather than a per-target search parameter — which is what the original finding
+proposed, now measured rather than inferred.
+
+### Caveats
+
+- `hand_shadow` and `figures` are n=10; those rows are directional.
+- The 64 `_v2` targets are in the grounded sweeps (542) but not the centred ones
+  (478), so every paired table above is on the 478 intersection. The grounded
+  means over all 542 are 0.3481 / 0.7489 (small) and 0.3465 / 0.7793 (big).
+- `at_bound` is 14.2%, not the 1.1% the reach map predicted (see §4b).
+
 ## 5. Metrics
 
 ```bash
