@@ -681,7 +681,27 @@ const PANEL = [
    cards keep PANEL: seven cells do not fit a 176px .mrow. */
 const READOUT = PANEL.concat([
   { k:"clip_top1", name:"top-1", dir:1, dp:3, what:"correctly identified outright" },
-  { k:"clip_top5", name:"top-5", dir:1, dp:3, what:"true class within the top 5" }
+  { k:"clip_top5", name:"top-5", dir:1, dp:3, what:"true class within the top 5" },
+  /* Composition, not a score. Deliberately NOT paired with a "chance = 1/labels"
+     figure: CLIP ranks each item inside its OWN subset's class list, so the
+     pooled distinct-label count across a mixed selection is not the list anything
+     was ranked against. The sub-line gives the real chance range instead. */
+  { k:"__labels", name:"labels", what:"distinct classes in view — each ranked "
+      + "within its own subset, so chance differs per row",
+    agg: (rows) => {
+      const cls = new Set(), subs = new Set(), ch = [];
+      for(const s of rows){
+        if(s.cls) cls.add(s.subset + "/" + s.cls);
+        subs.add(s.subset);
+        if(s.clip_n) ch.push(1 / s.clip_n);
+      }
+      ch.sort((a,b) => a-b);
+      const lo = ch[0], hi = ch[ch.length-1];
+      return { value: String(cls.size),
+               sub: subs.size + (subs.size === 1 ? " subset" : " subsets")
+                    + (ch.length ? "  ·  chance " + (lo === hi ? lo.toFixed(3)
+                        : lo.toFixed(3) + "–" + hi.toFixed(3)) : "") };
+    } }
 ]);
 const q05 = (xs, p) => { if(!xs.length) return null;
   const a = [...xs].sort((x,y) => x-y), i = (a.length-1)*p, f = Math.floor(i);
@@ -884,14 +904,26 @@ function renderReadout(rows){
   const box = $("#readout");
   box.replaceChildren();
   for(const p of READOUT){
-    const xs = rows.map(s => mv(s, p.k)).filter(x => x != null);
-    const mean = xs.length ? xs.reduce((a,b) => a+b, 0) / xs.length : null;
     const el = document.createElement("div");
     el.className = "ro";
+    let head, val, sub;
+    if(p.agg){
+      // A cell that is not a mean. Counts have no percentiles and no direction,
+      // so it supplies its own value and sub-line rather than being forced
+      // through the mean path.
+      const a = p.agg(rows);
+      head = ""; val = a.value; sub = a.sub;
+    } else {
+      const xs = rows.map(s => mv(s, p.k)).filter(x => x != null);
+      const mean = xs.length ? xs.reduce((a,b) => a+b, 0) / xs.length : null;
+      head = (p.dir > 0 ? "↑ higher better" : "↓ lower better");
+      val = (mean == null ? "—" : mean.toFixed(p.dp));
+      sub = "p05 " + num(q05(xs, .05), p.dp) + "  ·  p95 " + num(q05(xs, .95), p.dp);
+    }
     el.innerHTML =
-      '<div class="k"><span class="lbl">' + p.name + '</span><em>' + (p.dir > 0 ? "↑ higher better" : "↓ lower better") + '</em></div>' +
-      '<div class="v">' + (mean == null ? "—" : mean.toFixed(p.dp)) + '</div>' +
-      '<div class="sp">p05 ' + num(q05(xs, .05), p.dp) + '  ·  p95 ' + num(q05(xs, .95), p.dp) + '</div>' +
+      '<div class="k"><span class="lbl">' + p.name + '</span><em>' + head + '</em></div>' +
+      '<div class="v">' + val + '</div>' +
+      '<div class="sp">' + sub + '</div>' +
       '<div class="wh">' + p.what + '</div>';
     box.append(el);
   }
