@@ -45,8 +45,18 @@ import _rescue_common as rc
 from shape_attributes import _denoise
 
 TELEOP = os.path.join(rc.BENCH, "Teleops")
-DEFAULT_CKPT = os.path.expanduser(
-    "~/GitHub/fleet-shadow-art/Shadow_robot_ui/render_server/checkpoints/sam2.1_hiera_small.pt")
+# The checkpoint lives in the render_server repo, which is checked out beside
+# this one on some machines and under ~/GitHub on others. Probe both instead of
+# hardcoding one and making every other machine pass --checkpoint by hand.
+_CKPT_REL = os.path.join("Shadow_robot_ui", "render_server", "checkpoints",
+                         "sam2.1_hiera_small.pt")
+_CKPT_CANDIDATES = [
+    os.path.join(os.path.dirname(rc.BENCH), "fleet-shadow-art", _CKPT_REL),
+    os.path.expanduser(os.path.join("~", "GitHub", "fleet-shadow-art", _CKPT_REL)),
+    os.path.join(rc.BENCH, "checkpoints", "sam2.1_hiera_small.pt"),
+]
+DEFAULT_CKPT = next((p for p in _CKPT_CANDIDATES if os.path.exists(p)),
+                    _CKPT_CANDIDATES[0])
 
 
 # ── flat field, identical to the one the browser segments on ────────────────
@@ -158,7 +168,38 @@ def sam2_predictor(ckpt, cfg):
     return _PRED
 
 
-def sam2_backend(path, pos, neg, ckpt, cfg, enhance=True):
+def expose(rgb, ev=0.0, contrast=1.0):
+    """Exposure in stops, then contrast as a gain about the frame's own mean.
+
+    Global on purpose, unlike the CLAHE path below. CLAHE is local, so it lifts
+    wall texture and the lamp's edge exactly as hard as it lifts the shadow
+    boundary — which is why segmenting the enhanced field went looking for edges
+    that were not there. A stop of exposure and a gain about the mean move the
+    whole frame together and leave the shadow-to-wall relationship intact.
+
+    Pivoting on the post-exposure mean keeps the two knobs independent: exposure
+    sets brightness, contrast stretches around whatever brightness that left.
+    """
+    x = rgb.astype(np.float32) / 255.0
+    if ev:
+        x = x * (2.0 ** ev)
+    if contrast != 1.0:
+        m = float(x.mean())
+        x = (x - m) * contrast + m
+    return np.clip(x * 255.0, 0, 255).astype(np.uint8)
+
+
+def sam2_backend(path, pos, neg, ckpt, cfg, enhance=True, blur=0.0,
+                 ev=0.0, contrast=1.0):
+    """`blur` is a Gaussian sigma applied last, on what SAM 2 actually sees.
+
+    SAM 2 resizes every input to 1024x1024, so these 500x383 crops reach the
+    encoder upsampled 2-2.7x — and bilinear upsampling amplifies sensor noise
+    along with everything else. A small sigma spends detail the crop does not
+    really have to buy a boundary that is not chasing interpolated grain. It is
+    a denoise, not a resolution fix: the fix for resolution is to rectify the
+    1280x720 original into something larger than 500x383.
+    """
     import torch
     rgb = np.array(Image.open(path).convert("RGB"))
     if enhance:
@@ -167,6 +208,10 @@ def sam2_backend(path, pos, neg, ckpt, cfg, enhance=True):
         lab = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB)
         lab[..., 0] = cv2.createCLAHE(3.0, (8, 8)).apply(lab[..., 0])
         rgb = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
+    if ev or contrast != 1.0:
+        rgb = expose(rgb, ev, contrast)
+    if blur > 0:
+        rgb = cv2.GaussianBlur(rgb, (0, 0), blur)
     pts = np.array([[float(x), float(y)] for x, y in list(pos) + list(neg)], np.float32)
     lbl = np.array([1] * len(pos) + [0] * len(neg), np.int32)
     p = sam2_predictor(ckpt, cfg)
@@ -188,7 +233,18 @@ def main() -> None:
     ap.add_argument("--open-r", type=int, default=2)
     ap.add_argument("--checkpoint", default=os.getenv("SAM2_CHECKPOINT", DEFAULT_CKPT))
     ap.add_argument("--config", default=os.getenv("SAM2_CONFIG", "configs/sam2.1/sam2.1_hiera_s.yaml"))
-    ap.add_argument("--no-enhance", action="store_true")
+    ap.add_argument("--enhance", action="store_true",
+                    help="CLAHE the photo before segmenting it. Off by default, "
+                         "matching auto_segment_teleop.py.")
+    ap.add_argument("--no-enhance", action="store_true",
+                    help="kept so old commands still run; enhancement is now off "
+                         "by default, so this is a no-op unless --enhance is given.")
+    ap.add_argument("--blur", type=float, default=0.0,
+                    help="sam2 only: Gaussian sigma on the image SAM 2 sees. 0 = off.")
+    ap.add_argument("--ev", type=float, default=0.0,
+                    help="sam2 only: exposure in stops. +0.3 is about a third of a stop.")
+    ap.add_argument("--contrast", type=float, default=1.0,
+                    help="sam2 only: contrast gain about the frame mean. 1.0 = off.")
     ap.add_argument("--out", default="Teleops/masks")
     ap.add_argument("--write", action="store_true")
     a = ap.parse_args()
@@ -207,7 +263,9 @@ def main() -> None:
             skipped += 1; continue
         path = os.path.join(rc.BENCH, rec["rectified"])
         if a.backend == "sam2":
-            m = sam2_backend(path, pos, neg, a.checkpoint, a.config, not a.no_enhance)
+            m = sam2_backend(path, pos, neg, a.checkpoint, a.config,
+                             a.enhance and not a.no_enhance,
+                             a.blur, a.ev, a.contrast)
         elif a.backend == "geo":
             m = geo_backend(path, pos, neg, a.tol if a.tol is not None else d.get("tol", 55))
         else:

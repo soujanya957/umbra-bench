@@ -89,6 +89,20 @@ def main() -> None:
     ap.add_argument("--open-r", type=int, default=2)
     ap.add_argument("--checkpoint", default=os.getenv("SAM2_CHECKPOINT", DEFAULT_CKPT))
     ap.add_argument("--config", default=os.getenv("SAM2_CONFIG", "configs/sam2.1/sam2.1_hiera_s.yaml"))
+    ap.add_argument("--enhance", action="store_true",
+                    help="sam2 only: CLAHE the photo before segmenting it. Off by "
+                         "default — the seeds come from the enhanced field, the "
+                         "boundary comes from the photo as shot.")
+    ap.add_argument("--points", default="Teleops/masks/points.json",
+                    help="dashboard markup. Used when present; auto seeds fill the gaps.")
+    ap.add_argument("--ignore-points", action="store_true",
+                    help="ignore --points and seed every capture automatically.")
+    ap.add_argument("--blur", type=float, default=0.0,
+                    help="sam2 only: Gaussian sigma on the image SAM 2 sees. 0 = off.")
+    ap.add_argument("--ev", type=float, default=0.0,
+                    help="sam2 only: exposure in stops. +0.3 is about a third of a stop.")
+    ap.add_argument("--contrast", type=float, default=1.0,
+                    help="sam2 only: contrast gain about the frame mean. 1.0 = off.")
     ap.add_argument("--out", default="Teleops/masks")
     ap.add_argument("--sheet", default="Teleops/masks/_contact_sheet.png")
     ap.add_argument("--write", action="store_true")
@@ -102,13 +116,34 @@ def main() -> None:
             print(f"[!] sam2 unavailable ({type(e).__name__}) — falling back to geo")
             backend = "geo"
 
+    # Hand markup wins wherever it exists. auto_seeds is the fallback for
+    # captures nobody marked, not the primary source: a percentile rule states
+    # "this decile is dark" and hopes that means shadow, while a person pointing
+    # at the shadow states it. Deriving the seeds was worth doing because it made
+    # 29 captures reachable without 29 sessions of clicking — it was never worth
+    # preferring over the clicking that had already happened.
+    hand = {}
+    pts_p = os.path.join(rc.BENCH, a.points)
+    if not a.ignore_points and os.path.exists(pts_p):
+        hand = json.load(open(pts_p)).get("captures", {})
+        print(f"[points] {len(hand)} hand-marked captures from {a.points}")
+    elif not a.ignore_points:
+        print(f"[points] {a.points} not found — seeding every capture automatically")
+
     man_p = os.path.join(rc.BENCH, "Teleops", "masks", "manifest.json")
     man = json.load(open(man_p))
     rows, tiles = [], []
     for rec in man["records"]:
         path = os.path.join(rc.BENCH, rec["rectified"])
         ff = flatfield8(path)
-        pos, neg = auto_seeds(ff)
+        h = hand.get(rec["capture"])
+        if h and h.get("pos"):
+            pos = [(float(x), float(y)) for x, y in h["pos"]]
+            neg = [(float(x), float(y)) for x, y in h.get("neg", [])]
+            src = "hand"
+        else:
+            pos, neg = auto_seeds(ff)
+            src = "auto"
         if not pos and backend != "otsu":
             print(f"  !! no seed found for {rec['capture']}"); continue
         if backend == "otsu":
@@ -116,7 +151,8 @@ def main() -> None:
             m = (ff < threshold_otsu(ff)).astype(np.uint8)
             m[:6] = m[-6:] = 0; m[:, :6] = m[:, -6:] = 0     # rectification edge
         elif backend == "sam2":
-            m = sam2_backend(path, pos, neg, a.checkpoint, a.config, True)
+            m = sam2_backend(path, pos, neg, a.checkpoint, a.config, a.enhance,
+                             a.blur, a.ev, a.contrast)
         else:
             m = geo_backend(path, pos, neg, a.tol)
         if a.open_r and m.sum():
@@ -127,25 +163,31 @@ def main() -> None:
         if m.sum():
             m = _denoise(m, float(m.sum()))
         frac = float(m.mean())
-        rows.append((rec["capture"], frac, rc.n_holes_signif(m), len(pos)))
+        rows.append((rec["capture"], frac, rc.n_holes_signif(m), len(pos), src))
         if a.write:
             rc.save_mask(m, os.path.join(rc.BENCH, a.out, rec["capture"] + "_mask.png"))
-            rec.update(mask_backend="auto-" + backend, shape_frac=round(frac, 4),
-                       n_seeds=len(pos), holes_signif=rc.n_holes_signif(m))
+            tag = "auto-" + backend + ("-clahe" if backend == "sam2" and a.enhance else "")
+            rec.update(mask_backend=tag, shape_frac=round(frac, 4),
+                       n_seeds=len(pos), holes_signif=rc.n_holes_signif(m),
+                       seed_source=src)
         # contact-sheet row: flat field, mask, and the seeds that produced it
         vis = cv2.cvtColor(ff, cv2.COLOR_GRAY2BGR)
-        for x, y in pos: cv2.circle(vis, (x, y), 5, (0, 200, 0), -1)
-        for x, y in neg: cv2.circle(vis, (x, y), 4, (0, 90, 240), -1)
+        # int() here, not at the source: SAM 2 takes the sub-pixel coordinates the
+        # dashboard exported, only the drawing needs whole pixels.
+        for x, y in pos: cv2.circle(vis, (int(x), int(y)), 5, (0, 200, 0), -1)
+        for x, y in neg: cv2.circle(vis, (int(x), int(y)), 4, (0, 90, 240), -1)
         tiles.append(np.hstack([cv2.resize(vis, (200, 153)),
                                 cv2.resize(cv2.cvtColor((1-m)*255, cv2.COLOR_GRAY2BGR), (200, 153))]))
 
     fr = np.array([r[1] for r in rows])
     med = float(np.median(fr)); mad = float(np.median(np.abs(fr - med)) + 1e-9)
     print(f"\nbackend {backend}  ·  {len(rows)} captures")
-    print(f"{'capture':46} {'frac':>6} {'holes':>6} {'seeds':>6}")
-    for cap, frac, hs, ns in rows:
+    n_hand = sum(1 for r in rows if r[4] == "hand")
+    print(f"seeds: {n_hand} hand-marked, {len(rows) - n_hand} auto")
+    print(f"{'capture':46} {'frac':>6} {'holes':>6} {'seeds':>6} {'from':>5}")
+    for cap, frac, hs, ns, src in rows:
         flag = "  <-- outlier" if abs(frac - med) > 4 * mad else ""
-        print(f"{cap[:46]:46} {frac:6.3f} {hs:6d} {ns:6d}{flag}")
+        print(f"{cap[:46]:46} {frac:6.3f} {hs:6d} {ns:6d} {src:>5}{flag}")
     print(f"\nshape fraction: median {med:.3f}, range {fr.min():.3f}-{fr.max():.3f}")
 
     if a.write:
@@ -154,7 +196,11 @@ def main() -> None:
                            for i in range(0, len(tiles), per)])
         os.makedirs(os.path.dirname(os.path.join(rc.BENCH, a.sheet)), exist_ok=True)
         cv2.imwrite(os.path.join(rc.BENCH, a.sheet), sheet)
-        json.dump(man, open(man_p, "w"), indent=1)
+        # Follow --out, so a side-by-side run into a scratch dir cannot overwrite
+        # the manifest that describes the masks actually in Teleops/masks.
+        out_man = os.path.join(rc.BENCH, a.out, "manifest.json")
+        os.makedirs(os.path.dirname(out_man), exist_ok=True)
+        json.dump(man, open(out_man, "w"), indent=1)
         print(f"wrote {len(rows)} masks, manifest.json and {a.sheet}")
         print("  sheet columns per capture: flat field with seeds (green = shadow, "
               "orange = wall) | resulting mask")
