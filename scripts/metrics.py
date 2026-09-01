@@ -334,6 +334,62 @@ def fourier_distance(gt: np.ndarray, pred: np.ndarray, n_harm: int = 32) -> floa
 
 # --- alignment ----------------------------------------------------------------
 
+def _trim(m: np.ndarray):
+    ys, xs = np.where(m)
+    if not len(ys):
+        return None
+    return m[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+
+
+def trimmed_centred(gt: np.ndarray, pred: np.ndarray, height: int = 256,
+                    pad: int = 6) -> dict:
+    """IoU with position and size removed: trim to ink, match height, centre.
+
+    `iou` answers "did the shadow land on the target". On a --fit-target sweep
+    that is dominated by the fit itself -- the target is deliberately scaled and
+    shifted before anyone solves for it -- so the number mostly reports how far
+    the fit moved, not how good the shape is. This answers the other question:
+    ignoring where it was placed and how big it was drawn, is it the right shape?
+
+    Height, not width or area, sets the scale. Measured over 571 solves against
+    an optimal scale found by search, height lands 0.0200 short of the ceiling
+    and within 0.02 of it on 65% of targets; max-side ties it (0.0201 / 67%),
+    diagonal is close (0.0221), pixel-area is worse (0.0300) and width is much
+    worse (0.0528). Height is also the one that keeps aspect error honest: width
+    follows the same factor, so a shadow that is relatively too wide stays too
+    wide and is still penalised, which a per-axis fit would hide.
+
+    Returns `tc_iou` plus the two aspect ratios and their relative error, since a
+    high `tc_iou` with a large `tc_aspect_error` is a different failure from a
+    low one -- the first is a stretched shape, the second a wrong one.
+    """
+    a, b = _trim(np.asarray(gt, bool)), _trim(np.asarray(pred, bool))
+    if a is None or b is None:
+        return {"tc_iou": None, "tc_aspect_target": None,
+                "tc_aspect_shadow": None, "tc_aspect_error": None}
+
+    def to_h(m):
+        h, w = m.shape
+        W = max(1, int(round(w * height / h)))
+        return np.asarray(Image.fromarray(m).resize((W, height), Image.NEAREST))
+
+    A, B = to_h(a), to_h(b)
+    H = height + 2 * pad
+    W = max(A.shape[1], B.shape[1]) + 2 * pad
+
+    def place(m):
+        o = np.zeros((H, W), bool)
+        y0, x0 = (H - m.shape[0]) // 2, (W - m.shape[1]) // 2
+        o[y0:y0 + m.shape[0], x0:x0 + m.shape[1]] = m
+        return o
+
+    at, as_ = a.shape[1] / a.shape[0], b.shape[1] / b.shape[0]
+    return {"tc_iou": round(iou(place(A), place(B)), 4),
+            "tc_aspect_target": round(at, 4),
+            "tc_aspect_shadow": round(as_, 4),
+            "tc_aspect_error": round(abs(as_ - at) / at, 4) if at else None}
+
+
 def aligned_iou(gt: np.ndarray, pred: np.ndarray,
                 scales=(0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15),
                 max_shift_frac: float = 0.12) -> dict:
@@ -385,6 +441,10 @@ def all_metrics(gt: np.ndarray, pred: np.ndarray, with_alignment: bool = False) 
     out.update(betti_error(gt, pred))
     out.update(persistence_distance(gt, pred))
     out.update(limb_match(gt, pred))
+    # Cheap (two bbox crops and a resize), so it is always on rather than behind
+    # --align: on a fitted sweep it is the only pairwise number that is about the
+    # shape rather than about the fit.
+    out.update(trimmed_centred(gt, pred))
     if with_alignment:
         out.update({k: v for k, v in aligned_iou(gt, pred).items() if k != "iou"})
     return out

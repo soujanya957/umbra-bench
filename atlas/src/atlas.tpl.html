@@ -389,6 +389,7 @@ button.act:hover{border-color:var(--accent); color:var(--accent-ink)}
       <div class="seg" id="segView">
         <button data-v="overlay" aria-pressed="true" title="shadow against the target as authored — includes whatever --fit-target moved">overlay</button>
         <button data-v="fit" aria-pressed="false" title="shadow against the shape the optimizer was actually asked to cast (the target after --fit-target). This is the aligned comparison">vs&nbsp;fit</button>
+        <button data-v="centred" aria-pressed="false" title="both trimmed to the shape, matched on height and centred — position and size removed. Pairs with the shape-IoU metric">shape</button>
         <button data-v="shadow" aria-pressed="false">shadow</button>
         <button data-v="target" aria-pressed="false">target</button>
         <button data-v="trip" aria-pressed="false">all&nbsp;3</button>
@@ -425,6 +426,9 @@ button.act:hover{border-color:var(--accent); color:var(--accent-ink)}
         <option value="hu-asc">Hu ↓ — shape closest, pose ignored</option>
         <option value="hu-desc">Hu ↓ — shape furthest, pose ignored</option>
         <option value="disagree">where IoU and NSD disagree most</option>
+        <option value="tc-desc">shape IoU — best shape, size &amp; place ignored</option>
+        <option value="tc-asc">shape IoU — worst shape</option>
+        <option value="asp-desc">aspect error — most stretched</option>
         <option value="delta-desc">Δ big − small — biggest gain</option>
         <option value="stroke-asc">stroke width — thinnest first</option>
         <option value="subset">subset, then IoU</option>
@@ -612,6 +616,8 @@ const CMP = {
   "nsd-desc":   hi("nsd"),  "nsd-asc":  lo("nsd"),
   "pw-asc":     lo("pw_h1"), "pw-desc": hi("pw_h1"),
   "hu-asc":     lo("hu_distance"), "hu-desc": hi("hu_distance"),
+  "tc-desc":    hi("tc_iou"), "tc-asc": lo("tc_iou"),
+  "asp-desc":   hi("tc_aspect_error"),
   "delta-desc": (a,b) => (delta(b) ?? -9) - (delta(a) ?? -9),
   "stroke-asc": (a,b) => (a.a.median_stroke_width_rel ?? 9) - (b.a.median_stroke_width_rel ?? 9),
   "subset":     (a,b) => a.subset.localeCompare(b.subset) || (iou(b) ?? -1) - (iou(a) ?? -1),
@@ -728,6 +734,11 @@ function plate(s){
                // `fit` compares it with what the optimizer was actually given.
                fit: () => e && e.s && e.w ? cvEl(e.w, e.s)
                         : blankEl(e && e.s ? "no fitted target recorded" : ""),
+               // Both trimmed to ink, matched on height, centred -- the same
+               // normalisation tc_iou uses, so this plate and that number are
+               // the same comparison. White padding keeps the cards one size.
+               centred: () => e && e.ct && e.cs ? cvEl(e.ct, e.cs)
+                        : blankEl(e && e.s ? "no centred pair recorded" : ""),
                human: () => tel ? imgEl(tel.mask) : blankEl("no hand-cast shadow") };
   if(st.view === "trip"){ wrap.append(mk.target(), mk.shadow(), mk.overlay()); }
   else { wrap.append(mk[st.view]()); }
@@ -970,7 +981,7 @@ function seg(sel, key, after){
   });
 }
 seg("#segSweep", "sweep", () => { renderHist(); renderGrid(); renderReel(); });
-seg("#segView",  "view",  () => { renderGrid(); $("#legend").style.display = ["overlay","fit","trip"].includes(st.view) ? "" : "none"; });
+seg("#segView",  "view",  () => { renderGrid(); $("#legend").style.display = ["overlay","fit","centred","trip"].includes(st.view) ? "" : "none"; });
 
 (function themeSeg(){
   const box = $("#segTheme"), cur = store.get("theme", "auto");
