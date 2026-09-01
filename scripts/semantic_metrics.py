@@ -65,7 +65,7 @@ def render_shadow(mask: np.ndarray, size: int = 384, blur_frac: float = 0.012,
 
 def clip_retrieval(images, class_names, true_idx, model_name="ViT-B-32",
                    pretrained="laion2b_s34b_b79k", prompt_tmpl="a shadow of a {}",
-                   batch_size=32):
+                   batch_size=32, top_k=5):
     """N-way retrieval accuracy over the benchmark's own class list.
 
     Deliberately *not* raw image-text cosine similarity. A bare CLIP score has no
@@ -74,7 +74,9 @@ def clip_retrieval(images, class_names, true_idx, model_name="ViT-B-32",
     the benchmark's other classes gives top-1 / top-5 / MRR, which have a known
     chance level and are directly comparable to the human N-AFC task.
 
-    Returns per-item rank plus aggregate top1/top5/MRR. Requires `open_clip_torch`.
+    ``prompt_tmpl`` may be either a format string or a ``class_name -> prompt``
+    callable. Returns per-item rank, the top ``top_k`` CLIP candidates, and
+    aggregate top1/top5/MRR. Requires `open_clip_torch`.
     """
     import torch
     import open_clip
@@ -85,11 +87,16 @@ def clip_retrieval(images, class_names, true_idx, model_name="ViT-B-32",
     model.eval()
 
     with torch.no_grad():
-        txt = tokenizer([prompt_tmpl.format(c) for c in class_names])
+        prompts = ([prompt_tmpl.format(c) for c in class_names]
+                   if isinstance(prompt_tmpl, str)
+                   else [prompt_tmpl(c) for c in class_names])
+        txt = tokenizer(prompts)
         tf = model.encode_text(txt)
         tf /= tf.norm(dim=-1, keepdim=True)
 
+        top_k = max(1, min(top_k, len(class_names)))
         ranks = []
+        top_predictions = []
         for i in range(0, len(images), batch_size):
             batch = torch.stack([preprocess(im) for im in images[i:i + batch_size]])
             f = model.encode_image(batch)
@@ -98,10 +105,16 @@ def clip_retrieval(images, class_names, true_idx, model_name="ViT-B-32",
             for j, s in enumerate(sims):
                 order = np.argsort(-s)
                 ranks.append(int(np.where(order == true_idx[i + j])[0][0]) + 1)
+                top_predictions.append([
+                    {"label": class_names[index], "index": int(index),
+                     "similarity": float(s[index])}
+                    for index in order[:top_k]
+                ])
 
     ranks = np.array(ranks)
     return {
         "rank": ranks.tolist(),
+        "top_predictions": top_predictions,
         "top1": float((ranks == 1).mean()),
         "top5": float((ranks <= 5).mean()),
         "mrr": float((1.0 / ranks).mean()),
