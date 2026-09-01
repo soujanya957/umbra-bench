@@ -1,93 +1,116 @@
 # Handoff — overnight sweep on `distort_target`
 
 Written 2026-09-01. Both repos are on branch `distort_target`, nothing pushed.
-Do these in order; steps 1–3 are pre-flight and take a couple of minutes.
 
-## 1. Cherry-pick the renderer-clone leak fix — do not skip this one
+**Pre-flight steps 1–3 are DONE (2026-09-01 00:30, machine `ivy`), and the
+small-budget sweep is running.** They are kept below as the record of what was
+done and why. Jump to §4 for the run that is in flight and §5 for the morning.
 
-```bash
-cd fleet-shadow-art          # on distort_target
-git cherry-pick d964173
+## 1. Cherry-pick the renderer-clone leak fix — DONE
+
+`d964173` cherry-picked onto `fleet-shadow-art/distort_target` as **`bccd8c1`**.
+It auto-merged with `adfda3a`, which had touched the same file; both survived and
+were verified by hand:
+
+- `_RendererPool._clones` / `close()` present, `shutdown(wait=True)` at both call
+  sites (the FD path and the staged path);
+- the win32 `n_workers` clamp still present on both paths.
+
+Note the two interact: on win32 the clamp sets `_n_workers = 1`, so `_pool` is
+never built and the leak fix is inert for *this* run. Both `close()` call sites
+are `if ... is not None`-guarded, so that is safe rather than a crash — verified
+before launching. The fix still matters for any EGL run off this branch.
+
+## 2. Stage the grounded targets — DONE
+
+Committed as **`cdb65e8`**, 542 LFS pointers. git-lfs 3.7.1 is present on `ivy`.
+Re-verified before the run: 40/40 sampled targets rest on the bottom frame row.
+
+## 3. Repo hygiene — DONE
+
+`core.autocrlf=true` set on `umbra-bench` (status went from ~12,900 phantom
+modifications to clean); `_stale_locks/` removed from both repos.
+
+A stale `index.lock` (fleet-shadow-art) and `HEAD.lock` (umbra-bench) both had to
+be cleared during this session — 0 bytes, no live `git.exe`. **GitHub Desktop is
+running on this machine and polls both repos**, which is the likely source. If a
+git command reports a lock, check `ls -la .git/*.lock` and the process list
+before removing anything.
+
+## 3b. Windows blockers found by smoke-testing — FIXED, commit `b112986`
+
+A one-target smoke run was done before committing the night to a sweep. It hit
+three failures in a row, each of which aborted in the first seconds — the night
+would have been lost to any one of them:
+
+| failure | cause | fix |
+| --- | --- | --- |
+| `UnicodeEncodeError: '→'` | solver prints `→`/`×`; console is cp1252 | `PYTHONIOENCODING=utf-8` |
+| `AttributeError: os.uname` | posix-only, in `write_budget_md` | `platform.node()` |
+| `UnicodeEncodeError: 'σ'` | `BUDGET.md` holds `σ`; bare `open(...,"w")` is cp1252 | explicit `encoding="utf-8"` |
+
+The last two are fixed in this repo (`b112986`, which also fixes the three reads
+and writes in `compute_metrics.py`). The first cannot be fixed from here — the
+prints are in `fleet-shadow-art` — so **any caller must export
+`PYTHONIOENCODING=utf-8`**. Setting `PYTHONUTF8=1` as well is belt-and-braces: it
+makes `open()` default to UTF-8 process-wide and covers the ~25 other bare
+`open()` calls in `scripts/` that this run did not happen to touch.
+
+## 4. The sweep — LAUNCHED 2026-09-01 00:27, 12 shards
+
+Running now as 12 detached processes on `ivy`. Launcher:
+`scratchpad/launch_sweep.ps1` (copy it into `scripts/` if it earns its keep).
+
+```powershell
+powershell -File launch_sweep.ps1 -NumShards 12 `
+  -Out "optimized/small-budget-grounded" -Tag small
 ```
 
-`d964173` is a single unmerged commit on `origin/renderer-clone-leak` that closes
-renderer clones when a parallel section ends. `main` has never had it, and every
-existing sweep in `optimized/` was produced *with* it.
+which runs, per shard, the §4 command as originally written, plus
+`--num-shards 12 --shard $s`, with `PYTHONIOENCODING=utf-8` and `PYTHONUTF8=1`
+exported (see §3b) and a 400 ms stagger so the shards do not race writing the
+reach-map cache.
 
-It matters most for exactly the run being planned. Its commit message records a
-sweep deadlocking after **~800 solves** with ~25k leaked EGL contexts and 12 GB of
-GPU memory held by no live process. A 542-target sweep at `--runs 10` is **5,420
-solves**. Without this, the overnight run is likely to hang partway and the night
-is lost.
+- logs: `results/sweep_logs/small-shard{0..11}.{log,err}` (`results/` is gitignored)
+- progress: `grep -h best= results/sweep_logs/small-shard*.log | wc -l` out of 542
+- to stop: `Get-Process python | Where-Object {$_.Path -like "*fleet-shadow*"} | Stop-Process`
 
-## 2. Stage the grounded targets (needs git-lfs)
-
-```bash
-cd umbra-bench
-git add targets_grounded/    # 542 PNGs, LFS-tracked
-git commit -m "targets: add the grounded target tree"
-```
-
-They are on disk but unstaged: `*.png` is LFS-tracked and git-lfs was not
-available on the machine that produced them.
-
-## 3. Two small repo hygiene fixes
-
-```bash
-git -C umbra-bench config core.autocrlf true    # else every text file reads as modified
-rm -rf umbra-bench/.git/_stale_locks fleet-shadow-art/.git/_stale_locks
-```
-
-## 4. The sweep
-
-**Run the small budget first.** It is the matched comparison against
-`optimized/small-budget-fitted`, it fits in one night, and if something about the
-grounded targets is wrong you find out after one night instead of three.
-
-```bash
-cd umbra-bench
-python scripts/run_base_optimizer.py \
-  --repo ../fleet-shadow-art \
-  --targets-dir targets_grounded \
-  --out optimized/small-budget-grounded --fit-target \
-  --subsets abstract animals digits figures hand_shadow \
-            letters_lower letters_upper objects vehicles \
-  --runs 10 \
-  --popsize 32 --phase1-iters 8 --phase2-iters 8 --final-iters 10 \
-  --n-robots 3 --arm-gap 0.2 --size 128 \
-  --fit-scale-min 0.35 --fit-scale-max 1.6 --fit-n-scales 14 \
-  --fit-n-shifts 15 --fit-max-shift 0.22 --reach-samples 300 \
-  --n-workers 0 --num-shards 4 --shard 0
-```
-
-Then `--shard 1`, `2`, `3` in their own terminals. Set `--num-shards` to the core
-count; four is a placeholder.
-
-Three things that are easy to get wrong here:
+Four things that are easy to get wrong here:
 
 - **`--n-workers 0`, never 2.** `BUDGET.md` for the existing sweeps records 2,
   which was true of the EGL machine that produced them. On Windows wgl contexts
   are not thread-safe and the failure is silent — renders corrupt mid-run and IoU
-  collapses to 0. The clamp added on this branch now overrides an explicit 2
-  anyway, but do not ask for it.
-- **`--targets-dir targets_grounded` must be repeated at metrics time** (step 5),
+  collapses to 0. Confirmed correct for this run: the freshly written
+  `optimized/small-budget-grounded/BUDGET.md` reads `0 requested / 1 effective`.
+- **Export `PYTHONIOENCODING=utf-8`** or the run dies in the first second (§3b).
+- **`--targets-dir targets_grounded` must be repeated at metrics time** (§5),
   or `ref=original` scores against the centred tree and the numbers are nonsense.
 - **`--fit-target` requires its own `--out`.** Sharing a folder with a no-fit run
   makes the resume check skip targets it should solve.
 
 Resume is automatic: a target with a `results.json` is skipped unless `--force`,
-so an interrupted run continues where it stopped.
+so an interrupted run continues where it stopped, and re-running the launcher is
+the way to pick up after a crash.
 
-### Time budget
+### Time budget — measured on `ivy`, replacing the earlier estimate
 
-From `seconds` in the existing sweeps' `results.json`, scaled to 542 targets,
-4 shards, and doubled for win32 single-threaded rendering:
+The estimate below §4 in the previous revision (65 s/target, ~4.9 h at 4 shards)
+came from `seconds` in sweeps produced on a slower machine. Measured here:
 
-| sweep | per target | 542 targets, 4 shards, win32 |
-| --- | --- | --- |
-| small budget | 65s | **~4.9 h** — one night |
-| big budget | 166s | **~12.5 h** — more than one night at 4 shards |
-| just the 64 missing `_v2`, big budget | | ~1.5 h |
+| | measured |
+| --- | --- |
+| per target, per shard, 12 shards contending | **73 s** |
+| small budget, 542 targets, 12 shards | **~0.9 h** |
+| big budget, extrapolated at 2.55x | ~2.4 h |
+
+**The GPU is the bottleneck, not the core count.** At 12 shards `nvidia-smi`
+reads 95% utilisation and only 5.7 GB of 16.3 GB. Adding shards past ~12 buys
+little; the total is ~10,800 GPU-seconds however it is divided. `ivy` has 24
+cores, so cores are not the constraint and the old advice to set `--num-shards`
+to the core count does not apply.
+
+Both budgets therefore fit in one night, which the earlier estimate said was
+impossible.
 
 ## 5. Metrics
 
