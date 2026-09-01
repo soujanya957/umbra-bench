@@ -207,6 +207,11 @@ def main() -> None:
                     "top1": int(rank == 1),
                     "clip_top1_label": preds[0]["label"],
                     "clip_top1_similarity": round(preds[0]["similarity"], 4),
+                    # what CLIP actually guessed, for the card detail view. A
+                    # rank of 8 says the shadow failed; these say what it failed
+                    # *as*, which is the part a reader can act on.
+                    "clip_top3": "|".join(
+                        f"{q['label']}:{q['similarity']:.4f}" for q in preds[:3]),
                     "n_classes": len(class_names),
                     "chance_top1": round(1 / len(class_names), 4),
                 })

@@ -127,6 +127,40 @@ select.field{cursor:pointer}
   .readout{grid-auto-flow:row; grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 
+/* ── expanded card ───────────────────────────────────────────────────────────
+   The grid is a browsing surface: at 176px a shadow reads as a blob and the
+   overlay's disagreement colours are single pixels. This is where a single
+   sample is actually looked at. */
+.dback{position:fixed; inset:0; z-index:50; background:rgba(0,0,0,.55);
+  display:grid; place-items:center; padding:24px; overflow:auto}
+.dsheet{background:var(--panel); border:1px solid var(--line); border-radius:10px;
+  max-width:1040px; width:100%; max-height:calc(100vh - 48px); overflow:auto;
+  box-shadow:0 18px 60px rgba(0,0,0,.35)}
+.dhead{display:flex; align-items:baseline; gap:12px; padding:14px 18px;
+  border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--panel); z-index:1}
+.dhead .did{font-family:"IBM Plex Mono",monospace; font-size:14px; font-weight:600}
+.dhead .dsub{font-size:11px; color:var(--muted)}
+.dhead .dx{margin-left:auto; cursor:pointer; border:1px solid var(--line);
+  background:var(--panel-2); border-radius:6px; padding:3px 10px; font-size:12px; color:var(--ink-2)}
+.dplates{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; padding:16px 18px}
+.dp{display:flex; flex-direction:column; gap:5px}
+.dp .lab{font-size:10px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted)}
+/* Upscaled from the 128px the metrics were computed on. Pixelated, not smoothed:
+   smoothing would invent edge detail the measurement never saw. */
+.dp img, .dp canvas{width:100%; aspect-ratio:1; image-rendering:pixelated;
+  border:1px solid var(--line-2); border-radius:6px; background:#fff}
+.dp .miss{aspect-ratio:1; display:grid; place-items:center; border:1px dashed var(--line);
+  border-radius:6px; color:var(--muted); font-size:11px; text-align:center; padding:8px}
+.dsec{padding:0 18px 16px}
+.dsec h4{margin:14px 0 7px; font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted)}
+.dsec .note{font-size:11px; color:var(--muted); line-height:1.5; margin-top:6px}
+table.dtab{border-collapse:collapse; width:100%; font-family:"IBM Plex Mono",monospace; font-size:11.5px}
+table.dtab th, table.dtab td{padding:4px 8px; text-align:right; border-bottom:1px solid var(--line-2)}
+table.dtab th:first-child, table.dtab td:first-child{text-align:left; font-family:"IBM Plex Sans",sans-serif}
+table.dtab thead th{color:var(--muted); font-weight:500; font-size:10px; letter-spacing:.05em; text-transform:uppercase}
+.guess{font-family:"IBM Plex Mono",monospace; font-size:11px}
+.guess b{color:var(--accent)}
+
 .grid{
   padding:18px 20px 200px;
   display:grid; gap:14px;
@@ -876,7 +910,10 @@ function card(s){
   star.className = "star"; star.type = "button";
   star.setAttribute("aria-label", "Add " + s.id + " to the sequence");
   star.textContent = "★";
-  star.addEventListener("click", () => togglePick(s.id));
+  star.addEventListener("click", (ev) => { ev.stopPropagation(); togglePick(s.id); });
+  // The star already stops propagation, so the rest of the card is the hit area.
+  el.style.cursor = "zoom-in";
+  el.addEventListener("click", () => openDetail(s.id));
   p.append(star);
 
   const cell = (p) => '<div class="m"' + (p.tip ? ' title="' + p.tip(s, e) + '"' : "") +
@@ -890,6 +927,115 @@ function card(s){
     '<div class="mrow">' + PANEL.slice(1).map(cell).join("") + '</div>';
   el.append(p, meta);
   return el;
+}
+
+/* ── expanded card ───────────────────────────────────────────────────────── */
+function parseGuess(str){
+  if(!str) return [];
+  return String(str).split("|").map(t => {
+    const i = t.lastIndexOf(":");
+    return i < 0 ? {label:t, sim:null} : {label:t.slice(0,i), sim:+t.slice(i+1)};
+  });
+}
+function guessRow(str, truth){
+  const g = parseGuess(str);
+  if(!g.length) return "—";
+  return '<span class="guess">' + g.map(x =>
+    (x.label === truth ? "<b>" + x.label + "</b>" : x.label) +
+    (x.sim == null ? "" : " " + x.sim.toFixed(3))).join("  ·  ") + "</span>";
+}
+function closeDetail(){
+  const el = document.getElementById("detail");
+  if(el) el.remove();
+  document.removeEventListener("keydown", detailKey);
+}
+function detailKey(e){ if(e.key === "Escape") closeDetail(); }
+
+function openDetail(id){
+  closeDetail();
+  const s = byId.get(id); if(!s) return;
+  const e = sw(s), tel = TELBY.get(id);
+  const back = document.createElement("div");
+  back.className = "dback"; back.id = "detail";
+  back.addEventListener("click", (ev) => { if(ev.target === back) closeDetail(); });
+
+  const sheet = document.createElement("div"); sheet.className = "dsheet";
+  const sweepName = (DATA.sweep_dirs || {})[st.sweep] || st.sweep;
+
+  // header
+  const head = document.createElement("div"); head.className = "dhead";
+  head.innerHTML = `<span class="did">${s.id}</span>
+    <span class="dsub">${s.subset}${s.cls ? " · " + s.cls : ""} · ${sweepName}</span>`;
+  const x = document.createElement("button"); x.className = "dx"; x.textContent = "close  esc";
+  x.addEventListener("click", closeDetail);
+  head.append(x);
+
+  // plates: target, shadow, overlay -- plus the hand-cast one where it exists
+  const plates = document.createElement("div"); plates.className = "dplates";
+  const tgt = (e && e.w) || s.t;
+  const cell = (lab, node) => {
+    const d = document.createElement("div"); d.className = "dp";
+    const l = document.createElement("div"); l.className = "lab"; l.textContent = lab;
+    d.append(l, node); return d;
+  };
+  const missing = (msg) => { const d = document.createElement("div"); d.className = "miss";
+    d.textContent = msg; return d; };
+  plates.append(cell("target (as given to the optimizer)", tgt ? imgEl(tgt) : missing("none")));
+  plates.append(cell("shadow", e && e.s ? imgEl(e.s) : missing("not solved")));
+  if(e && e.s && tgt){
+    // Not observed by the grid's IntersectionObserver, so paint it now.
+    const cv = document.createElement("canvas"); cv.width = cv.height = PX;
+    paintOverlay(cv, tgt, e.s).catch(()=>{});
+    plates.append(cell("overlay — blue agrees, cyan missed, magenta spilled", cv));
+  }
+  if(tel) plates.append(cell("hand-cast (human)", imgEl(tel.mask)));
+
+  // numbers, both sweeps at once
+  const sec = document.createElement("div"); sec.className = "dsec";
+  const slots = Object.keys(DATA.sweep_dirs || {big:1, small:1});
+  const f = (v, dp=3) => (v == null ? "—" : (+v).toFixed(dp));
+  const mrow = (label, key, dp=3) => `<tr><td>${label}</td>` +
+    slots.map(k => `<td>${f((s[k]||{})[key], dp)}</td>`).join("") + "</tr>";
+
+  const g = parseGuess(e && e.clip_top3);
+  const tg = parseGuess(s.clip_t_top3);
+  sec.innerHTML = `
+    <h4>Geometry — against the target the optimizer was given</h4>
+    <table class="dtab"><thead><tr><th></th>${slots.map(k =>
+      `<th>${(DATA.sweep_dirs||{})[k] || k}</th>`).join("")}</tr></thead><tbody>
+      ${mrow("IoU","iou")}${mrow("NSD","nsd")}${mrow("boundary IoU","boundary_iou")}
+      ${mrow("clDice","cldice")}${mrow("pw_h1","pw_h1")}${mrow("Hu distance","hu_distance",2)}
+      ${mrow("shape IoU (size &amp; place removed)","tc_iou")}
+      ${mrow("aspect error","tc_aspect_error")}
+    </tbody></table>
+
+    <h4>Recognizability — CLIP, ranked in ${s.clip_n || "?"} classes of this subset</h4>
+    <table class="dtab"><thead><tr><th></th><th>rank</th><th>1/rank</th><th>what CLIP read it as</th></tr></thead><tbody>
+      <tr><td>target (ceiling)</td><td>${s.clip_t_rank ?? "—"}</td><td>${f(s.clip_t_rr)}</td>
+          <td style="text-align:left">${guessRow(s.clip_t_top3, s.clip_true)}</td></tr>
+      <tr><td>shadow</td><td>${(e&&e.clip_rank) ?? "—"}</td><td>${f(e&&e.clip_rr)}</td>
+          <td style="text-align:left">${guessRow(e&&e.clip_top3, s.clip_true)}</td></tr>
+    </tbody></table>
+    <div class="note">True class <b>${s.clip_true ?? s.cls ?? "?"}</b>, chance
+      ${s.clip_n ? (1/s.clip_n).toFixed(3) : "—"}. Ratio shadow/target
+      <b>${f(e && e.clip_ratio)}</b>. The similarity beside each guess is a raw
+      cosine, not a confidence — it does not sum to 1 across candidates.</div>
+
+    <h4>Fit — why the shadow is not the size or place of the authored target</h4>
+    <table class="dtab"><thead><tr><th></th>${slots.map(k =>
+      `<th>${(DATA.sweep_dirs||{})[k] || k}</th>`).join("")}</tr></thead><tbody>
+      ${mrow("scale","fit_scale",4)}${mrow("dx (px @128)","fit_dx",2)}${mrow("dy (px @128)","fit_dy",2)}
+      ${mrow("uncastable before","uncastable_before")}${mrow("uncastable after","uncastable_after")}
+      ${mrow("best IoU reported","best")}${mrow("mean over seeds","mean")}${mrow("seconds","sec",1)}
+    </tbody></table>
+    <div class="note">Images are 128&nbsp;px upscaled — that is the resolution the
+      sweep rendered at and every metric above was computed on, so there is no finer
+      detail to show.</div>`;
+
+  sheet.append(head, plates, sec);
+  back.append(sheet);
+  document.body.append(back);
+  document.addEventListener("keydown", detailKey);
 }
 
 function renderGrid(){

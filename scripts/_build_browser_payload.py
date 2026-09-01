@@ -38,6 +38,11 @@ METRICS = ["iou", "nsd", "pw_h1", "hu_distance", "boundary_iou", "cldice", "cham
            # position- and size-free: the only pairwise number on a fitted sweep
            # that is about the shape rather than about the fit (metrics.py).
            "tc_iou", "tc_aspect_error"]
+# Shown only when a card is expanded. The fit is the reason a shadow is smaller
+# and lower than the target it was drawn from, so a detail report that omits it
+# cannot explain its own pictures.
+DETAIL = ["fit_scale", "fit_dx", "fit_dy", "uncastable_before", "uncastable_after",
+          "tc_iou", "tc_aspect_error", "seconds"]
 ATTRS = ["area_frac", "solidity", "compactness", "median_stroke_width_rel",
          "min_stroke_width_rel", "thin_mass_frac", "elongation", "n_holes", "n_holes_signif",
          "n_components", "n_limbs", "aspect_ratio"]
@@ -160,6 +165,8 @@ def main() -> None:
                 # "correctly identified" ratio for exactly what is on screen.
                 "clip_top5": int(int(r.rank) <= 5),
                 "clip_n": int(r.n_classes),
+                "clip_top3": getattr(r, "clip_top3", None),
+                "clip_true": getattr(r, "true_class", None),
             }
         print(f"  clip: {len(cdf)} scored images from {a.clip_dir}")
         # The subset-level table too. top1 and mrr are both carried because they
@@ -200,6 +207,8 @@ def main() -> None:
             rec["clip_t_rr"] = ct["clip_rr"]
             rec["clip_t_rank"] = ct["clip_rank"]
             rec["clip_n"] = ct["clip_n"]
+            rec["clip_true"] = ct.get("clip_true")
+            rec["clip_t_top3"] = ct.get("clip_top3")
         for slot, name in sweeps.items():
             sp = os.path.join(OPTIMIZED, name, d["subset"], stem, f"{stem}_best.png")
             if not os.path.exists(sp):
@@ -222,6 +231,10 @@ def main() -> None:
                 for m in METRICS:
                     v = r.get(m)
                     e[m] = None if v is None or (isinstance(v, float) and np.isnan(v)) else round(float(v), 4)
+                for m in DETAIL:
+                    v = r.get(m)
+                    if v is not None and not (isinstance(v, float) and np.isnan(v)):
+                        e[m] = round(float(v), 4)
                 for k, c in (("best", "best_iou_reported"), ("mean", "mean_iou_reported"),
                              ("std", "std_iou_reported"), ("sec", "seconds")):
                     v = r.get(c)
@@ -232,6 +245,7 @@ def main() -> None:
                 e["clip_rank"] = cs["clip_rank"]
                 e["clip_top1"] = cs["clip_top1"]
                 e["clip_top5"] = cs["clip_top5"]
+                e["clip_top3"] = cs.get("clip_top3")
                 if ct and ct["clip_rr"]:
                     e["clip_ratio"] = round(cs["clip_rr"] / ct["clip_rr"], 4)
             rec[slot] = e
