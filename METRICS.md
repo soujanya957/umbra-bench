@@ -15,7 +15,8 @@ driver [`scripts/compute_metrics.py`](scripts/compute_metrics.py).
 
 IoU is the benchmark's only metric so far. On this data it substantially measures
 **how fat the target is**. Spearman correlation of `best_iou` against target
-attributes, over all 546 targets of the big-budget sweep:
+attributes, over the 546 targets of the pre-rescue big-budget sweep (the
+dataset now indexes 571; this correlation has not been recomputed):
 
 | target attribute | ρ vs `best_iou` |
 | --- | --- |
@@ -244,22 +245,182 @@ Two rules apply to all of C and are the easy things to get wrong:
    `recognizability(shadow) / recognizability(target)`. Treat `abstract` as the null
    control: its ceiling should sit near chance, and if it doesn't, the class list is
    leaking information.
-2. **Render, don't feed masks.** `render_shadow()` produces a soft-edged dark shape
-   on a warm wall — closer to the models' training distribution *and* to what human
-   raters will be shown, which keeps the automatic metrics and the human ceiling on
-   the same footing.
+2. **Render, don't feed masks — argued, then measured, and it does not matter.**
+   `render_shadow()` produces a soft-edged dark shape on a warm wall, closer to the
+   models' training distribution *and* to what human raters will be shown. The
+   reasoning still holds for the human ceiling. For CLIP it was tested both ways
+   over all 1713 images (2026-09-01): mean top-1 **0.3338 on raw masks against
+   0.3352 rendered**, with per-subset differences going both directions. Rendering
+   is mildly *worse* where it counts — `abstract` targets rise 0.086 → 0.198, which
+   erodes the null control rather than helping the shadows. So the runners feed raw
+   masks by default and keep `--render` for re-testing. Revisit this for any model
+   that is not CLIP; the finding is about ViT-B-32, not about silhouettes.
 
 ## C.1 CLIP retrieval — `clip_retrieval()`
 
-**Definition.** Encode the rendered shadow; encode `"a shadow of a {class}"` for
-every class in the benchmark; report the rank of the true class → top-1, top-5, MRR.
-
-**Purpose.** Zero-marginal-cost recognizability over all 546 targets, with a known
+**Purpose.** Zero-marginal-cost recognizability over all 571 targets, with a known
 chance level, directly comparable to the human N-AFC task.
+
+### The math
+
+For one image and a class list `C` with true class `y`:
+
+1. Encode image → `f ∈ ℝᵈ`, encode one prompt per class → `tᶜ ∈ ℝᵈ`, using
+   open_clip `ViT-B-32` / `laion2b_s34b_b79k`.
+2. L2-normalise both, so the inner product is the cosine:
+
+   `sᶜ = ⟨ f/‖f‖ , tᶜ/‖tᶜ‖ ⟩  ∈ [−1, 1]`
+
+3. Rank the true class, descending by `sᶜ`:
+
+   `r = 1 + |{ c ∈ C : sᶜ > sʸ }|`
+
+Over `N` images:
+
+| | |
+| --- | --- |
+| top-k | `(1/N) Σᵢ 1[rᵢ ≤ k]` |
+| MRR | `(1/N) Σᵢ 1/rᵢ` |
+| chance top-k | `k / \|C\|` |
+| chance MRR | `H(\|C\|) / \|C\|`, where `H(n) = Σ_{r=1..n} 1/r` |
+
+**There is no softmax and no `logit_scale`.** Standard CLIP zero-shot
+classification computes `softmax(logit_scale.exp() · s)` with `logit_scale.exp()
+≈ 100`; none of that is applied here. The consequence matters for anyone reading
+the CSV: `clip_top1_similarity` is a **raw cosine**, so it does not sum to 1 over
+the candidates, it is not a confidence, and a value of 0.25 does not mean "25%
+sure". CLIP cosines cluster in a narrow band (~0.15–0.35), which is exactly why
+the metric is a *rank* and not a score.
 
 **Not raw cosine similarity.** A bare CLIP score has no interpretable scale — 0.24
 is neither good nor bad — and drifts with prompt wording, so it cannot be compared
 across subsets. Ranking against a fixed class list fixes both.
+
+### The class list is per subset, and chance is not constant
+
+`figures` has 2 classes and `letters_upper` has 26, so chance top-1 runs from
+0.500 to 0.038 and chance MRR from 0.750 to 0.148. **Absolute top-1 is therefore
+not comparable down a column of subsets.** Each subset is ranked inside its own
+class list and the comparable columns are `top1_over_chance` and the ratio against
+the target.
+
+`figures` shows why chance MRR is worth carrying: with 2 classes MRR is bounded
+below by 0.5, so a perfect 1.000 is only 1.33× chance, while `letters_upper`'s
+0.9936 is 6.70×.
+
+### The ratio, and why two of them
+
+`recognizability_ratio(shadow, target, key)` is `shadow[key] / target[key]`. Both
+keys are reported because they disagree in a way that changes the conclusion:
+
+| key | reads as | `hand_shadow` |
+| --- | --- | --- |
+| `top1` | how often the shadow wins outright | **0.000** |
+| `mrr` | how much of the target's rank position survives | **0.407** |
+
+No `hand_shadow` shadow ever ranks first, so `top1` says total loss; they land
+around 4th of 9, so `mrr` says the signal is there and never wins. Quote one
+without the other and the subset is misreported either way. `mrr` is also the
+aggregate counterpart of the per-item figure the atlas card shows, since the mean
+of `1/r` *is* MRR.
+
+**A per-item top-1 ratio does not exist** — it would be `0/1 ÷ 0/1`. Per item, use
+reciprocal rank.
+
+### Labels
+
+There is **no shadow label**. A shadow is scored against its *target's* class: the
+question is whether the shadow makes the target's true class rank first, not what
+the shadow independently looks like. (For that, C.3.)
+
+Two extraction paths, deliberately different:
+
+- `tests/clip_eval.py` reads the label from the **capture filename**
+  (`letters_upper<X>_…_mask.png`) and folds it: low-confidence lowercase scored as
+  uppercase, and `I/l/1`, `O/o/0`, `q/9` collapsed as visually identical
+  silhouettes — 49 classes from 62. That folding is part of the metric definition.
+- `scripts/clip_eval_dataset.py` reads `class` from `metadata.jsonl`, which
+  `build_metadata.py` sets as `stem.split("_")[0]`. The exception is `teleop`,
+  where that heuristic yields the originating subset rather than the class, so it
+  is taken from the capture manifest instead.
+
+### Averaging: micro, not macro
+
+The atlas top strip means per item over whatever is on screen, so it is a **micro
+average** and is implicitly weighted by subset size — `objects` and `animals` are
+39% of the dataset, `figures` and `hand_shadow` 1.8% each. It also pools items
+whose class lists differ in size. Micro over all 571 is 0.326 against a macro
+(subset-equal) 0.375.
+
+Read the strip as "the average over the cards currently filtered", which is what it
+is. For a benchmark-level statement use the per-subset table, where the class list
+is fixed within each row.
+
+### Measured, 2026-09-01, raw masks, per-subset class lists
+
+| subset | classes | chance | target top-1 | big | ratio top-1 | ratio MRR |
+| --- | --- | --- | --- | --- | --- | --- |
+| letters_upper | 26 | 0.038 | 0.987 | 0.320 | 0.325 | 0.448 |
+| letters_lower | 26 | 0.038 | 0.923 | 0.244 | 0.264 | 0.396 |
+| digits | 10 | 0.100 | 0.900 | 0.333 | 0.370 | 0.524 |
+| animals | 22 | 0.046 | 0.700 | 0.100 | 0.143 | 0.301 |
+| objects | 23 | 0.044 | 0.617 | 0.139 | 0.225 | 0.391 |
+| vehicles | 6 | 0.167 | 0.467 | 0.233 | 0.500 | 0.667 |
+| figures | 2 | 0.500 | 1.000 | 0.500 | 0.500 | 0.750 |
+| hand_shadow | 9 | 0.111 | 0.500 | 0.000 | 0.000 | 0.407 |
+| abstract | 17 | 0.059 | 0.086 | 0.086 | — | — |
+| teleop | 27 | 0.037 | 0.069 | 0.103 | — | — |
+
+**The null control holds.** `abstract` targets score 0.086 against 0.059 chance
+(1.47×), and 0.246 MRR against 0.202 chance (1.22×). The class list is not
+leaking, which is the precondition for reading any row above it.
+
+**`teleop` behaves as a second null control** at 0.069 against 0.037. That follows
+from what the subset is — human shadow captures re-used as targets — and a shadow
+of a letter is not itself legible as that letter. Its shadow scores match its
+target scores, so it carries no recognizability signal and should not sit in a
+table beside the semantic subsets without that note.
+
+**Budget helps recognizability**, unlike IoU: big beats small on 7 of 8 semantic
+subsets, where the same budget increase bought +0.030 IoU against the shown target
+and nothing against the authored one.
+
+### The two runners do not agree, and should not be compared
+
+`tests/clip_eval.py` reports top-1 **0.160** on 25 glyph captures. The dataset
+runner's `teleop` row reports **0.069**. Neither is wrong; they score different
+pixels against different class lists with different prompts. Changed one at a
+time on the same 25 captures:
+
+| variant | top-1 | top-5 | MRR |
+| --- | --- | --- | --- |
+| Simin's configuration — raw masks, 49 folded classes, case-explicit prompt | **0.160** | 0.280 | **0.261** |
+| only the pixels change — normalised + grounded 512×512 | **0.040** | 0.360 | 0.192 |
+| only the prompt changes — generic `"a shadow of a {}"` | 0.080 | 0.240 | 0.172 |
+| only the class list changes — the `teleop` subset's own 27, unfolded | 0.120 | 0.280 | 0.216 |
+
+**Preprocessing is the largest single effect and it is worth understanding.**
+The captures are 500×383; `normalize_targets.py` pads them to a 512×512 square
+and `ground_targets.py` translates them to rest on the bottom edge, because that
+is what makes them solvable targets. CLIP then sees a smaller shape sitting low
+in a larger white field, and top-1 falls 0.160 → 0.040. Note top-5 *rises*
+(0.280 → 0.360) and MRR falls much less (0.261 → 0.192): grounding scrambles
+which class comes first without destroying the ranking. Anything reported on the
+`teleop` subset is a statement about the grounded, padded images, not about the
+captures as photographed.
+
+**The case-explicit prompt earns its place.** `glyph_prompt` ("a shadow of the
+uppercase letter M") doubles top-1 over the generic wording, 0.160 against 0.080.
+
+**Folding helps despite enlarging the class list.** 49 folded classes beat 27
+unfolded ones, 0.160 against 0.120, because the unfolded list makes `I`, `l` and
+`1` compete as separate answers for silhouettes that are identical.
+
+### Runners
+
+    python tests/clip_eval.py            # 25 glyph captures, 49-class folded set
+    python scripts/clip_eval_dataset.py  # all 571, 3 conditions, per-subset lists
+    python scripts/clip_eval_dataset.py --render   # the render_shadow() variant
 
 ## C.2 Domain-matched classifier
 
@@ -281,7 +442,7 @@ definition, not an implementation detail).
 **Purpose.** Closer to the human task than CLIP: naming must be *produced*, not
 merely ranked. It degrades gracefully on `abstract`, where a forced-choice model
 must pick something but a VLM can correctly answer "nothing". Vote spread across the
-5 samples is a free confidence estimate. ~$0.001/image, so it can run on all 546 and
+5 samples is a free confidence estimate. ~$0.001/image, so it can run on all 571 and
 be used to choose the ~100 items worth paying humans for.
 
 ## C.4 Human study — `build_human_study()`
@@ -372,10 +533,10 @@ once instead of being run repeatedly against a growing feature set.
 | --- | --- | --- | --- |
 | 1 | Extend `shape_attributes.py` — Part A | free, ~7 min for 546 | **done** |
 | 2 | `metrics.py` + `compute_metrics.py` — Part B | free, ~0.07 s/pair | **done** |
-| 3 | Rebuild `metadata.jsonl`; run `compute_metrics.py` over both sweeps | ~15 min | next |
-| 4 | CLIP retrieval + targets ceiling — C.1 | free (local model) | next |
+| 3 | Rebuild `metadata.jsonl`; run `compute_metrics.py` over both sweeps | ~15 min | **done** |
+| 4 | CLIP retrieval + targets ceiling — C.1 | free (local model) | **done** — 1713 images, C.1 |
 | 5 | **EDA** — Part F below | — | after 3–4 |
-| 6 | VLM naming on all 546 — C.3 | ~$1 | after 5 |
+| 6 | VLM naming on all 571 — C.3 | ~$1 | after 5 |
 | 7 | Human study on the ~100 items EDA selects — C.4 | ~$150–300 | after 6 |
 | 8 | Metric-validation: correlate every metric with human accuracy — C.5 | free | after 7 |
 | 9 | Optimizer ablation: add a clDice or persistence term to the objective | compute | stretch |
