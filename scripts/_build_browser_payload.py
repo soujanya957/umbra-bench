@@ -147,7 +147,7 @@ def main() -> None:
     # `clip_rr` = 1/rank: continuous, higher-better, and its mean over a set is
     # exactly the MRR that clip_eval_dataset.py reports, so the card and the
     # summary table cannot disagree. Optional -- the dashboard predates it.
-    clip = {}
+    clip, clip_summary = {}, []
     clip_csv = os.path.join(BENCH, a.clip_dir, "clip_per_image.csv")
     if os.path.exists(clip_csv):
         cdf = pd.read_csv(clip_csv)
@@ -156,9 +156,26 @@ def main() -> None:
                 "clip_rr": round(1.0 / int(r.rank), 4),
                 "clip_rank": int(r.rank),
                 "clip_top1": int(r.top1),
+                # 0/1 per item, so the readout's mean over a selection is the
+                # "correctly identified" ratio for exactly what is on screen.
+                "clip_top5": int(int(r.rank) <= 5),
                 "clip_n": int(r.n_classes),
             }
         print(f"  clip: {len(cdf)} scored images from {a.clip_dir}")
+        # The subset-level table too. top1 and mrr are both carried because they
+        # disagree in a way that matters: hand_shadow is 0.000 by top1, since no
+        # shadow ever ranks first, and 0.407 by MRR, since they rank respectably
+        # and just never win. One column alone misreports that subset either way.
+        csum = os.path.join(BENCH, a.clip_dir, "clip_summary.csv")
+        if os.path.exists(csum):
+            keep = ["subset", "condition", "n", "n_classes", "chance_top1", "top1",
+                    "top5", "mrr", "top1_over_chance", "ratio_vs_target",
+                    "mrr_ratio_vs_target"]
+            sdf = pd.read_csv(csum)
+            clip_summary = [
+                {k: (None if pd.isna(v) else (float(v) if isinstance(v, float) else v))
+                 for k, v in r.items() if k in keep}
+                for r in sdf.to_dict("records")]
     else:
         print(f"  clip: {a.clip_dir}/clip_per_image.csv absent -- "
               f"run scripts/clip_eval_dataset.py to add the recognizability metric")
@@ -214,6 +231,7 @@ def main() -> None:
                 e["clip_rr"] = cs["clip_rr"]
                 e["clip_rank"] = cs["clip_rank"]
                 e["clip_top1"] = cs["clip_top1"]
+                e["clip_top5"] = cs["clip_top5"]
                 if ct and ct["clip_rr"]:
                     e["clip_ratio"] = round(cs["clip_rr"] / ct["clip_rr"], 4)
             rec[slot] = e
@@ -221,6 +239,7 @@ def main() -> None:
 
     payload = {"px": a.px, "n": len(samples), "metrics": METRICS, "attrs": ATTRS,
                "targets_dir": a.targets_dir, "sweep_dirs": sweeps, "ref": a.ref,
+               "clip_summary": clip_summary,
                "subsets": sorted({s["subset"] for s in samples}), "samples": samples}
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     with open(a.out, "w", encoding="utf-8") as f:
