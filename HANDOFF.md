@@ -112,33 +112,58 @@ to the core count does not apply.
 Both budgets therefore fit in one night, which the earlier estimate said was
 impossible.
 
-## 4b. Early result — 51 shared `abstract` targets, while the sweep ran
+## 4b. Result — small-budget-grounded vs small-budget-fitted, 478 shared targets
 
-Preliminary and **not** the finding: `abstract` only (the null-control subset),
-51 of 542, from the first minutes of the run. Recorded because it is the first
-direct measurement of the placement hypothesis. Paired on shared target ids,
-small-budget-grounded vs small-budget-fitted:
+The sweep finished 2026-09-01 01:24, 542/542, in **0.92 h** on 12 shards. Both
+CSVs are in `results/`. Paired on the 478 target ids the two sweeps share
+(grounded has 542; the extra 64 are the `_v2` targets the centred sweep never
+ran):
 
-| | grounded | fitted (centred) | delta |
-| --- | --- | --- | --- |
-| IoU vs `ref=original` | **0.3486** | 0.2557 | **+0.0929**, better on 47/51 |
-| IoU vs `ref=shown` | 0.7493 | 0.7552 | −0.0059 |
+| ref | grounded | centred | delta | better |
+| --- | --- | --- | --- | --- |
+| `original` | **0.3504** | 0.1999 | **+0.1506** | **441/478** |
+| `shown` | 0.7523 | 0.7345 | +0.0179 | 285/478 |
 
-That is the shape the hypothesis predicts, and the two rows have to be read
-together: fidelity to the *authored* target improves by ~36% relative, while the
-solver's ability to cast what it was actually asked to cast is unchanged. The
-gain is therefore in the placement — the fit no longer has to shove the target
-down and off the frame — not in the solver getting better. If `ref=shown` had
-moved too, the comparison would be confounded.
+**+75% relative on IoU against the authored target, improving 92% of targets.**
 
-One number to watch as the other subsets land: **`at_bound` is running ~12%**,
-not the 1.1% the empirical reach-map sweep over the same (scale, dy) grid
-predicted. Still far below the 60% the centred sweeps sit at, so the direction
-holds, but the reach-map estimate was optimistic by ~10x and the gap is worth
-explaining before either number goes in a writeup.
+Every subset improves, and the spread is itself informative:
 
-The baseline CSV is already computed: `results/metrics_small-budget-fitted.csv`
-(478 targets, `--targets-dir targets`).
+| subset | n | grounded | centred | delta | better |
+| --- | --- | --- | --- | --- | --- |
+| vehicles | 30 | 0.5261 | 0.1144 | **+0.4117** | 30/30 |
+| objects | 95 | 0.4076 | 0.1886 | +0.2190 | 89/95 |
+| animals | 76 | 0.3914 | 0.1856 | +0.2058 | 69/76 |
+| hand_shadow | 10 | 0.2825 | 0.1326 | +0.1499 | 10/10 |
+| letters_lower | 77 | 0.2988 | 0.2010 | +0.0978 | 74/77 |
+| abstract | 76 | 0.3391 | 0.2596 | +0.0795 | 65/76 |
+| letters_upper | 74 | 0.2709 | 0.1918 | +0.0792 | 69/74 |
+| digits | 30 | 0.2482 | 0.1916 | +0.0566 | 26/30 |
+| figures | 10 | 0.4160 | 0.3604 | +0.0556 | 9/10 |
+
+`vehicles` gains most and wins 30/30 — consistent with the earlier reach-map
+finding that vehicles are the subset that wants to move *up* (−11 px). Centred
+placement pushed them hardest in the wrong direction, so grounding recovers the
+most there. `digits` and `figures` gain least, and digits wanted +17 px, the
+opposite sign. The effect tracks the per-subset placement remainder rather than
+being uniform, which is what a placement effect should look like.
+
+**`ref=shown` moved too, by +0.0179.** An earlier partial on `abstract` alone had
+it at −0.006, i.e. flat, which made a tidier story: gain entirely in placement,
+solver untouched. On the full set that is not quite right — the solver also does
+marginally better on grounded targets. The attribution still holds, because the
+`ref=original` gain is ~8x larger, but it should be stated as "dominated by
+placement", not "purely placement".
+
+### Two things to resolve before this is written up
+
+1. **`at_bound` came in at 14.2%**, against the **1.1%** predicted by the
+   empirical reach-map sweep over the same (scale, dy) grid, and 60% on the
+   centred sweeps. The direction is right and the improvement is large, but the
+   reach-map estimate was optimistic by ~13x. It is a more permissive proxy than
+   an actual solve; worth understanding before either figure is quoted.
+2. `betti_error` is **0.40 grounded vs 0.49 centred** and `cldice` 0.517 vs
+   0.299 — the topology metrics move the same way as IoU, so the result is not
+   an IoU artefact. Worth a line in the writeup.
 
 ## 5. Metrics
 
