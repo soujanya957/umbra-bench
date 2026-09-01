@@ -446,6 +446,8 @@ button.act:hover{border-color:var(--accent); color:var(--accent-ink)}
         <option value="clip-asc">CLIP — least recognisable</option>
         <option value="cliptop1-desc">CLIP — identified top-1 first</option>
         <option value="cliptop5-desc">CLIP — identified top-5 first</option>
+        <option value="cliptgt-desc">CLIP target — most legible targets</option>
+        <option value="cliptgt-asc">CLIP target — targets CLIP cannot read</option>
         <option value="clipretain-desc">CLIP vs target — most of the ceiling kept</option>
         <option value="clipover-desc">CLIP vs target — shadow beat its target</option>
         <option value="tc-desc">shape IoU — best shape, size &amp; place ignored</option>
@@ -656,6 +658,8 @@ const CMP = {
                             || (a.clip_t_rank ?? 1e9) - (b.clip_t_rank ?? 1e9),
   "clipover-desc":  hi("clip_ratio"),
   "cliptop1-desc":  hi("clip_top1"), "cliptop5-desc": hi("clip_top5"),
+  "cliptgt-desc":   (a,b) => (b.clip_t_rr ?? -1) - (a.clip_t_rr ?? -1),
+  "cliptgt-asc":    (a,b) => (a.clip_t_rr ??  2) - (b.clip_t_rr ??  2),
   "delta-desc": (a,b) => (delta(b) ?? -9) - (delta(a) ?? -9),
   "stroke-asc": (a,b) => (a.a.median_stroke_width_rel ?? 9) - (b.a.median_stroke_width_rel ?? 9),
   "subset":     (a,b) => a.subset.localeCompare(b.subset) || (iou(b) ?? -1) - (iou(a) ?? -1),
@@ -673,7 +677,14 @@ const PANEL = [
      selection is exactly the MRR clip_eval_dataset.py reports. Absent until that
      has been run, and absent for a sweep it did not cover -- num() renders it as
      an em dash rather than inventing a zero. */
-  { k:"clip_rr",     name:"CLIP",  dir:1,  dp:3, what:"is it recognisable, 1/rank" }
+  { k:"clip_rr",     name:"CLIP",  dir:1,  dp:3, what:"is it recognisable, 1/rank",
+    tip: (s, e) => {
+      if(!e || e.clip_rank == null) return "no CLIP score";
+      const n = s.clip_n ? " of " + s.clip_n : "";
+      const t = s.clip_t_rank != null ? "target ranks " + s.clip_t_rank + n : "target not scored";
+      return "shadow ranks " + e.clip_rank + n + " · " + t
+           + (e.clip_ratio != null ? " · ratio " + e.clip_ratio : "");
+    } }
 ];
 /* The top strip carries two more than the cards do. clip_top1/clip_top5 are 0/1
    per item, so a mean over the current selection IS the correctly-identified
@@ -682,6 +693,19 @@ const PANEL = [
 const READOUT = PANEL.concat([
   { k:"clip_top1", name:"top-1", dir:1, dp:3, what:"correctly identified outright" },
   { k:"clip_top5", name:"top-5", dir:1, dp:3, what:"true class within the top 5" },
+  /* The ceiling. It lives on the sample, not the sweep entry, so it needs its own
+     aggregate rather than mv(). Without it on screen the ratio sorts have an
+     invisible denominator and cannot be checked by eye. */
+  { k:"__clipT", name:"target", what:"the same measure on the target — the ceiling",
+    agg: (rows) => {
+      const xs = rows.map(s => s.clip_t_rr).filter(x => x != null);
+      if(!xs.length) return { value:"—", sub:"" };
+      const m = xs.reduce((a,b)=>a+b,0)/xs.length;
+      const sh = rows.map(s => mv(s,"clip_rr")).filter(x => x != null);
+      const ms = sh.length ? sh.reduce((a,b)=>a+b,0)/sh.length : null;
+      return { value: m.toFixed(3),
+               sub: ms == null ? "" : "shadow keeps " + (ms/m).toFixed(3) + " of it" };
+    } },
   /* Composition, not a score. Deliberately NOT paired with a "chance = 1/labels"
      figure: CLIP ranks each item inside its OWN subset's class list, so the
      pooled distinct-label count across a mixed selection is not the list anything
@@ -717,7 +741,8 @@ const SORT_METRIC = {
   "pw-asc":"pw_h1", "pw-desc":"pw_h1", "hu-asc":"hu_distance", "hu-desc":"hu_distance",
   "delta-desc":"__delta", "stroke-asc":"__stroke",
   "clip-desc":"clip_rr", "clip-asc":"clip_rr",
-  "cliptop1-desc":"clip_top1", "cliptop5-desc":"clip_top5", "clipretain-desc":"clip_ratio", "clipover-desc":"clip_ratio",
+  "cliptop1-desc":"clip_top1", "cliptop5-desc":"clip_top5",
+  "cliptgt-desc":"__clipT", "cliptgt-asc":"__clipT", "clipretain-desc":"clip_ratio", "clipover-desc":"clip_ratio",
   "tc-desc":"tc_iou", "tc-asc":"tc_iou", "asp-desc":"tc_aspect_error",
   "disagree":"iou", "subset":"iou", "id":"iou"
 };
@@ -729,6 +754,7 @@ const METRIC_META = {
   clip_rr:     { label:"CLIP 1/rank",   dir: 1, dp:3 },
   clip_top1:   { label:"identified top-1", dir: 1, dp:3 },
   clip_top5:   { label:"identified top-5", dir: 1, dp:3 },
+  __clipT:     { label:"target CLIP 1/rank", dir: 1, dp:3 },
   clip_ratio:  { label:"CLIP vs target",dir: 1, dp:3 },
   tc_iou:      { label:"shape IoU",     dir: 1, dp:3 },
   tc_aspect_error:{ label:"aspect error",dir:-1, dp:3 },
@@ -738,6 +764,9 @@ const METRIC_META = {
 const mkey = () => SORT_METRIC[st.sort] || "iou";
 const mval = (s, k) => k === "__delta"  ? delta(s)
                      : k === "__stroke" ? (s.a.median_stroke_width_rel ?? null)
+                     // sample-level, not per-sweep: mv() looks inside the active
+                     // sweep entry and would return undefined for the ceiling.
+                     : k === "__clipT"  ? (s.clip_t_rr ?? null)
                      : mv(s, k);
 
 /* rank-disagreement: the cases METRICS.md is about — area filled, outline wrong */
@@ -862,7 +891,8 @@ function card(s){
   star.addEventListener("click", () => togglePick(s.id));
   p.append(star);
 
-  const cell = (p) => '<div class="m"><span>' + p.name + (p.dir > 0 ? " ↑" : " ↓") +
+  const cell = (p) => '<div class="m"' + (p.tip ? ' title="' + p.tip(s, e) + '"' : "") +
+    '><span>' + p.name + (p.dir > 0 ? " ↑" : " ↓") +
     '</span><b>' + num(e && e[p.k], p.dp) + '</b></div>';
   const meta = document.createElement("div");
   meta.className = "meta";
