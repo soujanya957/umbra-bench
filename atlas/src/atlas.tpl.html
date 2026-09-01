@@ -110,7 +110,11 @@ select.field{cursor:pointer}
 
 /* four-metric readout — recomputed over whatever the filters currently show */
 .readout{
-  display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:1px;
+  /* One column per PANEL entry, however many that is. It was repeat(4,...) and
+     the panel is no longer four, which left a row of empty cells the moment
+     CLIP was added. auto-flow:column tracks the array instead of restating its
+     length in CSS. */
+  display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); gap:1px;
   background:var(--line); border-bottom:1px solid var(--line);
 }
 .ro{background:var(--panel-2); padding:9px 20px 10px; display:flex; flex-direction:column; gap:2px; min-width:0}
@@ -119,7 +123,9 @@ select.field{cursor:pointer}
 .ro .v{font-family:"IBM Plex Mono",monospace; font-size:19px; font-weight:600; letter-spacing:-.02em; font-variant-numeric:tabular-nums}
 .ro .sp{font-family:"IBM Plex Mono",monospace; font-size:10px; color:var(--muted); font-variant-numeric:tabular-nums}
 .ro .wh{font-size:10.5px; color:var(--muted); line-height:1.35}
-@media (max-width:760px){ .readout{grid-template-columns:repeat(2,1fr)} }
+@media (max-width:760px){
+  .readout{grid-auto-flow:row; grid-template-columns:repeat(2,minmax(0,1fr))}
+}
 
 .grid{
   padding:18px 20px 200px;
@@ -148,7 +154,7 @@ select.field{cursor:pointer}
 .idline{display:flex; align-items:baseline; justify-content:space-between; gap:6px}
 .sid{font-family:"IBM Plex Mono",monospace; font-size:10px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .iou{font-family:"IBM Plex Mono",monospace; font-size:17px; font-weight:600; letter-spacing:-.02em; font-variant-numeric:tabular-nums; flex:none}
-.mrow{display:grid; grid-template-columns:repeat(3,1fr); gap:4px; border-top:1px solid var(--line-2); padding-top:6px}
+.mrow{display:grid; grid-template-columns:repeat(2,1fr); gap:4px; border-top:1px solid var(--line-2); padding-top:6px}
 .m{display:flex; flex-direction:column; gap:1px}
 /* metric names are code identifiers — keep their real case so they match METRICS.md */
 .m span{font-family:"IBM Plex Mono",monospace; font-size:9px; letter-spacing:.04em; color:var(--muted)}
@@ -424,6 +430,9 @@ button.act:hover{border-color:var(--accent); color:var(--accent-ink)}
         <option value="hu-asc">Hu ↓ — shape closest, pose ignored</option>
         <option value="hu-desc">Hu ↓ — shape furthest, pose ignored</option>
         <option value="disagree">where IoU and NSD disagree most</option>
+        <option value="clip-desc">CLIP — most recognisable</option>
+        <option value="clip-asc">CLIP — least recognisable</option>
+        <option value="clipratio-desc">CLIP vs target — closest to the ceiling</option>
         <option value="tc-desc">shape IoU — best shape, size &amp; place ignored</option>
         <option value="tc-asc">shape IoU — worst shape</option>
         <option value="asp-desc">aspect error — most stretched</option>
@@ -615,6 +624,8 @@ const CMP = {
   "hu-asc":     lo("hu_distance"), "hu-desc": hi("hu_distance"),
   "tc-desc":    hi("tc_iou"), "tc-asc": lo("tc_iou"),
   "asp-desc":   hi("tc_aspect_error"),
+  "clip-desc":  hi("clip_rr"), "clip-asc": lo("clip_rr"),
+  "clipratio-desc": hi("clip_ratio"),
   "delta-desc": (a,b) => (delta(b) ?? -9) - (delta(a) ?? -9),
   "stroke-asc": (a,b) => (a.a.median_stroke_width_rel ?? 9) - (b.a.median_stroke_width_rel ?? 9),
   "subset":     (a,b) => a.subset.localeCompare(b.subset) || (iou(b) ?? -1) - (iou(a) ?? -1),
@@ -627,7 +638,12 @@ const PANEL = [
   { k:"iou",         name:"IoU",   dir:1,  dp:3, what:"how much area agrees" },
   { k:"nsd",         name:"NSD",   dir:1,  dp:3, what:"outline within tolerance" },
   { k:"pw_h1",       name:"pw_h1", dir:-1, dp:3, what:"holes survived, graded" },
-  { k:"hu_distance", name:"Hu",    dir:-1, dp:2, what:"shape, pose removed" }
+  { k:"hu_distance", name:"Hu",    dir:-1, dp:2, what:"shape, pose removed" },
+  /* 1/rank of the true class among its subset's own classes, so the mean over any
+     selection is exactly the MRR clip_eval_dataset.py reports. Absent until that
+     has been run, and absent for a sweep it did not cover -- num() renders it as
+     an em dash rather than inventing a zero. */
+  { k:"clip_rr",     name:"CLIP",  dir:1,  dp:3, what:"is it recognisable, 1/rank" }
 ];
 const q05 = (xs, p) => { if(!xs.length) return null;
   const a = [...xs].sort((x,y) => x-y), i = (a.length-1)*p, f = Math.floor(i);
@@ -642,6 +658,8 @@ const SORT_METRIC = {
   "iou-desc":"iou", "iou-asc":"iou", "nsd-desc":"nsd", "nsd-asc":"nsd",
   "pw-asc":"pw_h1", "pw-desc":"pw_h1", "hu-asc":"hu_distance", "hu-desc":"hu_distance",
   "delta-desc":"__delta", "stroke-asc":"__stroke",
+  "clip-desc":"clip_rr", "clip-asc":"clip_rr", "clipratio-desc":"clip_ratio",
+  "tc-desc":"tc_iou", "tc-asc":"tc_iou", "asp-desc":"tc_aspect_error",
   "disagree":"iou", "subset":"iou", "id":"iou"
 };
 const METRIC_META = {
@@ -649,6 +667,10 @@ const METRIC_META = {
   nsd:         { label:"NSD",           dir: 1, dp:3 },
   pw_h1:       { label:"pw_h1",         dir:-1, dp:3 },
   hu_distance: { label:"Hu",            dir:-1, dp:2 },
+  clip_rr:     { label:"CLIP 1/rank",   dir: 1, dp:3 },
+  clip_ratio:  { label:"CLIP vs target",dir: 1, dp:3 },
+  tc_iou:      { label:"shape IoU",     dir: 1, dp:3 },
+  tc_aspect_error:{ label:"aspect error",dir:-1, dp:3 },
   __delta:     { label:"Δ big − small", dir: 1, dp:3 },
   __stroke:    { label:"stroke width",  dir: 0, dp:3 }
 };
@@ -797,7 +819,12 @@ function renderGrid(){
     const d = disagreement(rows);
     rows = rows.slice().sort((a,b) => (d.get(b.id) ?? -1) - (d.get(a.id) ?? -1));
   } else {
-    rows = rows.slice().sort(CMP[st.sort]);
+    // Fall back rather than pass undefined. The guard at load only runs once, so
+    // a menu entry with no CMP comparator reached this as sort(undefined), which
+    // is a lexicographic sort of "[object Object]" -- every element equal, the
+    // order untouched, and no error. A sort that silently does nothing looks
+    // exactly like a sort whose metric happens to be flat.
+    rows = rows.slice().sort(CMP[st.sort] || CMP["iou-desc"]);
   }
   $("#nShown").textContent = rows.length;
   const solved = S.filter(x => iou(x) != null).length, pend = DATA.n - solved;

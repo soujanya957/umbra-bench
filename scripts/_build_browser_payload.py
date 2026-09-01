@@ -94,6 +94,10 @@ def main() -> None:
                          "authored, which folds the fit's scale and shift in as "
                          "error and is the end-to-end number; it will not line "
                          "up with the pictures.")
+    ap.add_argument("--clip-dir", default=os.path.join("results", "clip_dataset"),
+                    help="directory holding clip_per_image.csv from "
+                         "scripts/clip_eval_dataset.py. Absent is fine -- the "
+                         "recognizability metric is simply omitted.")
     ap.add_argument("--out", default=os.path.join(BENCH, "results", "browser_payload.json"))
     ap.add_argument("--list", action="store_true",
                     help="show the sweeps and target trees on disk, then exit")
@@ -138,6 +142,27 @@ def main() -> None:
             print(f"  ! no rows in master_table for sweep={name!r} -- "
                   f"the `{slot}` slot will have metrics missing")
 
+    # CLIP recognizability, if it has been run. Keyed by (id, condition) where the
+    # condition is the sweep slot, plus `target` for the ceiling. Carried as
+    # `clip_rr` = 1/rank: continuous, higher-better, and its mean over a set is
+    # exactly the MRR that clip_eval_dataset.py reports, so the card and the
+    # summary table cannot disagree. Optional -- the dashboard predates it.
+    clip = {}
+    clip_csv = os.path.join(BENCH, a.clip_dir, "clip_per_image.csv")
+    if os.path.exists(clip_csv):
+        cdf = pd.read_csv(clip_csv)
+        for r in cdf.itertuples(index=False):
+            clip[(r.id, r.condition)] = {
+                "clip_rr": round(1.0 / int(r.rank), 4),
+                "clip_rank": int(r.rank),
+                "clip_top1": int(r.top1),
+                "clip_n": int(r.n_classes),
+            }
+        print(f"  clip: {len(cdf)} scored images from {a.clip_dir}")
+    else:
+        print(f"  clip: {a.clip_dir}/clip_per_image.csv absent -- "
+              f"run scripts/clip_eval_dataset.py to add the recognizability metric")
+
     samples, missing_target, missing_shadow = [], [], {k: 0 for k in sweeps}
     for sid, d in meta.items():
         # The thumbnail must come from the tree the sweep solved, not from the
@@ -151,6 +176,13 @@ def main() -> None:
         rec = {"id": sid, "subset": d["subset"], "cls": d.get("class", ""),
                "t": thumb(tpath, a.px),
                "a": {k: d["attributes"].get(k) for k in ATTRS}}
+        ct = clip.get((sid, "target"))
+        if ct:
+            # The ceiling. A shadow scoring badly means nothing until you know
+            # whether CLIP could read the target at all.
+            rec["clip_t_rr"] = ct["clip_rr"]
+            rec["clip_t_rank"] = ct["clip_rank"]
+            rec["clip_n"] = ct["clip_n"]
         for slot, name in sweeps.items():
             sp = os.path.join(OPTIMIZED, name, d["subset"], stem, f"{stem}_best.png")
             if not os.path.exists(sp):
@@ -177,6 +209,13 @@ def main() -> None:
                              ("std", "std_iou_reported"), ("sec", "seconds")):
                     v = r.get(c)
                     e[k] = None if v is None or (isinstance(v, float) and np.isnan(v)) else round(float(v), 4)
+            cs = clip.get((sid, slot))
+            if cs:
+                e["clip_rr"] = cs["clip_rr"]
+                e["clip_rank"] = cs["clip_rank"]
+                e["clip_top1"] = cs["clip_top1"]
+                if ct and ct["clip_rr"]:
+                    e["clip_ratio"] = round(cs["clip_rr"] / ct["clip_rr"], 4)
             rec[slot] = e
         samples.append(rec)
 
