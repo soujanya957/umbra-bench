@@ -112,6 +112,27 @@ to the core count does not apply.
 Both budgets therefore fit in one night, which the earlier estimate said was
 impossible.
 
+## 4a. Why grounded is the dataset, not a condition
+
+Settled 2026-09-01. The arms are mounted on the table; a shadow is cast by
+something that grows up from the base plane. A target floating at the vertical
+centre of the frame is asking the rig for a shape it is not built to throw, and
+the 27-row offset between where targets were drawn and where the rig's real
+footprint sits is that mismatch measured rather than a property of any target.
+
+So `targets_grounded/` is the canonical tree from here, and `targets/` is the
+version with the placement bug. The grounded-vs-centred tables in 4b and 4c stay
+as the record of how it was established, but there is nothing left to A/B: a
+sweep against `targets/` is a sweep against targets the rig cannot reach, and
+re-stating the gain under a different metric would not change the decision.
+
+Practical consequences:
+
+- new targets get `scripts/normalize_targets.py` then `scripts/ground_targets.py`
+  before anything solves them, which is what the teleop subset went through;
+- `--targets-dir targets_grounded` at both solve and metrics time;
+- the atlas builds from the grounded tree and the grounded sweeps by default.
+
 ## 4b. Result — small-budget-grounded vs small-budget-fitted, 478 shared targets
 
 The sweep finished 2026-09-01 01:24, 542/542, in **0.92 h** on 12 shards. Both
