@@ -112,6 +112,34 @@ to the core count does not apply.
 Both budgets therefore fit in one night, which the earlier estimate said was
 impossible.
 
+## 4b. Early result — 51 shared `abstract` targets, while the sweep ran
+
+Preliminary and **not** the finding: `abstract` only (the null-control subset),
+51 of 542, from the first minutes of the run. Recorded because it is the first
+direct measurement of the placement hypothesis. Paired on shared target ids,
+small-budget-grounded vs small-budget-fitted:
+
+| | grounded | fitted (centred) | delta |
+| --- | --- | --- | --- |
+| IoU vs `ref=original` | **0.3486** | 0.2557 | **+0.0929**, better on 47/51 |
+| IoU vs `ref=shown` | 0.7493 | 0.7552 | −0.0059 |
+
+That is the shape the hypothesis predicts, and the two rows have to be read
+together: fidelity to the *authored* target improves by ~36% relative, while the
+solver's ability to cast what it was actually asked to cast is unchanged. The
+gain is therefore in the placement — the fit no longer has to shove the target
+down and off the frame — not in the solver getting better. If `ref=shown` had
+moved too, the comparison would be confounded.
+
+One number to watch as the other subsets land: **`at_bound` is running ~12%**,
+not the 1.1% the empirical reach-map sweep over the same (scale, dy) grid
+predicted. Still far below the 60% the centred sweeps sit at, so the direction
+holds, but the reach-map estimate was optimistic by ~10x and the gap is worth
+explaining before either number goes in a writeup.
+
+The baseline CSV is already computed: `results/metrics_small-budget-fitted.csv`
+(478 targets, `--targets-dir targets`).
+
 ## 5. Metrics
 
 ```bash
