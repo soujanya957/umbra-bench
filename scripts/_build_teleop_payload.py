@@ -68,6 +68,9 @@ items = []
 for r in man["records"]:
     e = {k: r[k] for k in ("capture", "subset", "class", "part", "otsu_thr",
                            "shape_frac", "n_components", "holes_signif", "suspect", "match")}
+    # How the committed mask was actually made. The view states it rather than
+    # implying the browser's own segmenter produced what is on screen.
+    e["mask_backend"] = r.get("mask_backend")
     e["reason"] = r.get("reason", "")
     e["sample_id"] = r.get("sample_id")
     e["raw"] = jpg(os.path.join(rc.BENCH, r["raw"]), 300) if os.path.exists(

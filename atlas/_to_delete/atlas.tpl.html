@@ -1,0 +1,1583 @@
+<title>Umbra Bench Atlas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* ── tokens ─────────────────────────────────────────────────────────────────
+   Palette inherited from the benchmark's own GIF tooling (make_phrase_gif.py):
+   BG 24,24,28 · ACCENT 168,214,255 · MUTED 150,150,160 · INK 17,17,20.
+   --screen stays white in BOTH themes on purpose: it is the projection wall,
+   and a shadow mask has to read as dark-on-lit.                             */
+:root{
+  --ground:#eef0f3; --panel:#ffffff; --panel-2:#f6f7f9; --screen:#ffffff;
+  --ink:#17171a; --ink-2:#4a4a55; --muted:#7c7c88;
+  --line:#d8dade; --line-2:#e8eaee;
+  --accent:#1f6396; --accent-soft:#d6e9fb; --accent-ink:#123f61;
+  --hit:#0000ff; --miss:#00ffff; --spill:#ff00ff;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
+  --shadow:0 1px 2px rgba(16,20,28,.06), 0 4px 14px rgba(16,20,28,.05);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#18181c; --panel:#212127; --panel-2:#1c1c21; --screen:#ffffff;
+    --ink:#e9e9ef; --ink-2:#b4b4c0; --muted:#8a8a96;
+    --line:#33333c; --line-2:#2a2a32;
+    --accent:#a8d6ff; --accent-soft:#20303f; --accent-ink:#cfe6fb;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#18181c; --panel:#212127; --panel-2:#1c1c21; --screen:#ffffff;
+  --ink:#e9e9ef; --ink-2:#b4b4c0; --muted:#8a8a96;
+  --line:#33333c; --line-2:#2a2a32;
+  --accent:#a8d6ff; --accent-soft:#20303f; --accent-ink:#cfe6fb;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.3);
+}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}   /* beats the component display rules below */
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font:400 14px/1.5 "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.mono{font-family:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric:tabular-nums}
+.lbl{
+  font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:10px; font-weight:500;
+  letter-spacing:.09em; text-transform:uppercase; color:var(--muted);
+}
+button, select, input{font:inherit; color:inherit}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:3px}
+
+/* ── shell ─────────────────────────────────────────────────────────────── */
+.app{display:grid; grid-template-columns:250px minmax(0,1fr); min-height:100vh}
+@media (max-width:900px){ .app{grid-template-columns:1fr} .rail{position:static!important; height:auto!important; border-right:none!important; border-bottom:1px solid var(--line)} }
+
+.rail{
+  position:sticky; top:0; height:100vh; overflow-y:auto;
+  background:var(--panel-2); border-right:1px solid var(--line);
+  padding:18px 16px 24px; display:flex; flex-direction:column; gap:20px;
+}
+.brand{display:flex; flex-direction:column; gap:3px}
+.brand h1{margin:0; font-size:16px; font-weight:600; letter-spacing:-.01em}
+.brand p{margin:0; font-size:11.5px; color:var(--muted); line-height:1.45}
+
+.grp{display:flex; flex-direction:column; gap:8px}
+.chips{display:flex; flex-wrap:wrap; gap:5px}
+.chip{
+  border:1px solid var(--line); background:var(--panel); color:var(--ink-2);
+  border-radius:999px; padding:3px 9px; cursor:pointer;
+  font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.02em;
+  transition:background .12s, border-color .12s, color .12s;
+}
+.chip:hover{border-color:var(--accent)}
+.chip[aria-pressed="true"]{background:var(--accent-soft); border-color:var(--accent); color:var(--accent-ink); font-weight:500}
+.chip .ct{opacity:.55; margin-left:5px}
+
+.seg{display:flex; flex-wrap:wrap; border:1px solid var(--line); border-radius:6px;
+  overflow:hidden; background:var(--panel)}
+.seg button{
+  flex:1 1 auto; min-width:52px; border:0; background:transparent; padding:6px 4px; cursor:pointer;
+  font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.03em; color:var(--ink-2);
+}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent-soft); color:var(--accent-ink); font-weight:600}
+
+.field{width:100%; padding:7px 9px; border:1px solid var(--line); border-radius:6px; background:var(--panel); font-size:12.5px}
+select.field{cursor:pointer}
+
+.legend{display:flex; flex-direction:column; gap:5px; padding:10px; border:1px solid var(--line); border-radius:7px; background:var(--panel)}
+.legend .row{display:flex; align-items:center; gap:7px; font-size:11px; color:var(--ink-2)}
+.sw{width:11px; height:11px; border-radius:2px; border:1px solid rgba(0,0,0,.28); flex:none}
+
+/* ── main ──────────────────────────────────────────────────────────────── */
+.main{display:flex; flex-direction:column; min-width:0}
+.top{
+  position:sticky; top:0; z-index:20; background:var(--panel);
+  border-bottom:1px solid var(--line); padding:12px 20px;
+  display:flex; align-items:center; gap:20px; flex-wrap:wrap;
+}
+.count{display:flex; align-items:baseline; gap:7px}
+.count b{font-family:"IBM Plex Mono",monospace; font-size:22px; font-weight:600; letter-spacing:-.02em; font-variant-numeric:tabular-nums}
+
+.dist{display:flex; flex-direction:column; gap:3px; flex:1; min-width:260px; max-width:520px}
+.dist .hd{display:flex; justify-content:space-between; align-items:baseline}
+.dist svg{width:100%; height:44px; display:block; cursor:crosshair; touch-action:none}
+.bar{fill:var(--line)}
+.bar.on{fill:var(--accent)}
+
+/* four-metric readout — recomputed over whatever the filters currently show */
+.readout{
+  display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:1px;
+  background:var(--line); border-bottom:1px solid var(--line);
+}
+.ro{background:var(--panel-2); padding:9px 20px 10px; display:flex; flex-direction:column; gap:2px; min-width:0}
+.ro .k{display:flex; align-items:baseline; gap:5px}
+.ro .k em{font-style:normal; font-size:10px; color:var(--accent); font-family:"IBM Plex Mono",monospace}
+.ro .v{font-family:"IBM Plex Mono",monospace; font-size:19px; font-weight:600; letter-spacing:-.02em; font-variant-numeric:tabular-nums}
+.ro .sp{font-family:"IBM Plex Mono",monospace; font-size:10px; color:var(--muted); font-variant-numeric:tabular-nums}
+.ro .wh{font-size:10.5px; color:var(--muted); line-height:1.35}
+@media (max-width:760px){ .readout{grid-template-columns:repeat(2,1fr)} }
+
+.grid{
+  padding:18px 20px 200px;
+  display:grid; gap:14px;
+  grid-template-columns:repeat(auto-fill, minmax(168px, 1fr));
+}
+.card{
+  background:var(--panel); border:1px solid var(--line); border-radius:9px;
+  overflow:hidden; box-shadow:var(--shadow); display:flex; flex-direction:column;
+  transition:border-color .12s, transform .12s;
+}
+.card:hover{border-color:var(--accent); transform:translateY(-1px)}
+.card.picked{border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft), var(--shadow)}
+.plate{background:var(--screen); position:relative; display:flex; gap:1px; border-bottom:1px solid var(--line-2)}
+.plate>*{width:100%; aspect-ratio:1/1; display:block; image-rendering:auto}
+.plate canvas, .plate img{background:#fff}
+.star{
+  position:absolute; top:5px; right:5px; z-index:2; width:23px; height:23px;
+  border-radius:5px; border:1px solid var(--line); background:rgba(255,255,255,.93);
+  cursor:pointer; display:grid; place-items:center; padding:0; line-height:1;
+  font-size:12px; color:#666; transition:background .12s;
+}
+.star:hover{background:#fff; color:var(--accent)}
+.card.picked .star{background:var(--hit); border-color:var(--hit); color:#fff}
+.meta{padding:8px 9px 9px; display:flex; flex-direction:column; gap:6px}
+.idline{display:flex; align-items:baseline; justify-content:space-between; gap:6px}
+.sid{font-family:"IBM Plex Mono",monospace; font-size:10px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.iou{font-family:"IBM Plex Mono",monospace; font-size:17px; font-weight:600; letter-spacing:-.02em; font-variant-numeric:tabular-nums; flex:none}
+.mrow{display:grid; grid-template-columns:repeat(3,1fr); gap:4px; border-top:1px solid var(--line-2); padding-top:6px}
+.m{display:flex; flex-direction:column; gap:1px}
+/* metric names are code identifiers — keep their real case so they match METRICS.md */
+.m span{font-family:"IBM Plex Mono",monospace; font-size:9px; letter-spacing:.04em; color:var(--muted)}
+.ro .lbl{text-transform:none; letter-spacing:.03em; font-size:11px; color:var(--ink-2)}
+.m b{font-family:"IBM Plex Mono",monospace; font-size:11.5px; font-weight:500; font-variant-numeric:tabular-nums; color:var(--ink-2)}
+
+/* ── filmstrip ─────────────────────────────────────────────────────────── */
+/* ── benchmark view ─────────────────────────────────────────────────────── */
+.bench{padding:22px 26px 60px; max-width:960px; display:flex; flex-direction:column; gap:26px}
+.bench h2{margin:0 0 4px; font-size:17px; font-weight:600; letter-spacing:-.01em; text-wrap:balance}
+.bench h3{margin:0 0 3px; font-size:13.5px; font-weight:600}
+.bench p{margin:0; font-size:13px; line-height:1.6; color:var(--ink-2); max-width:66ch}
+.bench .fig{background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:16px 18px 14px; box-shadow:var(--shadow)}
+.bench .cap{margin-top:9px; font-size:11.5px; line-height:1.5; color:var(--muted); max-width:78ch}
+.bench .cap b{color:var(--ink-2); font-weight:600}
+.axis-note{display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border-radius:7px;
+  background:var(--panel-2); border:1px solid var(--line-2)}
+.axis-note .tag{flex:none; font-family:"IBM Plex Mono",monospace; font-size:9.5px; letter-spacing:.06em;
+  text-transform:uppercase; padding:2px 7px; border-radius:999px; background:var(--accent-soft); color:var(--accent-ink)}
+.axis-note div{font-size:12.5px; line-height:1.55; color:var(--ink-2)}
+
+table.strat{border-collapse:collapse; font-family:"IBM Plex Mono",monospace; font-size:11.5px;
+  font-variant-numeric:tabular-nums; width:100%}
+table.strat th, table.strat td{padding:5px 9px; text-align:right; border-bottom:1px solid var(--line-2)}
+table.strat th:first-child, table.strat td:first-child{text-align:left; font-family:"IBM Plex Sans",sans-serif}
+table.strat thead th{color:var(--muted); font-weight:500; font-size:10px; letter-spacing:.05em; text-transform:uppercase}
+table.strat tr.tot td{border-top:1px solid var(--line); border-bottom:none; font-weight:600}
+table.strat td.warn{color:#c2410c; font-weight:600}
+:root[data-theme="dark"] table.strat td.warn{color:#fb923c}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) table.strat td.warn{color:#fb923c}}
+.tblwrap{overflow-x:auto}
+
+.legend-row{display:flex; flex-wrap:wrap; gap:12px; margin-bottom:6px}
+.legend-row span{display:flex; align-items:center; gap:5px; font-size:11px; color:var(--ink-2)}
+.legend-row i{width:9px; height:9px; border-radius:50%; flex:none}
+
+.pair{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+@media (max-width:680px){ .pair{grid-template-columns:1fr} }
+.pcard{border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--panel-2)}
+.pcard .trip{display:flex; gap:1px; background:var(--screen)}
+.pcard .trip>*{width:100%; aspect-ratio:1/1; display:block}
+.pcard .cd{padding:8px 10px; display:flex; flex-direction:column; gap:4px}
+.pcard .cd .nm{font-family:"IBM Plex Mono",monospace; font-size:10px; color:var(--muted)}
+.pcard .cd .nums{display:flex; gap:14px}
+.pcard .cd .nums div{display:flex; flex-direction:column}
+.pcard .cd .nums span{font-family:"IBM Plex Mono",monospace; font-size:9px; color:var(--muted); letter-spacing:.04em}
+.pcard .cd .nums b{font-family:"IBM Plex Mono",monospace; font-size:15px; font-weight:600; font-variant-numeric:tabular-nums}
+.pcard .cd .nums b.hot{color:#c2410c}
+:root[data-theme="dark"] .pcard .cd .nums b.hot{color:#fb923c}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .pcard .cd .nums b.hot{color:#fb923c}}
+.trip-lbl{display:flex; gap:1px; margin-top:2px}
+.trip-lbl span{width:100%; text-align:center; font-family:"IBM Plex Mono",monospace; font-size:8.5px;
+  letter-spacing:.05em; text-transform:uppercase; color:var(--muted)}
+
+/* ── reference set, in the benchmark view ────────────────────────────────── */
+.telbench{margin:22px 0 4px; padding:16px 18px; border:1px solid var(--line-2);
+  border-radius:9px; background:var(--panel)}
+.telbench h3{margin:0 0 7px; font-size:14.5px; font-weight:600}
+.telbench h3 code{font-family:"IBM Plex Mono",monospace; font-size:11.5px; font-weight:400;
+  color:var(--muted); background:var(--panel-2); padding:2px 6px; border-radius:4px}
+.telbench>p{margin:0 0 12px; font-size:13px; line-height:1.6; color:var(--ink-2); max-width:76ch}
+.telcov{display:flex; gap:8px; flex-wrap:wrap}
+.telcov>div{display:flex; align-items:baseline; gap:7px; padding:6px 11px; border-radius:6px;
+  background:var(--panel-2); border:1px solid var(--line-2)}
+.telcov span{font-size:11.5px; color:var(--muted)}
+.telcov b{font-family:"IBM Plex Mono",monospace; font-size:14px}
+
+/* ── pipeline steps ──────────────────────────────────────────────────────── */
+.steps{display:flex; flex-direction:column; gap:2px; max-width:82ch}
+.step{display:flex; gap:14px; padding:13px 14px; border:1px solid var(--line-2);
+  border-radius:8px; background:var(--panel)}
+.stepn{flex:0 0 26px; height:26px; display:grid; place-items:center; border-radius:50%;
+  background:var(--accent-soft); color:var(--accent-ink); font-weight:600; font-size:12px;
+  font-family:"IBM Plex Mono",monospace}
+.stepb{min-width:0; flex:1}
+.stepb h3{margin:2px 0 5px; font-size:13.5px; font-weight:600}
+.stepb p{margin:0; font-size:12.5px; line-height:1.6; color:var(--ink-2)}
+.stepb code{font-family:"IBM Plex Mono",monospace; font-size:11.5px;
+  background:var(--panel-2); padding:1px 4px; border-radius:3px}
+.cmd{margin:9px 0 0; padding:9px 11px; border-radius:6px; background:var(--panel-2);
+  border:1px solid var(--line-2); overflow-x:auto; font-family:"IBM Plex Mono",monospace;
+  font-size:11.5px; line-height:1.65; color:var(--ink-2); white-space:pre}
+
+/* ── the hand-cast reference set, where it surfaces in the atlas ─────────── */
+/* .plate>* sizes the image slots; the badge is not one of them. */
+.telflag{position:absolute; left:6px; bottom:6px; z-index:2; width:auto!important;
+  aspect-ratio:auto!important;
+  font-family:"IBM Plex Mono",monospace; font-size:9.5px; letter-spacing:.03em;
+  padding:2px 6px; border-radius:4px; background:var(--accent-soft);
+  color:var(--accent-ink); border:1px solid var(--line); pointer-events:none}
+.telrow{display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink-2);
+  cursor:pointer; user-select:none}
+.telrow b{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--muted); font-weight:500}
+
+/* ── full-width pane: shared by the teleop view ─────────────────────────── */
+.rescue{padding:22px 26px 60px; max-width:1180px; display:flex; flex-direction:column; gap:18px}
+.floorbar{display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:7px;
+  background:var(--panel-2); border:1px solid var(--line-2); font-size:12.5px; color:var(--ink-2)}
+.floorbar b{font-family:"IBM Plex Mono",monospace; font-size:15px; color:var(--ink)}
+.tallybar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:10px;
+  padding:9px 12px; border:1px solid var(--line); border-radius:7px; background:var(--panel)}
+.tally{display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--ink-2)}
+.tally b{font-family:"IBM Plex Mono",monospace; font-size:14px; font-weight:600}
+.tally .rev{color:var(--muted); font-size:11.5px}
+button.act{border:1px solid var(--line); background:var(--panel-2); border-radius:6px;
+  padding:5px 10px; cursor:pointer; font-family:"IBM Plex Mono",monospace; font-size:10.5px;
+  letter-spacing:.03em; color:var(--ink-2)}
+button.act:hover{border-color:var(--accent); color:var(--accent-ink)}
+.rgrp{display:flex; flex-direction:column; gap:10px}
+.rgrp>header{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap}
+.rgrp>header h3{margin:0; font-size:14.5px; font-weight:600}
+.rgrp>header .n{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--muted)}
+.rgrp>header p{margin:0; flex-basis:100%; font-size:12px; line-height:1.5; color:var(--muted); max-width:78ch}
+.rescue{gap:22px}
+.imgs3 img{flex:1 1 0; min-width:0; width:auto; aspect-ratio:1/1; display:block; background:#fff}
+.rlist2{display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(330px,1fr))}
+.ritem2{border:1px solid var(--line); border-radius:9px; background:var(--panel);
+  overflow:hidden; box-shadow:var(--shadow); display:flex; flex-direction:column}
+.ritem2[data-op="drop"]{opacity:.5}
+.ritem2[data-op="keep"]{border-style:dashed}
+.imgs3{display:flex; gap:1px; background:var(--screen)}
+.imgs3 canvas{flex:1 1 0; min-width:0; width:auto; aspect-ratio:1/1; display:block}
+.rlab3{display:flex; gap:1px; background:var(--panel-2); border-bottom:1px solid var(--line-2)}
+.rlab3 span{width:100%; text-align:center; font-family:"IBM Plex Mono",monospace; font-size:8.5px;
+  letter-spacing:.04em; text-transform:uppercase; color:var(--muted); padding:3px 0}
+.rbody{padding:9px 10px 10px; display:flex; flex-direction:column; gap:7px}
+.rhead{display:flex; align-items:baseline; gap:7px; justify-content:space-between}
+.nm3{font-family:"IBM Plex Mono",monospace; font-size:10px; color:var(--ink-2);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.sub3{font-family:"IBM Plex Mono",monospace; font-size:9px; color:var(--muted); flex:none}
+.vstat{font-family:"IBM Plex Mono",monospace; font-size:10.5px; padding:4px 7px; border-radius:5px;
+  border:1px solid transparent}
+.vstat.ok{background:rgba(27,175,122,.13); color:#0f7a52; border-color:rgba(27,175,122,.32)}
+.vstat.bad{background:rgba(235,104,52,.13); color:#b8431a; border-color:rgba(235,104,52,.32)}
+.vstat.drop{background:var(--panel-2); color:var(--muted); border-color:var(--line-2)}
+:root[data-theme="dark"] .vstat.ok{color:#4ecf9a}
+:root[data-theme="dark"] .vstat.bad{color:#f58a5c}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .vstat.ok{color:#4ecf9a}
+  :root:not([data-theme="light"]) .vstat.bad{color:#f58a5c}}
+.kv3{display:flex; gap:12px; flex-wrap:wrap}
+.kv3 div{display:flex; flex-direction:column}
+.kv3 span{font-family:"IBM Plex Mono",monospace; font-size:8.5px; color:var(--muted); letter-spacing:.04em}
+.kv3 b{font-family:"IBM Plex Mono",monospace; font-size:12px; font-weight:600; font-variant-numeric:tabular-nums}
+.opbar{display:flex; flex-wrap:wrap; gap:4px}
+.opbar button{border:1px solid var(--line); background:var(--panel-2); color:var(--ink-2);
+  border-radius:5px; padding:4px 8px; cursor:pointer; font-family:"IBM Plex Mono",monospace;
+  font-size:10px; letter-spacing:.02em}
+.opbar button:hover{border-color:var(--accent)}
+.opbar button[aria-pressed="true"]{background:var(--accent-soft); border-color:var(--accent);
+  color:var(--accent-ink); font-weight:600}
+.radrow{display:flex; align-items:center; gap:8px; font-size:10.5px; color:var(--muted)}
+.radrow input[type=range]{flex:1; accent-color:var(--accent)}
+.radrow b{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--ink-2); min-width:42px}
+.autotag{font-size:10px; color:var(--muted); line-height:1.4; font-style:italic}
+.tlist{display:grid; gap:14px; grid-template-columns:repeat(auto-fill,minmax(430px,1fr))}
+.titem{border:1px solid var(--line); border-radius:9px; background:var(--panel);
+  overflow:hidden; box-shadow:var(--shadow); display:flex; flex-direction:column}
+.titem.suspect{border-color:#eb6834}
+:root[data-theme="dark"] .titem.suspect{border-color:#d95926}
+.ttop{display:flex; gap:1px; background:var(--line-2)}
+.tcanvas{flex:1 1 auto; min-width:0; width:100%; height:auto; display:block; cursor:crosshair;
+  background:var(--screen); touch-action:manipulation}
+.tside{flex:0 0 88px; background:var(--panel-2); display:flex; flex-direction:column}
+.ttgt{display:flex; flex-direction:column; align-items:center; gap:2px; padding:6px 5px}
+.ttgt img{width:100%; background:#fff; border:1px solid var(--line-2); border-radius:3px}
+.ttgt span, .ttgt .none{font-family:"IBM Plex Mono",monospace; font-size:8px; letter-spacing:.04em;
+  text-transform:uppercase; color:var(--muted); text-align:center}
+.ttgt .none{padding:14px 0}
+.titem.done{border-color:var(--accent)}
+.tbody{padding:9px 11px 11px; display:flex; flex-direction:column; gap:6px}
+.treason{font-size:11px; line-height:1.45; color:var(--ink-2)}
+.tflag{font-family:"IBM Plex Mono",monospace; font-size:10px; padding:3px 7px; border-radius:5px;
+  align-self:flex-start; background:rgba(235,104,52,.13); color:#b8431a; border:1px solid rgba(235,104,52,.3)}
+:root[data-theme="dark"] .tflag{color:#f58a5c}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .tflag{color:#f58a5c}}
+
+.strip{
+  position:fixed; left:0; right:0; bottom:0; z-index:30;
+  background:var(--panel); border-top:1px solid var(--line);
+  box-shadow:0 -4px 20px rgba(0,0,0,.10);
+  padding:9px 20px 12px; display:flex; flex-direction:column; gap:8px;
+}
+.strip .hd{display:flex; align-items:center; gap:12px; flex-wrap:wrap}
+.strip .hd .sp{flex:1}
+.strip button.act{
+  border:1px solid var(--line); background:var(--panel-2); border-radius:6px;
+  padding:5px 10px; cursor:pointer; font-family:"IBM Plex Mono",monospace; font-size:10.5px;
+  letter-spacing:.03em; color:var(--ink-2);
+}
+.strip button.act:hover{border-color:var(--accent); color:var(--accent-ink)}
+.reel{display:flex; gap:7px; overflow-x:auto; padding-bottom:3px; min-height:66px; align-items:flex-start}
+.frame{
+  flex:none; width:58px; cursor:grab; position:relative;
+  border:1px solid var(--line); border-radius:5px; overflow:hidden; background:var(--screen);
+}
+.frame.drag{opacity:.35}
+.frame img, .frame canvas{width:100%; aspect-ratio:1/1; display:block}
+.frame .n{
+  position:absolute; top:0; left:0; background:var(--hit); color:#fff;
+  font-family:"IBM Plex Mono",monospace; font-size:9px; padding:1px 4px; border-bottom-right-radius:4px;
+}
+.frame .x{
+  position:absolute; top:0; right:0; background:rgba(0,0,0,.55); color:#fff; border:0;
+  font-size:10px; line-height:1; padding:2px 4px; cursor:pointer; border-bottom-left-radius:4px;
+}
+.empty{color:var(--muted); font-size:12px; padding:18px 0; font-style:italic}
+.hint{font-size:11px; color:var(--muted)}
+@media (prefers-reduced-motion:reduce){ *{transition:none!important} }
+</style>
+
+<div class="app">
+  <aside class="rail">
+    <div class="brand">
+      <h1>Umbra Bench Atlas</h1>
+      <p>542 targets &middot; base-optimizer, 10 seeds each &middot; the four-metric panel. 64 v2 targets await the re-run. Star frames to build a sequence.</p>
+    </div>
+
+    <div class="grp">
+      <div class="lbl">View</div>
+      <div class="seg" id="segPage">
+        <button data-v="atlas" aria-pressed="true">atlas</button>
+        <button data-v="bench" aria-pressed="false">benchmark</button>
+        <button data-v="teleop" aria-pressed="false">teleop</button>
+      </div>
+    </div>
+
+    <div class="grp" data-only="atlas">
+      <div class="lbl">Sweep</div>
+      <div class="seg" id="segSweep">
+        <button data-v="big" aria-pressed="true">big&nbsp;budget</button>
+        <button data-v="small" aria-pressed="false">small</button>
+      </div>
+    </div>
+
+    <div class="grp" data-only="atlas">
+      <div class="lbl">Plate</div>
+      <div class="seg" id="segView">
+        <button data-v="overlay" aria-pressed="true">overlay</button>
+        <button data-v="shadow" aria-pressed="false">shadow</button>
+        <button data-v="target" aria-pressed="false">target</button>
+        <button data-v="trip" aria-pressed="false">all&nbsp;3</button>
+        <button data-v="human" aria-pressed="false" title="the hand-cast shadow, where one exists">human</button>
+      </div>
+      <div class="legend" id="legend">
+        <div class="row"><i class="sw" style="background:#0000ff"></i> agreement</div>
+        <div class="row"><i class="sw" style="background:#00ffff"></i> target missed</div>
+        <div class="row"><i class="sw" style="background:#ff00ff"></i> shadow spilled</div>
+      </div>
+    </div>
+
+    <div class="grp" data-only="atlas">
+      <div class="lbl">Subset</div>
+      <div class="chips" id="subsets"></div>
+      <button class="chip" id="allSub" style="align-self:flex-start">reset all</button>
+    </div>
+
+    <div class="grp" data-only="atlas">
+      <div class="lbl">Reference set</div>
+      <label class="telrow"><input type="checkbox" id="telOnly">
+        <span>hand-cast only <b id="telN">0</b></span></label>
+    </div>
+
+    <div class="grp" data-only="atlas">
+      <div class="lbl">Sort</div>
+      <select class="field mono" id="sort">
+        <option value="iou-desc">IoU ↑ — most area agreement</option>
+        <option value="iou-asc">IoU ↑ — least area agreement</option>
+        <option value="nsd-desc">NSD ↑ — outline lands closest</option>
+        <option value="nsd-asc">NSD ↑ — outline worst placed</option>
+        <option value="pw-asc">pw_h1 ↓ — topology best kept</option>
+        <option value="pw-desc">pw_h1 ↓ — topology most broken</option>
+        <option value="hu-asc">Hu ↓ — shape closest, pose ignored</option>
+        <option value="hu-desc">Hu ↓ — shape furthest, pose ignored</option>
+        <option value="disagree">where IoU and NSD disagree most</option>
+        <option value="delta-desc">Δ big − small — biggest gain</option>
+        <option value="stroke-asc">stroke width — thinnest first</option>
+        <option value="subset">subset, then IoU</option>
+        <option value="id">sample id</option>
+      </select>
+    </div>
+
+    <div class="grp" data-only="atlas">
+      <div class="lbl">Search</div>
+      <input class="field mono" id="q" type="search" placeholder="id or class…" autocomplete="off">
+    </div>
+
+    <div class="grp">
+      <div class="lbl">Theme</div>
+      <div class="seg" id="segTheme">
+        <button data-v="auto" aria-pressed="true">auto</button>
+        <button data-v="light" aria-pressed="false">light</button>
+        <button data-v="dark" aria-pressed="false">dark</button>
+      </div>
+    </div>
+  </aside>
+
+  <section class="bench" id="benchView" hidden></section>
+  <section class="rescue" id="teleopView" hidden></section>
+
+  <main class="main" id="atlasView">
+    <header class="top">
+      <div class="count">
+        <b id="nShown">0</b>
+        <span class="lbl" id="nTot">of 546 targets</span>
+      </div>
+      <div class="dist">
+        <div class="hd">
+          <span class="lbl" id="histLabel">IoU — drag to filter</span>
+          <span class="lbl mono" id="rangeTxt"></span>
+        </div>
+        <svg id="hist" viewBox="0 0 520 44" preserveAspectRatio="none" role="img"
+             aria-label="Distribution of IoU across the selected targets"></svg>
+      </div>
+    </header>
+    <div class="readout" id="readout"></div>
+    <section class="grid" id="grid"></section>
+  </main>
+</div>
+
+<div class="strip">
+  <div class="hd">
+    <span class="lbl">Sequence</span>
+    <span class="mono" id="pickN" style="font-size:12px">0 frames</span>
+    <span class="sp"></span>
+    <span class="hint" id="stripHint">Star a card to add it. Drag frames to reorder.</span>
+    <button class="act" id="copyIds">copy ids</button>
+    <button class="act" id="copyJson">copy json</button>
+    <button class="act" id="clearPicks">clear</button>
+  </div>
+  <div class="reel" id="reel"><div class="empty">No frames yet — star the shots you want, in order.</div></div>
+</div>
+
+<script id="data" type="application/json">__PAYLOAD__</script>
+<script id="teleop" type="application/json">__TELEOP__</script>
+<script>
+(() => {
+"use strict";
+const DATA = JSON.parse(document.getElementById("data").textContent);
+const PX = DATA.px, S = DATA.samples;
+const $ = (s) => document.querySelector(s);
+
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem("uba:"+k); return v===null?d:JSON.parse(v); }catch{ return d; } },
+  set(k, v){ try{ localStorage.setItem("uba:"+k, JSON.stringify(v)); }catch{} }
+};
+
+/* Saved state outlives the code that wrote it. A browser still holding
+   page:"rescue" from before that view was removed would have every view hidden
+   and no button pressed -- a blank page with no way back except clearing storage.
+   Anything not on this list falls back to the atlas. */
+const PAGES = ["atlas", "bench", "teleop"];
+/* The teleop set is read here, ahead of the atlas, because the atlas uses it:
+   a target somebody has actually cast by hand is a different kind of row, and
+   the grid says so rather than making you switch views to find out. */
+const TELEOP = JSON.parse(document.getElementById("teleop").textContent);
+const TELBY = new Map();
+for(const it of (TELEOP.items || [])) if(it.sample_id && !TELBY.has(it.sample_id)) TELBY.set(it.sample_id, it);
+
+const st = {
+  page:  (p => PAGES.includes(p) ? p : "atlas")(store.get("page", "atlas")),
+  telOnly: store.get("telOnly", false),
+  sweep: store.get("sweep","big"),
+  view:  store.get("view","overlay"),
+  subs:  new Set(store.get("subs", DATA.subsets)),
+  sort:  store.get("sort","iou-desc"),
+  q:     "",
+  lo: null, hi: null,      // null = full range, in the active metric's units
+  picks: store.get("picks", [])
+};
+const byId = new Map(S.map(s => [s.id, s]));
+
+/* ── derived helpers ─────────────────────────────────────────────────── */
+const sw = (s) => s[st.sweep] || null;
+const iou = (s) => { const e = sw(s); return e && e.iou != null ? e.iou : null; };
+const delta = (s) => (s.big && s.small && s.big.iou != null && s.small.iou != null)
+  ? s.big.iou - s.small.iou : null;
+const num = (v, d=3) => v == null ? "—" : v.toFixed(d);
+
+function filtered(){
+  const q = st.q.trim().toLowerCase();
+  return S.filter(s => {
+    if(!st.subs.has(s.subset)) return false;
+    if(st.telOnly && !TELBY.has(s.id)) return false;
+    if(iou(s) == null) return false;               // no results yet — nothing to browse
+    if(st.lo != null){
+      const v = mval(s, mkey());
+      if(v == null || v < st.lo - 1e-9 || v > st.hi + 1e-9) return false;
+    }
+    if(q && !(s.id.toLowerCase().includes(q) || (s.cls||"").toLowerCase().includes(q))) return false;
+    return true;
+  });
+}
+const mv = (s, k) => { const e = sw(s); return e && e[k] != null ? e[k] : null; };
+const hi = (k) => (a,b) => (mv(b,k) ?? -Infinity) - (mv(a,k) ?? -Infinity);   // big first
+const lo = (k) => (a,b) => (mv(a,k) ??  Infinity) - (mv(b,k) ??  Infinity);   // small first
+const CMP = {
+  "iou-desc":   hi("iou"),  "iou-asc":  lo("iou"),
+  "nsd-desc":   hi("nsd"),  "nsd-asc":  lo("nsd"),
+  "pw-asc":     lo("pw_h1"), "pw-desc": hi("pw_h1"),
+  "hu-asc":     lo("hu_distance"), "hu-desc": hi("hu_distance"),
+  "delta-desc": (a,b) => (delta(b) ?? -9) - (delta(a) ?? -9),
+  "stroke-asc": (a,b) => (a.a.median_stroke_width_rel ?? 9) - (b.a.median_stroke_width_rel ?? 9),
+  "subset":     (a,b) => a.subset.localeCompare(b.subset) || (iou(b) ?? -1) - (iou(a) ?? -1),
+  "id":         (a,b) => a.id.localeCompare(b.id)
+};
+
+/* The four-metric panel. iou/nsd higher-better; pw_h1/hu_distance lower-better —
+   the arrow is part of the label so the direction is never inferred. */
+const PANEL = [
+  { k:"iou",         name:"IoU",   dir:1,  dp:3, what:"how much area agrees" },
+  { k:"nsd",         name:"NSD",   dir:1,  dp:3, what:"outline within tolerance" },
+  { k:"pw_h1",       name:"pw_h1", dir:-1, dp:3, what:"holes survived, graded" },
+  { k:"hu_distance", name:"Hu",    dir:-1, dp:2, what:"shape, pose removed" }
+];
+const q05 = (xs, p) => { if(!xs.length) return null;
+  const a = [...xs].sort((x,y) => x-y), i = (a.length-1)*p, f = Math.floor(i);
+  return f+1 < a.length ? a[f] + (a[f+1]-a[f])*(i-f) : a[f]; };
+
+/* The distribution strip follows the sort: whatever you are ordering by is what
+   you are looking at, so the brush filters on the same quantity. Two of the sorts
+   rank by something that is not a panel metric — the budget delta and the target's
+   own stroke width — and those get a strip too; the stroke one is a property of the
+   TARGET, not a score, and is labelled as such. */
+const SORT_METRIC = {
+  "iou-desc":"iou", "iou-asc":"iou", "nsd-desc":"nsd", "nsd-asc":"nsd",
+  "pw-asc":"pw_h1", "pw-desc":"pw_h1", "hu-asc":"hu_distance", "hu-desc":"hu_distance",
+  "delta-desc":"__delta", "stroke-asc":"__stroke",
+  "disagree":"iou", "subset":"iou", "id":"iou"
+};
+const METRIC_META = {
+  iou:         { label:"IoU",           dir: 1, dp:3 },
+  nsd:         { label:"NSD",           dir: 1, dp:3 },
+  pw_h1:       { label:"pw_h1",         dir:-1, dp:3 },
+  hu_distance: { label:"Hu",            dir:-1, dp:2 },
+  __delta:     { label:"Δ big − small", dir: 1, dp:3 },
+  __stroke:    { label:"stroke width",  dir: 0, dp:3 }
+};
+const mkey = () => SORT_METRIC[st.sort] || "iou";
+const mval = (s, k) => k === "__delta"  ? delta(s)
+                     : k === "__stroke" ? (s.a.median_stroke_width_rel ?? null)
+                     : mv(s, k);
+
+/* rank-disagreement: the cases METRICS.md is about — area filled, outline wrong */
+function disagreement(rows){
+  const rank = (k, desc) => {
+    const ok = rows.filter(s => mv(s,k) != null)
+      .sort((a,b) => desc ? mv(b,k)-mv(a,k) : mv(a,k)-mv(b,k));
+    const m = new Map(); ok.forEach((s,i) => m.set(s.id, i/Math.max(1, ok.length-1)));
+    return m;
+  };
+  const ri = rank("iou", true), rn = rank("nsd", true);
+  const d = new Map();
+  rows.forEach(s => d.set(s.id, (ri.has(s.id) && rn.has(s.id)) ? Math.abs(ri.get(s.id)-rn.get(s.id)) : -1));
+  return d;
+}
+
+/* ── overlay compositing ─────────────────────────────────────────────────
+   Masks are 1-bit, dark = shape. Colours match make_phrase_gif.py so the
+   atlas reads the same way as the contact sheets and the paper figures.   */
+const imgCache = new Map();
+function loadMask(b64){
+  if(imgCache.has(b64)) return imgCache.get(b64);
+  const p = new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => res(im); im.onerror = rej;
+    im.src = "data:image/png;base64," + b64;
+  });
+  imgCache.set(b64, p);
+  return p;
+}
+let scratch = null;
+function scratchCtx(){
+  if(!scratch){ scratch = document.createElement("canvas"); scratch.width = scratch.height = PX; }
+  return scratch.getContext("2d", { willReadFrequently: true });
+}
+async function paintOverlay(cv, tb, sb){
+  const [ti, si] = await Promise.all([loadMask(tb), loadMask(sb)]);
+  const sc = scratchCtx();
+  sc.clearRect(0,0,PX,PX); sc.drawImage(ti,0,0,PX,PX);
+  const T = sc.getImageData(0,0,PX,PX).data;
+  sc.clearRect(0,0,PX,PX); sc.drawImage(si,0,0,PX,PX);
+  const Sd = sc.getImageData(0,0,PX,PX).data;
+  const ctx = cv.getContext("2d");
+  const out = ctx.createImageData(PX,PX), d = out.data;
+  for(let i=0, n=PX*PX; i<n; i++){
+    const j = i<<2, t = T[j] < 128, s = Sd[j] < 128;
+    let r=255, g=255, b=255;
+    if(t && s){ r=0;   g=0;   b=255; }        // agreement
+    else if(t){ r=0;   g=255; b=255; }        // target the shadow missed
+    else if(s){ r=255; g=0;   b=255; }        // shadow that spilled
+    d[j]=r; d[j+1]=g; d[j+2]=b; d[j+3]=255;
+  }
+  ctx.putImageData(out,0,0);
+}
+
+const io = new IntersectionObserver((ents) => {
+  for(const e of ents){
+    if(!e.isIntersecting) continue;
+    const cv = e.target;
+    io.unobserve(cv);
+    paintOverlay(cv, cv.dataset.t, cv.dataset.s).catch(()=>{});
+  }
+}, { rootMargin: "300px 0px" });
+
+function plate(s){
+  const e = sw(s), wrap = document.createElement("div");
+  wrap.className = "plate";
+  const tel = TELBY.get(s.id);
+  const mk = { target: () => imgEl(s.t), shadow: () => e && e.s ? imgEl(e.s) : blankEl(),
+               overlay: () => e && e.s ? cvEl(s.t, e.s) : blankEl(),
+               human: () => tel ? imgEl(tel.mask) : blankEl("no hand-cast shadow") };
+  if(st.view === "trip"){ wrap.append(mk.target(), mk.shadow(), mk.overlay()); }
+  else { wrap.append(mk[st.view]()); }
+  if(tel && st.view !== "human"){
+    // A marker, not a metric. Whether the human did better is not yet answerable
+    // -- the pose was never recorded, so mask and target share no alignment.
+    const t = document.createElement("span");
+    t.className = "telflag"; t.textContent = "hand-cast";
+    t.title = tel.capture + " — switch the plate to “human” to see it";
+    wrap.append(t);
+  }
+  return wrap;
+}
+function imgEl(b64){
+  const i = document.createElement("img");
+  i.loading = "lazy"; i.decoding = "async"; i.alt = "";
+  i.src = "data:image/png;base64," + b64;
+  return i;
+}
+function cvEl(tb, sb){
+  const c = document.createElement("canvas");
+  c.width = c.height = PX; c.dataset.t = tb; c.dataset.s = sb;
+  io.observe(c);
+  return c;
+}
+function blankEl(msg){
+  const d = document.createElement("div");
+  d.style.cssText = "background:var(--panel-2);display:grid;place-items:center;color:var(--muted);font-size:10px;text-align:center;padding:4px";
+  d.textContent = msg || "no solve";
+  return d;
+}
+
+/* ── grid ────────────────────────────────────────────────────────────── */
+function card(s){
+  const e = sw(s), v = iou(s);
+  const el = document.createElement("article");
+  el.className = "card" + (st.picks.includes(s.id) ? " picked" : "");
+  el.dataset.id = s.id;
+
+  const p = plate(s);
+  const star = document.createElement("button");
+  star.className = "star"; star.type = "button";
+  star.setAttribute("aria-label", "Add " + s.id + " to the sequence");
+  star.textContent = "★";
+  star.addEventListener("click", () => togglePick(s.id));
+  p.append(star);
+
+  const cell = (p) => '<div class="m"><span>' + p.name + (p.dir > 0 ? " ↑" : " ↓") +
+    '</span><b>' + num(e && e[p.k], p.dp) + '</b></div>';
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  meta.innerHTML =
+    '<div class="idline"><span class="sid" title="' + s.id + '">' + s.id + '</span>' +
+    '<span class="iou" title="IoU — how much area agrees">' + (v == null ? "—" : v.toFixed(3)) + '</span></div>' +
+    '<div class="mrow">' + PANEL.slice(1).map(cell).join("") + '</div>';
+  el.append(p, meta);
+  return el;
+}
+
+function renderGrid(){
+  let rows = filtered();
+  if(st.sort === "disagree"){
+    const d = disagreement(rows);
+    rows = rows.slice().sort((a,b) => (d.get(b.id) ?? -1) - (d.get(a.id) ?? -1));
+  } else {
+    rows = rows.slice().sort(CMP[st.sort]);
+  }
+  $("#nShown").textContent = rows.length;
+  const solved = S.filter(x => iou(x) != null).length, pend = DATA.n - solved;
+  $("#nTot").textContent = "of " + solved + " with results"
+    + (pend ? "  ·  " + pend + " v2 pending the re-run" : "");
+  const frag = document.createDocumentFragment();
+  rows.forEach(s => frag.append(card(s)));
+  $("#grid").replaceChildren(frag);
+  renderReadout(rows);
+}
+
+/* Aggregates recompute over the current filter, in the same shape METRICS.md
+   reports them — mean with a p05–p95 spread — so a subset read here is directly
+   quotable next to the numbers in the doc. */
+function renderReadout(rows){
+  const box = $("#readout");
+  box.replaceChildren();
+  for(const p of PANEL){
+    const xs = rows.map(s => mv(s, p.k)).filter(x => x != null);
+    const mean = xs.length ? xs.reduce((a,b) => a+b, 0) / xs.length : null;
+    const el = document.createElement("div");
+    el.className = "ro";
+    el.innerHTML =
+      '<div class="k"><span class="lbl">' + p.name + '</span><em>' + (p.dir > 0 ? "↑ higher better" : "↓ lower better") + '</em></div>' +
+      '<div class="v">' + (mean == null ? "—" : mean.toFixed(p.dp)) + '</div>' +
+      '<div class="sp">p05 ' + num(q05(xs, .05), p.dp) + '  ·  p95 ' + num(q05(xs, .95), p.dp) + '</div>' +
+      '<div class="wh">' + p.what + '</div>';
+    box.append(el);
+  }
+}
+
+/* ── distribution strip (single series, brushable) ─────────────────────────
+   Domain comes from the data, not a constant: IoU and NSD live in [0,1] but
+   pw_h1 and Hu are unbounded and the budget delta is signed, so a fixed axis
+   would squash three of the six into one bin. */
+const BINS = 26;
+let HDOM = [0, 1];
+function histPool(){
+  const k = mkey();
+  return S.filter(s => st.subs.has(s.subset) && iou(s) != null && mval(s, k) != null)
+          .map(s => mval(s, k));
+}
+function renderHist(){
+  const k = mkey(), meta = METRIC_META[k], all = histPool();
+  const svg = $("#hist"); svg.replaceChildren();
+  const arrow = meta.dir > 0 ? " ↑" : meta.dir < 0 ? " ↓" : "";
+  $("#histLabel").textContent = meta.label + arrow +
+    (k === "__stroke" ? " — target geometry, drag to filter" : " — drag to filter");
+  if(!all.length){ HDOM = [0, 1]; $("#rangeTxt").textContent = "no data"; return; }
+  let lo = Math.min(...all), hi = Math.max(...all);
+  if(hi - lo < 1e-9){ hi = lo + 1e-6; }
+  const pad = (hi - lo) * 0.02; lo -= pad; hi += pad;
+  HDOM = [lo, hi];
+  const counts = new Array(BINS).fill(0);
+  all.forEach(v => counts[Math.min(BINS - 1, Math.floor((v - lo) / (hi - lo) * BINS))]++);
+  const max = Math.max(1, ...counts), W = 520, H = 44, bw = W / BINS;
+  const ns = "http://www.w3.org/2000/svg";
+  counts.forEach((c, i) => {
+    const x0 = lo + (hi - lo) * i / BINS, x1 = lo + (hi - lo) * (i + 1) / BINS;
+    const on = st.lo == null || (x1 > st.lo && x0 < st.hi);
+    const h = Math.max(c ? 2 : 0, Math.round(c / max * (H - 6)));
+    const r = document.createElementNS(ns, "rect");
+    r.setAttribute("x", (i * bw + 0.6).toFixed(2)); r.setAttribute("y", H - h);
+    r.setAttribute("width", (bw - 1.2).toFixed(2)); r.setAttribute("height", h);
+    r.setAttribute("rx", "1.5"); r.setAttribute("class", "bar" + (on ? " on" : ""));
+    svg.append(r);
+  });
+  svg.setAttribute("aria-label",
+    `Distribution of ${meta.label} across the ${all.length} selected targets`);
+  const d = meta.dp;
+  $("#rangeTxt").textContent = st.lo == null
+    ? `${lo.toFixed(d)} – ${hi.toFixed(d)}`
+    : `${st.lo.toFixed(d)} – ${st.hi.toFixed(d)}   (click to clear)`;
+}
+(function brush(){
+  const svg = $("#hist");
+  let drag = null;
+  const at = (ev) => {
+    const r = svg.getBoundingClientRect();
+    const f = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
+    return HDOM[0] + f * (HDOM[1] - HDOM[0]);
+  };
+  svg.addEventListener("pointerdown", (e) => { drag = at(e); svg.setPointerCapture(e.pointerId); });
+  svg.addEventListener("pointermove", (e) => {
+    if(drag == null) return;
+    const b = at(e);
+    st.lo = Math.min(drag, b); st.hi = Math.max(drag, b);
+    renderHist();
+  });
+  svg.addEventListener("pointerup", (e) => {
+    if(drag == null) return;
+    const b = at(e), span = HDOM[1] - HDOM[0];
+    if(Math.abs(b - drag) < span * 0.012){ st.lo = st.hi = null; }   // click = clear
+    drag = null; renderHist(); renderGrid();
+  });
+})();
+
+/* ── sequence filmstrip ──────────────────────────────────────────────── */
+function togglePick(id){
+  const i = st.picks.indexOf(id);
+  if(i >= 0) st.picks.splice(i, 1); else st.picks.push(id);
+  store.set("picks", st.picks);
+  const c = $('.card[data-id="' + CSS.escape(id) + '"]');
+  if(c) c.classList.toggle("picked", st.picks.includes(id));
+  renderReel();
+}
+function renderReel(){
+  const reel = $("#reel");
+  $("#pickN").textContent = st.picks.length + (st.picks.length === 1 ? " frame" : " frames");
+  if(!st.picks.length){
+    reel.replaceChildren(Object.assign(document.createElement("div"),
+      { className: "empty", textContent: "No frames yet — star the shots you want, in order." }));
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  st.picks.forEach((id, k) => {
+    const s = byId.get(id); if(!s) return;
+    const e = sw(s);
+    const f = document.createElement("div");
+    f.className = "frame"; f.draggable = true; f.dataset.id = id;
+    f.title = id + "  IoU " + num(e && e.iou);
+    f.append(e && e.s ? imgEl(e.s) : blankEl());
+    const n = document.createElement("span"); n.className = "n"; n.textContent = k + 1;
+    const x = document.createElement("button");
+    x.className = "x"; x.type = "button"; x.textContent = "×";
+    x.setAttribute("aria-label", "Remove " + id);
+    x.addEventListener("click", (ev) => { ev.stopPropagation(); togglePick(id); });
+    f.append(n, x);
+    f.addEventListener("dragstart", (ev) => { ev.dataTransfer.setData("text/plain", id); f.classList.add("drag"); });
+    f.addEventListener("dragend", () => f.classList.remove("drag"));
+    f.addEventListener("dragover", (ev) => ev.preventDefault());
+    f.addEventListener("drop", (ev) => {
+      ev.preventDefault();
+      const from = ev.dataTransfer.getData("text/plain");
+      if(!from || from === id) return;
+      const a = st.picks.indexOf(from), b = st.picks.indexOf(id);
+      if(a < 0 || b < 0) return;
+      st.picks.splice(b, 0, st.picks.splice(a, 1)[0]);
+      store.set("picks", st.picks); renderReel();
+    });
+    frag.append(f);
+  });
+  reel.replaceChildren(frag);
+}
+function copy(text, btn){
+  const done = () => { const t = btn.textContent; btn.textContent = "copied"; setTimeout(() => btn.textContent = t, 1100); };
+  if(navigator.clipboard && window.isSecureContext){ navigator.clipboard.writeText(text).then(done, ()=>{}); return; }
+  const ta = document.createElement("textarea");
+  ta.value = text; ta.style.cssText = "position:fixed;opacity:0";
+  document.body.append(ta); ta.select();
+  try{ document.execCommand("copy"); done(); } finally { ta.remove(); }
+}
+
+/* ── controls ────────────────────────────────────────────────────────── */
+function seg(sel, key, after){
+  const box = $(sel);
+  box.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-v]"); if(!b) return;
+    [...box.querySelectorAll("button")].forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    st[key] = b.dataset.v; store.set(key, st[key]); after();
+  });
+  [...box.querySelectorAll("button")].forEach(x => x.setAttribute("aria-pressed", String(x.dataset.v === st[key])));
+}
+{
+  const box = $("#telOnly");
+  box.checked = st.telOnly;
+  // Counted against what actually has results, not against the 28 linked rows:
+  // the v2 re-run is still pending, so some hand-cast targets have nothing to
+  // show yet and a count that ignored that would not match the grid.
+  $("#telN").textContent = S.filter(x => TELBY.has(x.id) && iou(x) != null).length;
+  box.addEventListener("change", () => {
+    st.telOnly = box.checked; store.set("telOnly", st.telOnly);
+    renderHist(); renderGrid();
+  });
+}
+seg("#segSweep", "sweep", () => { renderHist(); renderGrid(); renderReel(); });
+seg("#segView",  "view",  () => { renderGrid(); $("#legend").style.display = st.view === "overlay" || st.view === "trip" ? "" : "none"; });
+
+(function themeSeg(){
+  const box = $("#segTheme"), cur = store.get("theme", "auto");
+  const apply = (v) => {
+    if(v === "auto") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", v);
+  };
+  apply(cur);
+  [...box.querySelectorAll("button")].forEach(x => x.setAttribute("aria-pressed", String(x.dataset.v === cur)));
+  box.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-v]"); if(!b) return;
+    [...box.querySelectorAll("button")].forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    store.set("theme", b.dataset.v); apply(b.dataset.v);
+  });
+})();
+
+(function subsetChips(){
+  const box = $("#subsets"), counts = {};
+  S.forEach(s => counts[s.subset] = (counts[s.subset] || 0) + 1);
+  DATA.subsets.forEach(name => {
+    const b = document.createElement("button");
+    b.className = "chip"; b.type = "button"; b.dataset.sub = name;
+    b.innerHTML = name.replace(/_/g, " ") + '<span class="ct">' + counts[name] + '</span>';
+    b.setAttribute("aria-pressed", String(st.subs.has(name)));
+    b.addEventListener("click", () => {
+      st.subs.has(name) ? st.subs.delete(name) : st.subs.add(name);
+      if(!st.subs.size) st.subs = new Set(DATA.subsets);
+      [...box.children].forEach(c => c.setAttribute("aria-pressed", String(st.subs.has(c.dataset.sub))));
+      store.set("subs", [...st.subs]); renderHist(); renderGrid();
+    });
+    box.append(b);
+  });
+  $("#allSub").addEventListener("click", () => {
+    st.subs = new Set(DATA.subsets);
+    [...box.children].forEach(c => c.setAttribute("aria-pressed", "true"));
+    store.set("subs", [...st.subs]); renderHist(); renderGrid();
+  });
+})();
+
+if(!CMP[st.sort] && st.sort !== "disagree") st.sort = "iou-desc";
+$("#sort").value = st.sort;
+$("#sort").addEventListener("change", (e) => {
+  const before = mkey();
+  st.sort = e.target.value; store.set("sort", st.sort);
+  // A range picked on IoU means nothing on Hu — clear it when the quantity changes.
+  if(mkey() !== before) st.lo = st.hi = null;
+  renderHist(); renderGrid();
+});
+let qt;
+$("#q").addEventListener("input", (e) => { clearTimeout(qt); qt = setTimeout(() => { st.q = e.target.value; renderGrid(); }, 140); });
+$("#copyIds").addEventListener("click", (e) => copy(st.picks.join("\n"), e.target));
+$("#copyJson").addEventListener("click", (e) => copy(JSON.stringify({
+  sweep: st.sweep,
+  frames: st.picks.map(id => {
+    const s = byId.get(id), en = s && s[st.sweep];
+    return { id, subset: s && s.subset, target: s && ("targets/" + s.subset + "/" + id.replace(s.subset + "_", "") + ".png"), iou: en && en.iou };
+  })
+}, null, 2), e.target));
+$("#clearPicks").addEventListener("click", () => { st.picks = []; store.set("picks", st.picks);
+  document.querySelectorAll(".card.picked").forEach(c => c.classList.remove("picked")); renderReel(); });
+
+/* ── benchmark view ──────────────────────────────────────────────────────────
+   Everything here is computed from the same payload the atlas uses, on the
+   big-budget sweep, so the figures cannot drift from the cards.              */
+const SRC = { digits:"glyph", letters_upper:"glyph", letters_lower:"glyph",
+  animals:"nameable", objects:"nameable", vehicles:"nameable", figures:"nameable",
+  abstract:"abstract", hand_shadow:"hand" };
+const SRC_ORDER = ["glyph","nameable","abstract","hand"];
+const SRC_LABEL = { glyph:"glyph (generated)", nameable:"MPEG-7 nameable",
+  abstract:"MPEG-7 abstract (null)", hand:"HaSPeR hand-expert" };
+const SRC_VAR = { glyph:"var(--s1)", nameable:"var(--s2)", abstract:"var(--s3)", hand:"var(--s4)" };
+const QN = ["S1 thin","S2","S3","S4 thick"];
+/* 5-fold CV R^2 of a linear model on 11 target attributes -> each metric.
+   Fitted offline (scripts/, statsmodels-free lstsq); see the caption. */
+const CVR2 = { iou:0.587, nsd:0.311, pw_h1:0.628, hu_distance:0.267 };
+const bm = (s,k) => (s.big && s.big[k] != null) ? s.big[k] : null;
+const pct = (xs,p) => { const a=[...xs].sort((x,y)=>x-y), i=(a.length-1)*p, f=Math.floor(i);
+  return f+1<a.length ? a[f]+(a[f+1]-a[f])*(i-f) : a[f]; };
+
+const BS = S.filter(s => bm(s,"iou") != null && s.a.median_stroke_width_rel != null)
+  .map(s => ({ ...s, src: SRC[s.subset], stroke: s.a.median_stroke_width_rel,
+               holed: (s.a.n_holes_signif ?? 0) > 0 }));
+{
+  const cuts = [.25,.5,.75].map(p => pct(BS.map(s => s.stroke), p));
+  BS.forEach(s => { s.q = s.stroke <= cuts[0] ? 0 : s.stroke <= cuts[1] ? 1 : s.stroke <= cuts[2] ? 2 : 3; });
+}
+const svgEl = (t, at) => { const e = document.createElementNS("http://www.w3.org/2000/svg", t);
+  for(const k in at) e.setAttribute(k, at[k]); return e; };
+
+function stratTable(){
+  const cell = (f) => BS.filter(f).length;
+  const head = "<thead><tr><th></th>" + QN.map(q => `<th>${q}</th>`).join("") + "<th>all</th></tr></thead>";
+  const body = SRC_ORDER.map(src => {
+    const tds = QN.map((_,q) => { const n = cell(s => s.src===src && s.q===q);
+      return `<td class="${n<10?"warn":""}">${n}</td>`; }).join("");
+    return `<tr><td>${SRC_LABEL[src]}</td>${tds}<td>${cell(s=>s.src===src)}</td></tr>`;
+  }).join("");
+  const tot = `<tr class="tot"><td>all</td>${QN.map((_,q)=>`<td>${cell(s=>s.q===q)}</td>`).join("")}<td>${BS.length}</td></tr>`;
+  const holed = `<tr><td style="padding-top:11px">of which <b>holed</b> (secondary axis)</td>` +
+    QN.map((_,q)=>{ const n=cell(s=>s.q===q&&s.holed); return `<td class="${n<10?"warn":""}" style="padding-top:11px">${n}</td>`; }).join("") +
+    `<td style="padding-top:11px">${cell(s=>s.holed)}</td></tr>`;
+  return `<div class="tblwrap"><table class="strat">${head}<tbody>${body}${tot}${holed}</tbody></table></div>`;
+}
+
+/* Fig B1 — castability vs stroke width, plus how much of each metric the
+   target alone explains. */
+function figB1(){
+  const W=880,H=300,L=52,R=14,T=14,B=38;
+  const xs=BS.map(s=>s.stroke), ys=BS.map(s=>bm(s,"iou"));
+  const x0=0, x1=Math.max(...xs)*1.02, y0=Math.min(...ys)*0.96, y1=Math.max(...ys)*1.02;
+  const X=v=>L+(v-x0)/(x1-x0)*(W-L-R), Y=v=>H-B-(v-y0)/(y1-y0)*(H-T-B);
+  const svg=svgEl("svg",{viewBox:`0 0 ${W} ${H}`,role:"img",
+    "aria-label":"Achieved IoU against target stroke width for all 546 targets"});
+  svg.style.cssText="width:100%;height:auto;display:block";
+  for(let i=0;i<=4;i++){ const v=y0+(y1-y0)*i/4;
+    svg.append(svgEl("line",{x1:L,x2:W-R,y1:Y(v),y2:Y(v),stroke:"var(--line-2)","stroke-width":1}));
+    const t=svgEl("text",{x:L-8,y:Y(v)+3.5,"text-anchor":"end",fill:"var(--muted)","font-size":10,
+      "font-family":"IBM Plex Mono, monospace"}); t.textContent=v.toFixed(2); svg.append(t); }
+  for(let i=0;i<=4;i++){ const v=x0+(x1-x0)*i/4;
+    const t=svgEl("text",{x:X(v),y:H-B+15,"text-anchor":"middle",fill:"var(--muted)","font-size":10,
+      "font-family":"IBM Plex Mono, monospace"}); t.textContent=v.toFixed(2); svg.append(t); }
+  BS.forEach(s=>svg.append(svgEl("circle",{cx:X(s.stroke).toFixed(1),cy:Y(bm(s,"iou")).toFixed(1),
+    r:2.6,fill:SRC_VAR[s.src],"fill-opacity":.55})));
+  const n=xs.length, mx=xs.reduce((a,b)=>a+b,0)/n, my=ys.reduce((a,b)=>a+b,0)/n;
+  let sxy=0,sxx=0; for(let i=0;i<n;i++){ sxy+=(xs[i]-mx)*(ys[i]-my); sxx+=(xs[i]-mx)**2; }
+  const b1=sxy/sxx, b0=my-b1*mx;
+  svg.append(svgEl("line",{x1:X(x0),y1:Y(b0+b1*x0),x2:X(x1),y2:Y(b0+b1*x1),
+    stroke:"var(--ink)","stroke-width":1.6,"stroke-dasharray":"6 4","stroke-opacity":.75}));
+  const ax=svgEl("text",{x:(L+W-R)/2,y:H-4,"text-anchor":"middle",fill:"var(--muted)","font-size":11});
+  ax.textContent="target median stroke width (fraction of image diagonal)"; svg.append(ax);
+  const ay=svgEl("text",{x:14,y:H/2,"text-anchor":"middle",fill:"var(--muted)","font-size":11,
+    transform:`rotate(-90 14 ${H/2})`}); ay.textContent="achieved IoU"; svg.append(ay);
+
+  const bw=svgEl("svg",{viewBox:"0 0 380 118",role:"img",
+    "aria-label":"Share of each metric's variance explained by target attributes alone"});
+  bw.style.cssText="width:100%;max-width:380px;height:auto;display:block";
+  Object.entries(CVR2).forEach(([k,v],i)=>{
+    const y=i*28+8, w=v*230;
+    const lb=svgEl("text",{x:0,y:y+13,fill:"var(--ink-2)","font-size":11,
+      "font-family":"IBM Plex Mono, monospace"}); lb.textContent=k;
+    bw.append(lb, svgEl("rect",{x:88,y,width:230,height:17,rx:2,fill:"var(--line-2)"}),
+      svgEl("rect",{x:88,y,width:w.toFixed(1),height:17,rx:2,fill:"var(--accent)"}));
+    const vt=svgEl("text",{x:324,y:y+13,fill:"var(--ink-2)","font-size":11,
+      "font-family":"IBM Plex Mono, monospace"}); vt.textContent=v.toFixed(3); bw.append(vt);
+  });
+  const leg = SRC_ORDER.map(s=>`<span><i style="background:${SRC_VAR[s]}"></i>${SRC_LABEL[s]}</span>`).join("");
+  const wrap=document.createElement("div"); wrap.className="fig";
+  wrap.innerHTML=`<h3>Castability is predictable before anything is solved</h3>
+    <div class="legend-row" style="margin-top:8px">${leg}</div>`;
+  wrap.append(svg);
+  const sub=document.createElement("div");
+  sub.innerHTML=`<div class="lbl" style="margin:14px 0 6px">variance explained by target attributes alone — 5-fold CV R²</div>`;
+  sub.append(bw); wrap.append(sub);
+  const cap=document.createElement("div"); cap.className="cap";
+  cap.innerHTML=`Each point is one of the 546 targets, big-budget sweep. IoU rises with stroke width
+    (Spearman <b>ρ = +0.66</b>); the dashed line is the least-squares fit. The bars below show how much of
+    each metric a linear model on eleven <em>target</em> attributes can predict without seeing a solve.
+    The ordering is the argument for the panel: <b>IoU (0.587) and pw_h1 (0.628) are largely determined by
+    the target</b>, while <b>hu_distance (0.267) is the least contaminated</b> — it is the member that most
+    reflects the solve rather than the shape it was handed.`;
+  wrap.append(cap); return wrap;
+}
+
+/* Fig B2 — matched pairs: IoU ties, another panel member does not. */
+const PAIRS = [
+  { k:"pw_h1", dp:3, title:"Same IoU, opposite topology",
+    a:"objects_spoon_mpeg7-05", b:"animals_butterfly_mpeg7-01" },
+  { k:"nsd", dp:3, title:"Same IoU, outline twice as badly placed",
+    a:"objects_spoon_mpeg7-04", b:"objects_cup_mpeg7-03" }
+];
+function pcard(s, k, dp, hot){
+  const el=document.createElement("div"); el.className="pcard";
+  const trip=document.createElement("div"); trip.className="trip";
+  // Only four of these, and they sit below the fold — paint eagerly rather than
+  // through the grid's IntersectionObserver, which never fires for them.
+  const cv=document.createElement("canvas"); cv.width=cv.height=PX;
+  paintOverlay(cv, s.t, s.big.s).catch(()=>{});
+  trip.append(imgEl(s.t), imgEl(s.big.s), cv);
+  const cd=document.createElement("div"); cd.className="cd";
+  cd.innerHTML=`<div class="trip-lbl"><span>target</span><span>shadow</span><span>overlay</span></div>
+    <div class="nm">${s.id}</div>
+    <div class="nums">
+      <div><span>IoU ↑</span><b>${bm(s,"iou").toFixed(3)}</b></div>
+      <div><span>${k} ${k==="nsd"?"↑":"↓"}</span><b class="${hot?"hot":""}">${bm(s,k).toFixed(dp)}</b></div>
+    </div>`;
+  el.append(trip, cd); return el;
+}
+function figB2(){
+  const wrap=document.createElement("div"); wrap.className="fig";
+  wrap.innerHTML=`<h3>Why four numbers and not one</h3>`;
+  PAIRS.forEach(p=>{
+    const A=byId.get(p.a), B=byId.get(p.b);
+    if(!A||!B||!A.big||!B.big) return;
+    const hd=document.createElement("div"); hd.className="lbl";
+    hd.style.cssText="margin:14px 0 6px"; hd.textContent=p.title;
+    const row=document.createElement("div"); row.className="pair";
+    // Highlight the member that is WORSE on the second metric. nsd is
+    // higher-better, pw_h1 lower-better — so "worse" flips with the metric.
+    const hiBetter = p.k === "nsd";
+    const aWorse = hiBetter ? bm(A,p.k) < bm(B,p.k) : bm(A,p.k) > bm(B,p.k);
+    row.append(pcard(A,p.k,p.dp, aWorse), pcard(B,p.k,p.dp, !aWorse));
+    wrap.append(hd,row);
+  });
+  const cap=document.createElement("div"); cap.className="cap";
+  cap.innerHTML=`Two pairs the optimizer scores identically on IoU. <b>Top:</b> a spoon and a butterfly both
+    land at IoU ≈ 0.60, but the butterfly's holes are gone — <b>pw_h1 differs by 1.008</b> while IoU differs
+    by 0.004. <b>Bottom:</b> a spoon and a cup both at IoU ≈ 0.75, same subset, but the cup's outline is more
+    than twice as badly placed (<b>NSD 0.741 vs 0.312</b>). Across all 546 the panel members share little:
+    the largest pairwise |ρ| is 0.51, and IoU↔pw_h1 is 0.10. Overlay colours as in the atlas.`;
+  wrap.append(cap); return wrap;
+}
+
+/* The reference set as a stratum, in the same shape as the table above it: the
+   question a reader has here is not what a capture looks like -- the atlas shows
+   that -- but which strata a human actually covered, and whether that coverage is
+   thin enough to make a claim about it unsafe. */
+function telBlock(){
+  const wrap = document.createElement("div"); wrap.className = "telbench";
+  const bySub = new Map();
+  for(const it of TEL.items){
+    if(!it.sample_id) continue;
+    const k = it.subset || "—";
+    bySub.set(k, (bySub.get(k) || 0) + 1);
+  }
+  const rows = [...bySub.entries()].sort((a, b) => b[1] - a[1]);
+  const linked = new Set(TEL.items.filter(i => i.sample_id).map(i => i.sample_id)).size;
+  const withResults = S.filter(x => TELBY.has(x.id) && iou(x) != null).length;
+  wrap.innerHTML = `
+    <h3>The hand-cast reference set <code>SO101_fleet_teleop</code></h3>
+    <p>${TEL.n} shadows a person produced by posing the same three arms, one per target, spread
+    across the parts A–D of the selection rather than sampled at random. They are a supplement to
+    the benchmark, not a stratum of it: they change no score and sit on the cards of the targets
+    they were posed for. ${linked} targets carry one; ${withResults} of those also have solver
+    results to sit beside, the rest waiting on the v2 re-run.</p>
+    <div class="telcov">${rows.map(([k, n]) =>
+      `<div><span>${k}</span><b>${n}</b></div>`).join("")}</div>
+    <div class="axis-note" style="margin-top:12px"><span class="tag">open</span><div>
+      <b>Not yet a score.</b> The pose was never recorded against the target's placement, so where
+      the shadow was <em>meant</em> to sit and how large it was meant to be are unknown. Mask and
+      target can be shown side by side honestly; overlaying them for an IoU means inventing that
+      alignment. Three ways out, none yet chosen: fit a shared similarity transform per capture and
+      report against both the placed and the authored target, as the <code>*-fitted</code> sweeps
+      already do; report only <code>hu_distance</code>, which is invariant to placement and is in
+      the panel for exactly this reason; or project the target onto the wall during the next session
+      and make the alignment measurable instead of inferred. Worth knowing before the set is called
+      an upper bound: on the abstract subset the hand-cast shadows are visibly far from their
+      targets, so for those strata a person may be a floor rather than a ceiling.</div></div>`;
+  return wrap;
+}
+
+function renderBench(){
+  const b=$("#benchView");
+  const intro=document.createElement("div");
+  intro.innerHTML=`<h2>How umbra-bench is stratified</h2>
+    <p style="margin-bottom:12px">Because a target's achievable IoU is unknown and target-dependent, a bare
+    score is uninterpretable. So the benchmark is built to make difficulty a <em>stratification variable
+    rather than a confound</em>: targets are binned along the axes the metric panel responds to, and every
+    number is reported per stratum. Where other benchmarks ask how well you scored, this one first asks what
+    the target was worth.</p>
+    <div class="axis-note" style="margin-bottom:8px"><span class="tag">primary</span>
+      <div><b>Stroke-width quartile</b> — four groups of ~137, split at the 25/50/75th percentile of the
+      target's median stroke width. This is the axis <b>IoU</b> moves along (ρ = +0.66), and it barely
+      touches the other three (|ρ| ≤ 0.08). Every result is reported per quartile.</div></div>
+    <div class="axis-note"><span class="tag">secondary</span>
+      <div><b>Topology</b> — does the target have a significant hole. This is the axis <b>pw_h1</b> moves
+      along (ρ = +0.35) and that <b>IoU cannot see at all</b> (ρ = −0.04). The split is 91 / 455, too
+      unbalanced to cross fully with the primary axis, so it is reported as a split within quartiles.</div></div>
+    <p style="margin-top:12px">Source is carried as a <em>label</em>, not a third crossing: it is what the
+    recognizability metrics and head-to-head comparisons need, and it explains only ~30% of the variance in
+    either attributes or scores.</p>`;
+  const note=document.createElement("div"); note.className="axis-note";
+  note.innerHTML=`<span class="tag">stale</span><div>Everything on this page describes the
+    <b>${BS.length}</b> targets that currently have results — the pre-rescue sweep. The benchmark now
+    indexes <b>${S.length}</b>: 68 sub-floor targets were dropped and 64 v2 replacements added, and
+    those 64 have not been solved yet. Re-run the four sweeps and rebuild <code>master_table.csv</code>
+    to refresh the stratification, the scatter and the CV R².</div>`;
+  const tbl=document.createElement("div"); tbl.className="fig";
+  tbl.innerHTML=`<h3>What is in it</h3>${stratTable()}
+    <div class="cap">Counts over all 546 targets. Cells under 10 are marked: <b>S4 × holed = 8</b> (thick
+    shapes rarely have holes) and <b>abstract × holed = 0</b>, so the primary and secondary axes cannot be
+    fully crossed, and the null-control subset cannot probe topology at all. <b>HaSPeR hand-expert has 10
+    items total</b> — the human-expert reference, and the smallest group in the benchmark.</div>`;
+  b.replaceChildren(intro, note, tbl, telBlock(), figB1(), figB2());
+}
+
+/* ── teleop captures — click to segment ──────────────────────────────────────
+   Photographs of real shadows, cast by hand-posing the same three arms, then
+   rectified by the four ArUco markers around the projection area.
+
+   Automatic thresholding was not good enough, and the reason is structural: the
+   shadow sits 30-60 grey levels below the lit wall and the lamp's falloff across
+   the frame is the same magnitude, so no global rule separates them. A person
+   pointing at the shadow settles in one click what no threshold gets right.
+
+   What runs here is a preview, not the deliverable. Clicking floods the
+   flat-fielded frame — illumination divided out, so one tolerance means the same
+   thing on every capture — from each positive point, subtracting the region under
+   each negative one. `copy points` exports exactly what
+   `scripts/segment_teleop.py` consumes, and that script runs the same points
+   through SAM 2 on a machine with the checkpoint. Same markup, better edges.  */
+const TEL = TELEOP;
+const tpts = store.get("teleopPts", {});
+const ffCache = new Map();
+
+function ffData(it){
+  if(ffCache.has(it.capture)) return ffCache.get(it.capture);
+  const p = new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => {
+      const c = document.createElement("canvas"); c.width = it.w; c.height = it.h;
+      const g = c.getContext("2d", { willReadFrequently: true });
+      g.drawImage(im, 0, 0);
+      const d = g.getImageData(0, 0, it.w, it.h).data;
+      const a = new Uint8Array(it.w * it.h);
+      for(let i = 0; i < a.length; i++) a[i] = d[i << 2];
+      res(a);
+    };
+    im.onerror = rej;
+    im.src = "data:image/png;base64," + it.ff;
+  });
+  ffCache.set(it.capture, p); return p;
+}
+
+/** The lit wall's own level: the 90th percentile of the flat field. */
+function wallLevel(ff){
+  const hist = new Uint32Array(256);
+  for(let i = 0; i < ff.length; i++) hist[ff[i]]++;
+  let acc = 0; const want = ff.length * 0.9;
+  for(let v = 0; v < 256; v++){ acc += hist[v]; if(acc >= want) return v; }
+  return 255;
+}
+
+/* ── seeded segmentation by geodesic competition ─────────────────────────────
+   A flood fill was the wrong tool and failed in the way flood fills fail: the
+   shadow is one connected region, so an exclude point landing anywhere in it
+   deleted the whole mask. Connectivity is all-or-nothing and the user's second
+   click should not be an all-or-nothing act.
+
+   Instead both kinds of seed COMPETE. For every pixel, measure the cheapest path
+   back to any foreground seed and to any background seed, where a path pays for
+   the intensity it climbs; the pixel joins whichever is nearer. An exclude point
+   then pulls its neighbourhood over to background and stops where the evidence
+   turns, rather than erasing a component. Adding seeds always refines.
+
+   The distances are the intensity-weighted geodesic ones — Toivanen's chamfer
+   sweep, a handful of raster passes, which is what makes this real-time on
+   190k pixels where a proper random walker solve would not be. `segment_teleop.py`
+   runs skimage's random_walker on the same seeds for the version that counts;
+   the two agree on where the boundary is and differ in how smooth it is.
+
+   The frame border seeds background implicitly, so one click on the shadow is
+   already a complete problem — there is always something to compete against. */
+function geodesic(ff, w, h, seeds, gamma, passes = 3){
+  const n = w * h, D = new Float32Array(n).fill(1e30);
+  for(const i of seeds) D[i] = 0;
+  const step = (a, b) => {                       // cost of moving between neighbours
+    const d = ff[a] - ff[b];
+    return 1 + gamma * (d > 0 ? d : -d);
+  };
+  const relax = (i, j, diag) => {
+    const c = D[j] + step(i, j) * (diag ? 1.4142 : 1);
+    if(c < D[i]) D[i] = c;
+  };
+  for(let p = 0; p < passes; p++){
+    for(let y = 0; y < h; y++) for(let x = 0; x < w; x++){
+      const i = y * w + x;
+      if(x > 0)            relax(i, i - 1, 0);
+      if(y > 0)            relax(i, i - w, 0);
+      if(y > 0 && x > 0)   relax(i, i - w - 1, 1);
+      if(y > 0 && x < w-1) relax(i, i - w + 1, 1);
+    }
+    for(let y = h - 1; y >= 0; y--) for(let x = w - 1; x >= 0; x--){
+      const i = y * w + x;
+      if(x < w-1)            relax(i, i + 1, 0);
+      if(y < h-1)            relax(i, i + w, 0);
+      if(y < h-1 && x < w-1) relax(i, i + w + 1, 1);
+      if(y < h-1 && x > 0)   relax(i, i + w - 1, 1);
+    }
+  }
+  return D;
+}
+function brushAt(x, y, w, h, r){                 // a seed is a small disc, not a pixel
+  const out = [];
+  for(let dy = -r; dy <= r; dy++) for(let dx = -r; dx <= r; dx++){
+    if(dx*dx + dy*dy > r*r) continue;
+    const xx = x + dx, yy = y + dy;
+    if(xx >= 0 && yy >= 0 && xx < w && yy < h) out.push(yy * w + xx);
+  }
+  return out;
+}
+function segment(ff, w, h, d){
+  const out = new Uint8Array(w * h);
+  if(!d.pos.length) return out;
+  const R = 4, gamma = (d.tol ?? 55) / 12;       // higher = edges cost more to cross
+  const fg = [], bg = [];
+  for(const [x, y] of d.pos) fg.push(...brushAt(Math.round(x), Math.round(y), w, h, R));
+  for(const [x, y] of d.neg) bg.push(...brushAt(Math.round(x), Math.round(y), w, h, R));
+  for(let x = 0; x < w; x++){ bg.push(x); bg.push((h - 1) * w + x); }   // the frame is wall
+  for(let y = 0; y < h; y++){ bg.push(y * w); bg.push(y * w + w - 1); }
+  const Df = geodesic(ff, w, h, fg, gamma), Db = geodesic(ff, w, h, bg, gamma);
+  for(let i = 0; i < out.length; i++) out[i] = Df[i] < Db[i] ? 1 : 0;
+  return out;
+}
+const tdec = (it) => tpts[it.capture] || { pos: [], neg: [], tol: 70 };
+function tset(it, d){ tpts[it.capture] = d; store.set("teleopPts", tpts); }
+
+const tcards = new Map();
+async function tdraw(it){
+  const c = tcards.get(it.capture); if(!c) return;
+  const ff = await ffData(it), d = tdec(it);
+  const m = d.pos.length ? segment(ff, it.w, it.h, d) : null;
+  const g = c.cv.getContext("2d");
+  g.clearRect(0, 0, it.w, it.h);
+  g.drawImage(c.photo, 0, 0, it.w, it.h);
+  if(m){
+    const im = g.getImageData(0, 0, it.w, it.h), px = im.data;
+    for(let i = 0; i < m.length; i++) if(m[i]){
+      const j = i << 2;
+      px[j] = px[j] * 0.35 + 255 * 0.65;      // magenta wash over the kept region
+      px[j+1] = px[j+1] * 0.35;
+      px[j+2] = px[j+2] * 0.35 + 255 * 0.65;
+    }
+    g.putImageData(im, 0, 0);
+  }
+  const dot = (x, y, fill) => {
+    g.beginPath(); g.arc(x, y, 6, 0, 6.284);
+    g.fillStyle = fill; g.fill();
+    g.lineWidth = 2; g.strokeStyle = "#fff"; g.stroke();
+  };
+  d.pos.forEach(([x, y]) => dot(x, y, "#1baf7a"));
+  d.neg.forEach(([x, y]) => dot(x, y, "#eb6834"));
+  const frac = m ? m.reduce((a, b) => a + b, 0) / m.length : 0;
+  const leak = frac > 0.55;
+  c.stat.className = "vstat " + (!d.pos.length ? "ok" : leak ? "bad" : "ok");
+  c.stat.textContent = !d.pos.length
+    ? `committed mask covers ${(it.shape_frac * 100).toFixed(1)}% · click to re-segment here`
+    : leak
+      ? `leaking — ${(frac * 100).toFixed(0)}% of the frame · raise edge pull, or shift-click the spill`
+      : `${d.pos.length}+ / ${d.neg.length}−  ·  edge ${d.tol}  ·  covers ${(frac * 100).toFixed(1)}%`;
+  c.tolv.textContent = d.tol;
+  c.range.value = d.tol;
+  c.el.classList.toggle("done", d.pos.length > 0);
+}
+let tq = Promise.resolve();
+const tqueue = (it) => { tq = tq.then(() => tdraw(it)).catch(() => {}); };
+
+function titem(it){
+  const el = document.createElement("article");
+  el.className = "titem" + (it.suspect ? " suspect" : "");
+  el.dataset.cap = it.capture;
+
+  const cv = document.createElement("canvas");
+  cv.width = it.w; cv.height = it.h; cv.className = "tcanvas";
+  const photo = new Image();
+  photo.onload = () => tqueue(it);
+  photo.src = "data:image/jpeg;base64," + it.rect;
+
+  const xy = (ev) => {
+    const r = cv.getBoundingClientRect();
+    return [Math.round((ev.clientX - r.left) / r.width * it.w),
+            Math.round((ev.clientY - r.top) / r.height * it.h)];
+  };
+  cv.addEventListener("click", (ev) => {
+    const d = tdec(it), p = xy(ev);
+    (ev.shiftKey || ev.altKey ? d.neg : d.pos).push(p);
+    tset(it, d); tqueue(it); ttally();
+  });
+  cv.addEventListener("contextmenu", (ev) => {
+    ev.preventDefault();
+    const d = tdec(it); d.neg.push(xy(ev)); tset(it, d); tqueue(it); ttally();
+  });
+
+  const side = document.createElement("div"); side.className = "tside";
+
+  // The mask that is actually committed to Teleops/masks and linked from
+  // metadata.jsonl. The canvas to its left shows the browser's own segmenter,
+  // which only runs once you click; without this panel an untouched card looks
+  // like nothing has been extracted, when in fact all of them have.
+  if(it.mask){
+    const mw = document.createElement("div"); mw.className = "ttgt";
+    const mi = document.createElement("img");
+    mi.src = "data:image/png;base64," + it.mask; mi.alt = "";
+    mw.append(mi, Object.assign(document.createElement("span"),
+      { textContent: "mask · " + (it.mask_backend || "committed") }));
+    side.append(mw);
+  }
+
+  const tgt = document.createElement("div"); tgt.className = "ttgt";
+  if(it.target){
+    const i = document.createElement("img");
+    i.src = "data:image/png;base64," + it.target; i.alt = "";
+    tgt.append(i);
+    const cap = document.createElement("span");
+    cap.textContent = it.target_status === "replaced_by_v2" ? "target (v1)" : "target";
+    tgt.append(cap);
+  } else {
+    tgt.innerHTML = '<div class="none">no target</div>';
+  }
+  side.append(tgt);
+
+  const stat = document.createElement("div");
+  const range = document.createElement("input");
+  range.type = "range"; range.min = 5; range.max = 95; range.step = 5;
+  const tolv = document.createElement("b");
+  range.addEventListener("input", () => { tolv.textContent = range.value; });
+  range.addEventListener("change", () => {
+    const d = tdec(it); d.tol = +range.value; tset(it, d); tqueue(it);
+  });
+  const rad = document.createElement("label"); rad.className = "radrow";
+  rad.append(Object.assign(document.createElement("span"), { textContent: "edge pull" }), range, tolv);
+
+  const btns = document.createElement("div"); btns.className = "opbar";
+  const mk = (label, fn) => { const b = document.createElement("button");
+    b.type = "button"; b.textContent = label; b.addEventListener("click", fn); return b; };
+  btns.append(
+    mk("undo", () => { const d = tdec(it);
+      if(d.neg.length) d.neg.pop(); else d.pos.pop();
+      tset(it, d); tqueue(it); ttally(); }),
+    mk("clear", () => { tset(it, { pos: [], neg: [], tol: tdec(it).tol });
+      tqueue(it); ttally(); }));
+
+  const body = document.createElement("div"); body.className = "tbody";
+  body.innerHTML = `<div class="rhead"><span class="nm3" title="${it.capture}">${it.capture}</span>
+      <span class="sub3">${it.part || "—"}</span></div>`
+    + (it.reason ? `<div class="treason">selected: ${it.reason}</div>` : "")
+    + `<div class="autotag">${it.sample_id || "no sample_id — this class is in neither selection CSV"}</div>`;
+  body.append(stat, rad, btns);
+  if(it.suspect){
+    const f = document.createElement("div"); f.className = "tflag";
+    f.textContent = "auto-threshold failed here (" + it.shape_frac.toFixed(2)
+      + " of the frame) — the crop runs past the lit cone";
+    body.append(f);
+  }
+  if(it.target_status === "replaced_by_v2"){
+    const f = document.createElement("div"); f.className = "tflag";
+    f.textContent = "posed against v1 — that target is now " + it.v2_id;
+    body.append(f);
+  }
+  const top = document.createElement("div"); top.className = "ttop";
+  top.append(cv, side);
+  el.append(top, body);
+  tcards.set(it.capture, { el, cv, photo, stat, range, tolv });
+  return el;
+}
+
+function ttally(){
+  const n = TEL.items.filter(i => (tpts[i.capture]?.pos || []).length).length;
+  const pts = Object.values(tpts).reduce((a, d) => a + d.pos.length + d.neg.length, 0);
+  const linked = new Set(TEL.items.filter(i => i.sample_id).map(i => i.sample_id)).size;
+  $("#ttally").innerHTML = `<span><b>${TEL.n}</b> captures segmented</span>`
+    + `<span><b>${linked}</b> targets linked</span>`
+    + `<span><b>${n}</b> re-marked here · ${pts} points</span>`
+    + `<span class="rev">${n ? "export → points.json, then: python3 scripts/segment_teleop.py --write"
+                            : "masks committed in Teleops/masks — click a card only to redo one"}</span>`;
+}
+
+/* Exposed on purpose: the preview makes a claim about what the points will do,
+   and a claim you cannot inspect is one you cannot trust. */
+window.__teleop = { TEL, ffData, wallLevel, geodesic, segment, tdec, tpts };
+
+/* The teleop view is the pipeline, not a second copy of the dataset. The captures
+   themselves surface in the atlas, on the cards of the targets they were posed
+   for; what belongs here is how to collect and process a new one, with the
+   interactive segmenter sitting inside the step that needs it. */
+const STEPS = [
+  ["1", "Rig", `Three SO-101 arms, one point light, the wall screen. Four AprilTags
+    (<code>36h11</code>, ids 0–3) go at the corners of the projection area — their
+    <b>inner</b> corners define the quad, which is what makes the rectification
+    reproducible without measuring anything.`, null],
+  ["2", "Capture", `Pose the arms by hand until the shadow reads, then grab the frame.
+    The script refuses a frame in which it cannot see all four tags, so a capture that
+    lands in the folder is always rectifiable.`,
+    `# live RealSense — SPACE grabs, N skips, Q quits
+python3 scripts/capture_teleop.py
+# or rectify frames you already have
+python3 scripts/capture_teleop.py --from-images 'raw/*.png'
+# --record-pose also writes joint angles to <name>_capture.json`],
+  ["3", "Rectify", `Warped to 500×383 fronto-parallel off those inner corners. This runs
+    inside step 2; it is called out because the number to check afterwards is the aspect
+    ratio of the detected quad — it should sit near 1.30, and a capture far off that had
+    the camera somewhere it should not have been.`, null],
+  ["4", "Binarise", `Illumination is divided out by a heavily blurred copy of the frame,
+    then CLAHE stretches what is left. Both steps are needed: the shadow sits only 30–60
+    grey levels under the wall, and the lamp's own falloff across the frame is the same
+    magnitude, so no global threshold separates them. Seeds are found automatically; the
+    cards below are for the ones that come out wrong.`,
+    `# no interaction; writes masks + a contact sheet
+python3 scripts/auto_segment_teleop.py --write
+# replays hand-placed points from points.json
+python3 scripts/segment_teleop.py --write`],
+  ["5", "Link", `A capture is not a target — it is a shadow somebody produced <i>for</i> one.
+    It fills <code>shadows.teleop</code> on that target's row and the row gains the tag
+    <code>SO101_fleet_teleop</code>, so both halves share one <code>sample_id</code>.
+    Matching is by capture name against the selection CSVs; class names come from the
+    source dataset and are not always the English spelling (MPEG-7 ships <code>glas</code>),
+    so exceptions go in <code>CLASS_ALIAS</code> rather than into a renamed photograph.`,
+    `# re-resolve sample_id only — keeps the committed masks
+python3 scripts/binarize_teleop.py --rematch --write
+python3 scripts/link_teleop.py            # dry run
+python3 scripts/link_teleop.py --write    # fill the slot, add the tag`],
+  ["6", "Rebuild", `The payload is read from the mask manifest, so anything the steps above
+    changed reaches the dashboard here and nowhere else.`,
+    `python3 scripts/_build_teleop_payload.py
+python3 atlas/build_atlas.py`],
+];
+
+function renderTeleop(){
+  const v = $("#teleopView");
+  const head = document.createElement("div");
+  const linked = new Set(TEL.items.filter(i => i.sample_id).map(i => i.sample_id)).size;
+  head.innerHTML = `
+    <h2 style="margin:0 0 6px;font-size:17px;font-weight:600">Collecting a teleop capture
+      <code style="font-size:12px;font-weight:400;color:var(--muted)">SO101_fleet_teleop</code></h2>
+    <p style="margin:0 0 14px;font-size:13px;line-height:1.6;color:var(--ink-2);max-width:74ch">
+      The pipeline from camera to a row in the benchmark. The captures themselves are not
+      a separate dataset — each one attaches to the target it was posed for and shows up on
+      that target's card in the atlas, under the <b>human</b> plate. This page is what to run
+      to add more. Full prose in <code>Teleops/README.md</code>.</p>
+    <div class="tallybar"><div class="tally">
+      <span><b>${TEL.n}</b> captures</span>
+      <span><b>${linked}</b> targets linked</span>
+      <span><b>${(TEL.median_frac * 100).toFixed(1)}%</b> median shape fraction</span>
+      <span class="rev">masks committed in Teleops/masks</span>
+    </div></div>
+    <div class="steps">${STEPS.map(([n, t, body, cmd]) => `
+      <section class="step">
+        <div class="stepn">${n}</div>
+        <div class="stepb"><h3>${t}</h3><p>${body}</p>
+          ${cmd ? `<pre class="cmd">${cmd}</pre>` : ""}</div>
+      </section>`).join("")}</div>
+
+    <h3 style="margin:26px 0 4px;font-size:14.5px;font-weight:600">Step 4, by hand</h3>
+    <p style="margin:0 0 10px;font-size:13px;line-height:1.6;color:var(--ink-2);max-width:74ch">
+      Every capture below already has a committed mask, shown beside its target. Redo one only
+      if it is wrong: <b>click</b> to include a region, <b>shift-click</b> (or right-click) to
+      exclude one. Both kinds of point compete for every pixel rather than one erasing the
+      other's region, so an exclude refines the boundary instead of deleting the mask.
+      <b>Edge pull</b> sets what crossing a boundary costs. Export, then
+      <code>scripts/segment_teleop.py --write</code> replays the same points exactly.</p>
+    <div class="tallybar"><div id="ttally" class="tally"></div>
+      <span style="flex:1"></span>
+      <button class="act" id="tExport">copy points</button>
+      <button class="act" id="tClear">clear all</button></div>`;
+  const list = document.createElement("div"); list.className = "tlist";
+  [...TEL.items].sort((a, b) => (b.suspect - a.suspect) || a.capture.localeCompare(b.capture))
+    .forEach(it => list.append(titem(it)));
+  v.replaceChildren(head, list);
+  ttally();
+  $("#tExport").addEventListener("click", (e) => {
+    const captures = {};
+    TEL.items.forEach(it => { const d = tdec(it);
+      if(d.pos.length) captures[it.capture] = { pos: d.pos, neg: d.neg, tol: d.tol }; });
+    copy(JSON.stringify({ ff_window: TEL.ff_window, captures }, null, 1), e.target);
+  });
+  $("#tClear").addEventListener("click", () => {
+    for(const k of Object.keys(tpts)) delete tpts[k];
+    store.set("teleopPts", tpts);
+    TEL.items.forEach(it => tqueue(it)); ttally();
+  });
+}
+
+function applyPage(){
+  if(!PAGES.includes(st.page)) st.page = "atlas";
+  store.set("page", st.page);
+  const p = st.page;
+  $("#benchView").hidden  = p !== "bench";
+  $("#teleopView").hidden = p !== "teleop";
+  $("#atlasView").hidden  = p !== "atlas";
+  document.querySelectorAll('[data-only="atlas"]').forEach(e => e.hidden = p !== "atlas");
+  document.querySelector(".strip").hidden = p !== "atlas";
+  if(p === "bench"  && !$("#benchView").childElementCount)  renderBench();
+  if(p === "teleop" && !$("#teleopView").childElementCount) renderTeleop();
+}
+seg("#segPage", "page", applyPage);
+
+renderHist(); renderGrid(); renderReel(); applyPage();
+})();
+</script>

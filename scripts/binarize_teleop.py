@@ -82,6 +82,12 @@ def load_selection() -> list[dict]:
     return rows
 
 
+# MPEG-7 ships the class spelled "glas"; whoever named the capture spelled it the
+# English way. An explicit alias is safer than fuzzy string matching, which would
+# let a genuine mismatch through as a near-hit.
+CLASS_ALIAS = {"glass": "glas"}
+
+
 def match(stem: str, rows: list[dict]):
     """Capture stems encode <subset><class>_<partcode>_<words>; ids do not."""
     subsets = sorted({r["subset"] for r in rows}, key=len, reverse=True)
@@ -91,6 +97,7 @@ def match(stem: str, rows: list[dict]):
         rest = stem[len(s):].lstrip("_")
         m = re.match(r"^(.+?)_([A-D])[._]?(\d?)", rest)
         cls, part = (m.group(1), m.group(2) + m.group(3)) if m else (rest, "")
+        cls = CLASS_ALIAS.get(cls, cls)   # report the benchmark's spelling
         cands = [r for r in rows if r["subset"] == s and r["class"] == cls]
         if part:
             narrowed = [r for r in cands if r["part"] == part[0]
@@ -107,15 +114,53 @@ def match(stem: str, rows: list[dict]):
     return None, stem, "", []
 
 
+def resolve(stem: str, rows: list[dict]) -> dict:
+    """The match fields for one capture, and nothing else."""
+    sub, cls, part, cands = match(stem, rows)
+    out = {"subset": sub, "class": cls, "part": part}
+    if len(cands) == 1:
+        out.update(sample_id=cands[0]["sample_id"], target=cands[0]["target_path"],
+                   reason=cands[0]["reason"], match="unique", candidates=[])
+    else:
+        out.update(sample_id=None, match="ambiguous" if cands else "no_match",
+                   candidates=[c["sample_id"] for c in cands])
+    return out
+
+
+def rematch(rows: list[dict], a) -> None:
+    man_p = os.path.join(rc.BENCH, a.out, "manifest.json")
+    man = json.load(open(man_p))
+    changed = []
+    for rec in man["records"]:
+        new = resolve(rec["capture"], rows)
+        if new["sample_id"] != rec.get("sample_id"):
+            changed.append((rec["capture"], rec.get("sample_id"), new["sample_id"]))
+        rec.update(new)
+    for cap, old, now in changed:
+        print(f"  {cap[:44]:44} {old} -> {now}")
+    print(f"{len(changed)} of {len(man['records'])} re-resolved"
+          + ("" if a.write else "   (dry run — pass --write)"))
+    if a.write:
+        json.dump(man, open(man_p, "w"), indent=1)
+        print(f"wrote {man_p}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--open-r", type=int, default=2)
     ap.add_argument("--out", default="Teleops/masks")
     ap.add_argument("--write", action="store_true")
+    ap.add_argument("--rematch", action="store_true",
+                    help="re-resolve sample_id on the existing manifest and stop; "
+                         "masks and every other field are left exactly as they are, "
+                         "so a hand-seeded segmentation is not thrown away")
     a = ap.parse_args()
 
     rows = load_selection()
+    if a.rematch:
+        rematch(rows, a)
+        return
     caps = sorted(glob.glob(os.path.join(TELEOP, "*_rectified.png")))
     recs = []
     for p in caps:
