@@ -444,7 +444,8 @@ button.act:hover{border-color:var(--accent); color:var(--accent-ink)}
         <option value="disagree">where IoU and NSD disagree most</option>
         <option value="clip-desc">CLIP — most recognisable</option>
         <option value="clip-asc">CLIP — least recognisable</option>
-        <option value="clipratio-desc">CLIP vs target — closest to the ceiling</option>
+        <option value="clipretain-desc">CLIP vs target — most of the ceiling kept</option>
+        <option value="clipover-desc">CLIP vs target — shadow beat its target</option>
         <option value="tc-desc">shape IoU — best shape, size &amp; place ignored</option>
         <option value="tc-asc">shape IoU — worst shape</option>
         <option value="asp-desc">aspect error — most stretched</option>
@@ -637,7 +638,21 @@ const CMP = {
   "tc-desc":    hi("tc_iou"), "tc-asc": lo("tc_iou"),
   "asp-desc":   hi("tc_aspect_error"),
   "clip-desc":  hi("clip_rr"), "clip-asc": lo("clip_rr"),
-  "clipratio-desc": hi("clip_ratio"),
+  // Ranking by raw clip_ratio put an 11x overshoot at the top: abstract_comma's
+  // target ranks 11th of 17 and its shadow happened to rank 1st. That is a
+  // collapsed ceiling, not a good shadow -- abstract targets sit at chance by
+  // design, so dividing by their rank divides by noise. Cap at 1: "how much of
+  // the target's legibility survived" tops out at "all of it", and beating an
+  // illegible target does not jump the queue.
+  // Capping alone is not enough: ~172 items retain the full ceiling and tie at
+  // 1, and a stable sort then leads with whichever the payload happened to list
+  // first -- in practice the collapsed-ceiling ones. Break the tie on the
+  // target's own rank, so "kept all of a ceiling worth keeping" outranks "kept
+  // all of a ceiling that was never there".
+  "clipretain-desc": (a,b) => (Math.min(mv(b,"clip_ratio") ?? 0, 1))
+                            - (Math.min(mv(a,"clip_ratio") ?? 0, 1))
+                            || (a.clip_t_rank ?? 1e9) - (b.clip_t_rank ?? 1e9),
+  "clipover-desc":  hi("clip_ratio"),
   "delta-desc": (a,b) => (delta(b) ?? -9) - (delta(a) ?? -9),
   "stroke-asc": (a,b) => (a.a.median_stroke_width_rel ?? 9) - (b.a.median_stroke_width_rel ?? 9),
   "subset":     (a,b) => a.subset.localeCompare(b.subset) || (iou(b) ?? -1) - (iou(a) ?? -1),
@@ -670,7 +685,7 @@ const SORT_METRIC = {
   "iou-desc":"iou", "iou-asc":"iou", "nsd-desc":"nsd", "nsd-asc":"nsd",
   "pw-asc":"pw_h1", "pw-desc":"pw_h1", "hu-asc":"hu_distance", "hu-desc":"hu_distance",
   "delta-desc":"__delta", "stroke-asc":"__stroke",
-  "clip-desc":"clip_rr", "clip-asc":"clip_rr", "clipratio-desc":"clip_ratio",
+  "clip-desc":"clip_rr", "clip-asc":"clip_rr", "clipretain-desc":"clip_ratio", "clipover-desc":"clip_ratio",
   "tc-desc":"tc_iou", "tc-asc":"tc_iou", "asp-desc":"tc_aspect_error",
   "disagree":"iou", "subset":"iou", "id":"iou"
 };
