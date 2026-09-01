@@ -387,11 +387,9 @@ button.act:hover{border-color:var(--accent); color:var(--accent-ink)}
     <div class="grp" data-only="atlas">
       <div class="lbl">Plate</div>
       <div class="seg" id="segView">
-        <button data-v="overlay" aria-pressed="true" title="shadow against the target as authored — includes whatever --fit-target moved">overlay</button>
-        <button data-v="fit" aria-pressed="false" title="shadow against the shape the optimizer was actually asked to cast (the target after --fit-target). This is the aligned comparison">vs&nbsp;fit</button>
-        <button data-v="centred" aria-pressed="false" title="both trimmed to the shape, matched on height and centred — position and size removed. Pairs with the shape-IoU metric">shape</button>
+        <button data-v="overlay" aria-pressed="true" title="shadow against the target the optimizer was actually given — after --fit-target scaled and shifted it">overlay</button>
         <button data-v="shadow" aria-pressed="false">shadow</button>
-        <button data-v="target" aria-pressed="false">target</button>
+        <button data-v="target" aria-pressed="false" title="the target as given to the optimizer, i.e. after the fit">target</button>
         <button data-v="trip" aria-pressed="false">all&nbsp;3</button>
         <button data-v="human" aria-pressed="false" title="the hand-cast shadow, where one exists">human</button>
       </div>
@@ -539,11 +537,7 @@ const st = {
   page:  (p => PAGES.includes(p) ? p : "atlas")(store.get("page", "atlas")),
   telOnly: store.get("telOnly", false),
   sweep: store.get("sweep","big"),
-  // Default the plate to whichever comparison the numbers on the card report,
-  // so the picture and the metric are never describing different things. On a
-  // fitted sweep (ref=shown) that is `fit`; on an unfitted one the target was
-  // cast as authored and `overlay` already is the aligned view.
-  view:  store.get("view", DATA.ref === "shown" ? "fit" : "overlay"),
+  view:  store.get("view", "overlay"),
   // Reconcile the remembered selection with the payload instead of trusting it.
   // A subset added since the last visit (teleop) is not in the stored list, so a
   // plain restore renders its chip unpressed and hides all of its samples -- new
@@ -585,6 +579,9 @@ store.set("subsKnown", DATA.subsets);
   el.textContent = `${DATA.n} targets · ${dirs} · ${DATA.targets_dir} · ${cmp}. `
                  + el.textContent.trim();
 })();
+// `fit` and `centred` were separate plates for one release; a reader who left
+// one selected would restore a view that no longer exists and see nothing.
+if(!["overlay","shadow","target","trip","human"].includes(st.view)) st.view = "overlay";
 const byId = new Map(S.map(s => [s.id, s]));
 
 /* ── derived helpers ─────────────────────────────────────────────────── */
@@ -726,19 +723,15 @@ function plate(s){
   const e = sw(s), wrap = document.createElement("div");
   wrap.className = "plate";
   const tel = TELBY.get(s.id);
-  const mk = { target: () => imgEl(s.t), shadow: () => e && e.s ? imgEl(e.s) : blankEl(),
-               overlay: () => e && e.s ? cvEl(s.t, e.s) : blankEl(),
-               // `overlay` compares the shadow with the target as authored, so it
-               // shows the fit's scale+shift as apparent mis-registration on top
-               // of any real solver error -- the two are not separable by eye.
-               // `fit` compares it with what the optimizer was actually given.
-               fit: () => e && e.s && e.w ? cvEl(e.w, e.s)
-                        : blankEl(e && e.s ? "no fitted target recorded" : ""),
-               // Both trimmed to ink, matched on height, centred -- the same
-               // normalisation tc_iou uses, so this plate and that number are
-               // the same comparison. White padding keeps the cards one size.
-               centred: () => e && e.ct && e.cs ? cvEl(e.ct, e.cs)
-                        : blankEl(e && e.s ? "no centred pair recorded" : ""),
+  // Every plate works in the fitted frame: `tgt` is the target the optimizer was
+  // given, which on a --fit-target sweep is the authored shape scaled ~0.83 and
+  // shifted ~14px. Showing the authored target instead put `target` and
+  // `overlay` in different coordinate systems, so `all 3` compared two frames at
+  // once and every card read as mis-registered. Unfitted sweeps have no `w`, and
+  // there the authored target IS what was cast, so the fallback is exact.
+  const tgt = (e && e.w) || s.t;
+  const mk = { target: () => imgEl(tgt), shadow: () => e && e.s ? imgEl(e.s) : blankEl(),
+               overlay: () => e && e.s ? cvEl(tgt, e.s) : blankEl(),
                human: () => tel ? imgEl(tel.mask) : blankEl("no hand-cast shadow") };
   if(st.view === "trip"){ wrap.append(mk.target(), mk.shadow(), mk.overlay()); }
   else { wrap.append(mk[st.view]()); }
@@ -981,7 +974,7 @@ function seg(sel, key, after){
   });
 }
 seg("#segSweep", "sweep", () => { renderHist(); renderGrid(); renderReel(); });
-seg("#segView",  "view",  () => { renderGrid(); $("#legend").style.display = ["overlay","fit","centred","trip"].includes(st.view) ? "" : "none"; });
+seg("#segView",  "view",  () => { renderGrid(); $("#legend").style.display = ["overlay","trip"].includes(st.view) ? "" : "none"; });
 
 (function themeSeg(){
   const box = $("#segTheme"), cur = store.get("theme", "auto");
@@ -1158,8 +1151,9 @@ function pcard(s, k, dp, hot){
   // Only four of these, and they sit below the fold — paint eagerly rather than
   // through the grid's IntersectionObserver, which never fires for them.
   const cv=document.createElement("canvas"); cv.width=cv.height=PX;
-  paintOverlay(cv, s.t, s.big.s).catch(()=>{});
-  trip.append(imgEl(s.t), imgEl(s.big.s), cv);
+  const ptgt=(s.big && s.big.w) || s.t;          // fitted frame, as the grid uses
+  paintOverlay(cv, ptgt, s.big.s).catch(()=>{});
+  trip.append(imgEl(ptgt), imgEl(s.big.s), cv);
   const cd=document.createElement("div"); cd.className="cd";
   cd.innerHTML=`<div class="trip-lbl"><span>target</span><span>shadow</span><span>overlay</span></div>
     <div class="nm">${s.id}</div>

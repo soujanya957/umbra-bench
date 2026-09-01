@@ -73,52 +73,6 @@ def thumb(path, px):
     return _enc(im.point(lambda v: 255 if v > 127 else 0))
 
 
-def _ink(path):
-    return np.asarray(Image.open(path).convert("L")) < 128
-
-
-def _trim(m):
-    ys, xs = np.where(m)
-    return None if not len(ys) else m[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
-
-
-def centred_pair(tpath, spath, px):
-    """Target and shadow trimmed to ink, matched on height, centred, padded.
-
-    The same normalisation as metrics.trimmed_centred, so the picture and
-    `tc_iou` describe one comparison. Both land on a common square canvas with
-    white padding, which is what keeps the cards a uniform size in the grid even
-    though the trimmed shapes are all different sizes.
-    """
-    a, b = _trim(_ink(tpath)), _trim(_ink(spath))
-    if a is None or b is None:
-        return None
-
-    H = int(px * 0.82)                     # leave room for the padding
-    def to_h(m):
-        h, w = m.shape
-        W = max(1, int(round(w * H / h)))
-        return np.asarray(Image.fromarray(m).resize((W, H), Image.NEAREST))
-
-    A, B = to_h(a), to_h(b)
-    if max(A.shape[1], B.shape[1]) > px:   # very wide shapes: fit the canvas
-        k = px / max(A.shape[1], B.shape[1])
-        rz = lambda m: np.asarray(Image.fromarray(m).resize(
-            (max(1, int(m.shape[1] * k)), max(1, int(m.shape[0] * k))), Image.NEAREST))
-        A, B = rz(A), rz(B)
-
-    def place(m):
-        o = np.zeros((px, px), bool)
-        y0, x0 = (px - m.shape[0]) // 2, (px - m.shape[1]) // 2
-        ys, xs = np.where(m)
-        o[ys + y0, xs + x0] = True
-        return o
-
-    # back to dark-on-white, the convention every other thumbnail uses
-    return tuple(_enc(Image.fromarray(np.where(place(m), 0, 255).astype(np.uint8)))
-                 for m in (A, B))
-
-
 def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -135,10 +89,11 @@ def main() -> None:
                     help="which comparison the card metrics report. `shown` is "
                          "the shadow against the shape the optimizer was given, "
                          "i.e. after --fit-target has scaled and shifted it -- "
-                         "the aligned comparison, and the one that matches the "
-                         "`vs fit` plate. `original` is against the target as "
+                         "the aligned comparison, and the frame every plate in "
+                         "the atlas draws. `original` is against the target as "
                          "authored, which folds the fit's scale and shift in as "
-                         "error and is the end-to-end number.")
+                         "error and is the end-to-end number; it will not line "
+                         "up with the pictures.")
     ap.add_argument("--out", default=os.path.join(BENCH, "results", "browser_payload.json"))
     ap.add_argument("--list", action="store_true",
                     help="show the sweeps and target trees on disk, then exit")
@@ -211,10 +166,6 @@ def main() -> None:
             wp = os.path.join(OPTIMIZED, name, d["subset"], stem, f"{stem}_shown.png")
             if os.path.exists(wp):
                 e["w"] = thumb(wp, a.px)
-            # The shape-only pair: position and size removed, matching tc_iou.
-            cp = centred_pair(tpath, sp, a.px)
-            if cp:
-                e["ct"], e["cs"] = cp
             if sid in rows[slot].index:
                 r = rows[slot].loc[sid]
                 if isinstance(r, pd.DataFrame):        # duplicate sample_id
