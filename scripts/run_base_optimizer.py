@@ -41,6 +41,26 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _BENCH = os.path.dirname(_HERE)
 
 
+def _default_repo() -> str:
+    """Where fleet-shadow-art lives.
+
+    The historical default, ~/dev/fleet-shadow-art, exists on none of the machines
+    this has run on since, so every invocation either passed --repo or failed deep
+    inside an import with nothing pointing at the cause. Checked in order: an
+    explicit env var, a checkout sitting beside this one (the usual layout, both
+    repos cloned into the same parent), then the historical default so a machine
+    where it did work is unaffected.
+    """
+    for cand in (
+        os.environ.get("FLEET_SHADOW_ART"),
+        os.path.join(os.path.dirname(_BENCH), "fleet-shadow-art"),
+        os.path.expanduser("~/dev/fleet-shadow-art"),
+    ):
+        if cand and os.path.isdir(os.path.join(cand, "motion-aware-shadow")):
+            return cand
+    return os.path.expanduser("~/dev/fleet-shadow-art")
+
+
 def load_target(path: str, size: int) -> np.ndarray:
     """Benchmark PNGs are 1-bit, dark = shape — the same convention run.py uses.
 
@@ -84,6 +104,15 @@ def write_budget_md(
     fin = fin_iters * cfg["popsize"]
     fd = 180
     total = hung + init + ph1 + ph2 + fin + fd
+    # What the optimizer will actually use, not what was asked for. On win32 the
+    # thread count is clamped to 1 whatever the flag says, and a BUDGET.md that
+    # records the request instead of the result is how "n_workers = 2", true only
+    # on the EGL machine that produced it, ends up reading like a setting any
+    # machine can reproduce.
+    eff_workers = (
+        1 if sys.platform == "win32"
+        else (a.n_workers if a.n_workers >= 1 else "auto")
+    )
 
     import subprocess
 
@@ -111,7 +140,7 @@ fleet-shadow-art @ `{sha}`.
 | final_iters (joint, {n_rob * n_arm}-D) | {a.final_iters} |
 | adaptive_final | {a.adaptive_final} |
 | floor / collision / self-collision penalty | {a.floor_penalty} / {a.collision_penalty} / {a.self_collision_penalty} |
-| n_workers per process | {a.n_workers} |
+| n_workers per process | {a.n_workers} requested / {eff_workers} effective |
 
 ## Renders per solve (derived)
 
@@ -157,7 +186,7 @@ Subsets: {", ".join(a.subsets)}
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--repo", default=os.path.expanduser("~/dev/fleet-shadow-art"))
+    p.add_argument("--repo", default=_default_repo())
     p.add_argument("--bench", default=_BENCH)
     p.add_argument(
         "--subsets", nargs="+", default=["letters_upper", "digits", "animals", "abstract"]
@@ -215,6 +244,27 @@ def main():
     p.add_argument("--fit-n-scales", type=int, default=14)
     p.add_argument("--fit-n-shifts", type=int, default=15)
     p.add_argument(
+        "--fit-dy-min",
+        type=float,
+        default=None,
+        help="Vertical search range as a fraction of --size, + = down. Pass with "
+        "--fit-dy-max to replace the symmetric +/- --fit-max-shift on the vertical "
+        "axis alone. Symmetric is the wrong shape for a rig whose reachable band "
+        "sits below the canvas centre: in big-budget-fitted 478/478 fits chose "
+        "dy > 0 and 60%% stopped exactly on the bound, so half the grid went to "
+        "shifts the search never takes while the half it wanted ran out of room",
+    )
+    p.add_argument("--fit-dy-max", type=float, default=None)
+    p.add_argument(
+        "--fit-min-retained",
+        type=float,
+        default=0.98,
+        help="Reject a placement losing more than 1 - this fraction of the scaled "
+        "target off the canvas. Default unchanged, so existing sweeps stay "
+        "reproducible; what is new is that the chosen placement's actual loss is "
+        "recorded as fit.clip_frac whether or not it cleared the threshold",
+    )
+    p.add_argument(
         "--reach-samples",
         type=int,
         default=300,
@@ -231,6 +281,10 @@ def main():
     if a.fit_target and not a.out:
         p.error("--fit-target changes the condition; pass an explicit --out so it "
                 "does not land on top of the no-fit results")
+    if (a.fit_dy_min is None) != (a.fit_dy_max is None):
+        p.error("--fit-dy-min and --fit-dy-max define one range; pass both or neither")
+    if a.fit_dy_min is not None and a.fit_dy_min >= a.fit_dy_max:
+        p.error("--fit-dy-min must be below --fit-dy-max")
 
     # Resolve paths against the launch directory before chdir'ing away from it, or a
     # relative --out silently lands under the package root instead of the benchmark.
@@ -239,6 +293,11 @@ def main():
         a.out = os.path.abspath(a.out)
 
     ms = os.path.join(a.repo, "motion-aware-shadow")
+    if not os.path.isdir(ms):
+        p.error(
+            f"--repo {a.repo!r} contains no motion-aware-shadow/. Pass --repo, or "
+            f"set FLEET_SHADOW_ART, or clone fleet-shadow-art beside this repo."
+        )
     sys.path.insert(0, ms)
     sys.path.insert(0, os.path.join(ms, "targets"))
     os.chdir(ms)  # URDF meshes resolve relative to the package root
@@ -305,6 +364,12 @@ def main():
             {
                 "scale_range": [a.fit_scale_min, a.fit_scale_max],
                 "max_shift_frac": a.fit_max_shift,
+                "dy_range": (
+                    [a.fit_dy_min, a.fit_dy_max]
+                    if a.fit_dy_min is not None
+                    else "symmetric"
+                ),
+                "min_retained": a.fit_min_retained,
                 "scale_penalty": a.fit_scale_penalty,
                 "n_scales": a.fit_n_scales,
                 "n_shifts": a.fit_n_shifts,
@@ -356,8 +421,14 @@ def main():
                 scale_range=(a.fit_scale_min, a.fit_scale_max),
                 n_scales=a.fit_n_scales,
                 max_shift_frac=a.fit_max_shift,
+                dy_range=(
+                    (a.fit_dy_min * a.size, a.fit_dy_max * a.size)
+                    if a.fit_dy_min is not None
+                    else None
+                ),
                 n_shifts=a.fit_n_shifts,
                 scale_penalty=a.fit_scale_penalty,
+                min_retained=a.fit_min_retained,
                 verbose=False,
             )
             T = fit.target
