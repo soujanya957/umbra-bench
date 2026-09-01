@@ -1,0 +1,55 @@
+# Budget — `big-budget-grounded`
+
+Generated 2026-09-01 11:03:33 Eastern Daylight Time on `ivy`,
+fleet-shadow-art @ `bccd8c1`.
+
+## Optimizer
+
+| setting | value |
+|---|---|
+| popsize | 48 |
+| phase1_iters (per robot, 6-D) | 16 |
+| phase2_iters (per robot, 6-D) | 16 |
+| final_iters (joint, 18-D) | 30 |
+| adaptive_final | False |
+| floor / collision / self-collision penalty | 40.0 / 400.0 / 200.0 |
+| n_workers per process | 0 requested / 1 effective |
+
+## Renders per solve (derived)
+
+| stage | renders |
+|---|---|
+| Hungarian pre-assignment | 72 |
+| init sampling | 48 |
+| phase 1 — forward greedy | 2,304 |
+| phase 2 — backward pass | 2,304 |
+| final — joint refinement (30 iters) | 1,440 |
+| FD refinement | ~180 |
+| **total** | **~6,348** |
+
+## Sampling
+
+- 10 independent solves per target, seeds `0…9`.
+- Targets finishing below **IoU 0.5** get **5 extra** solves
+  (seeds `10…14`), all of them, not stopping at the first
+  to clear the bar. `results.json` marks these with `"extra": true`.
+- Reported statistic is best-of-N. Within-target seed spread on this rig is
+  σ ≈ 0.022 IoU, so a single solve is a sample, not a measurement.
+
+## Rig
+
+| setting | value |
+|---|---|
+| robots | 3 × SO-101 |
+| arm gap | 0.2 m |
+| light-to-front / back-to-wall | None / None (None = default) |
+| render size | 128 px |
+| target deformation (free-form warp) | False |
+| target fit (similarity transform) | {'scale_range': [0.35, 1.6], 'max_shift_frac': 0.22, 'dy_range': 'symmetric', 'min_retained': 0.98, 'scale_penalty': 0.0, 'n_scales': 14, 'n_shifts': 15, 'reach_samples': 300} |
+
+## Scale
+
+29 targets × 10 runs ≈ **1.8M renders**
+before extras.
+
+Subsets: teleop
