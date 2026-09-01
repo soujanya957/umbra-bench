@@ -31,6 +31,7 @@ resumes instead of restarting.
 import argparse
 import json
 import os
+import platform
 import sys
 import time
 
@@ -123,11 +124,11 @@ def write_budget_md(
     except Exception:
         sha = "unknown"
 
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write(
             f"""# Budget — `{os.path.basename(os.path.dirname(path))}`
 
-Generated {time.strftime("%Y-%m-%d %H:%M:%S %Z")} on `{os.uname().nodename}`,
+Generated {time.strftime("%Y-%m-%d %H:%M:%S %Z")} on `{platform.node()}`,
 fleet-shadow-art @ `{sha}`.
 {note}
 ## Optimizer
@@ -499,7 +500,7 @@ def main():
                 n_extra += 1
 
         ious = [r["iou"] for r in runs]
-        with open(rjson, "w") as f:
+        with open(rjson, "w", encoding="utf-8") as f:
             json.dump(
                 {
                     "id": f"{sub}_{stem}",

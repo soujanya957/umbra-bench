@@ -82,7 +82,7 @@ def jobs_from_sweep(bench, results, size, align, targets_dir="targets"):
             stub = {"sample_id": f"{sub}_{stem}", "subset": sub, "stem": stem,
                     "source": "optimizer"}
             if os.path.exists(rj):
-                with open(rj) as f:
+                with open(rj, encoding="utf-8") as f:
                     r = json.load(f)
                 fit = r.get("fit") or {}
                 stub.update({"best_iou_reported": r.get("best_iou"),
@@ -104,7 +104,7 @@ def jobs_from_sweep(bench, results, size, align, targets_dir="targets"):
 
 def jobs_from_shadows(bench, sources, size, align):
     meta = os.path.join(bench, "metadata.jsonl")
-    with open(meta) as f:
+    with open(meta, encoding="utf-8") as f:
         for line in f:
             r = json.loads(line)
             for src in sources:
@@ -173,7 +173,7 @@ def main():
         for k in r:
             if k not in cols:
                 cols.append(k)
-    with open(path, "w", newline="") as f:
+    with open(path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=cols)
         w.writeheader()
         w.writerows(rows)
