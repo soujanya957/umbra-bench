@@ -209,6 +209,7 @@ def main() -> None:
         sys.exit(f"{kp_path} not found — run 03_label_keypoints.py first.")
     data = json.loads(kp_path.read_text())
     frames = data.get("frames", {})
+    decisions = data.get("decisions", {})
 
     todo = []
     problems = []
@@ -216,6 +217,12 @@ def main() -> None:
         if args.frames and fid not in args.frames:
             continue
         objs = {k: v for k, v in f.get("objects", {}).items() if v.get("points")}
+        # A label the labeller marked as reusing an existing element is not
+        # segmented: the element already exists, solved, in the library.
+        reused = {k for k in objs
+                  if decisions.get(f.get("scene", ""), {}).get(k)}
+        if reused:
+            objs = {k: v for k, v in objs.items() if k not in reused}
         if not objs:
             continue
         p = Path(f["file"])
@@ -228,6 +235,12 @@ def main() -> None:
                                 f"SAM needs at least one positive")
         todo.append((fid, f.get("scene", ""), p, objs))
 
+    all_reused = sorted({(sc, lab) for sc, d in decisions.items()
+                         for lab in d})
+    if all_reused:
+        print("reused from the library (not segmented): "
+              + ", ".join(f"{sc}/{lab}->{decisions[sc][lab]['reuse']}"
+                          for sc, lab in all_reused))
     n_obj = sum(len(o) for _, _, _, o in todo)
     n_pts = sum(len(v["points"]) for _, _, _, o in todo for v in o.values())
     print(f"{len(todo)} frame(s), {n_obj} object(s), {n_pts} point(s)")

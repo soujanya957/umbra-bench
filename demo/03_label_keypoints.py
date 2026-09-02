@@ -42,6 +42,54 @@ from pathlib import Path
 
 # ---------------------------------------------------------------- data model
 IMG_EXT = (".png", ".jpg", ".jpeg")
+LABEL_RE = re.compile(r"^[A-Za-z0-9_\-]+$")
+
+
+def load_library(bench: Path):
+    """(classes, ids) from the benchmark -- the label vocabulary and the
+    reusable elements. The benchmark IS the static library, so labelling
+    offers what already exists instead of inventing near-duplicates, and
+    every shape ends up with a real name."""
+    classes, ids = set(), []
+    mp = bench / "metadata.jsonl"
+    if mp.exists():
+        for line in mp.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            classes.add(str(r.get("class", "")))
+            ids.append(r["id"])
+    sp = bench / "sequences.jsonl"
+    if sp.exists():
+        for line in sp.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                ids.append(json.loads(line)["id"])
+    return sorted(c for c in classes if c), ids
+
+
+def prompt_from(options, what: str):
+    """Terminal prompt with prefix completion against the library.
+
+    Free text is always allowed -- the library suggests, the person decides.
+    Returns None on empty input.
+    """
+    print(f"\n{what} (free text, or a prefix of: "
+          f"{', '.join(options[:12])}{'...' if len(options) > 12 else ''})")
+    try:
+        raw = input("> ").strip()
+    except EOFError:
+        return None
+    if not raw:
+        return None
+    hits = [o for o in options if o.lower().startswith(raw.lower())]
+    if len(hits) == 1 and hits[0].lower() != raw.lower():
+        print(f"  -> {hits[0]}")
+        return hits[0]
+    if raw in options or LABEL_RE.match(raw):
+        return raw
+    print(f"  '{raw}' has characters that break downstream filenames "
+          "(allowed: letters, digits, _ -); ignored")
+    return None
 
 
 def frame_id_of(p: Path) -> str:
@@ -124,6 +172,21 @@ class Store:
         objs = self.data["frames"].get(fid, {}).get("objects", {})
         return sum(len(o["points"]) for o in objs.values())
 
+    # Reuse decisions are per (scene, label): "this A is the library's A --
+    # do not segment or solve it, pull the existing element at pack time."
+    # The decision is the labeller's, recorded here; 04 skips marked objects.
+    def decision(self, scene: str, label: str):
+        return self.data.get("decisions", {}).get(scene, {}).get(label)
+
+    def set_decision(self, scene: str, label: str, reuse) -> None:
+        d = self.data.setdefault("decisions", {}).setdefault(scene, {})
+        if reuse:
+            d[label] = {"reuse": reuse}
+        else:
+            d.pop(label, None)
+            if not d:
+                self.data["decisions"].pop(scene, None)
+
     def save(self) -> None:
         self.data["meta"]["updated"] = datetime.now(timezone.utc).isoformat(
             timespec="seconds")
@@ -141,7 +204,8 @@ def color_for(label: str) -> str:
     return PALETTE[sum(map(ord, label)) % len(PALETTE)]
 
 
-def run_gui(frames, store: Store, start_label: str) -> None:
+def run_gui(frames, store: Store, start_label: str,
+            lib_classes=(), lib_ids=()) -> None:
     import matplotlib
     import matplotlib.pyplot as plt
     import matplotlib.image as mpimg
@@ -164,6 +228,7 @@ def run_gui(frames, store: Store, start_label: str) -> None:
     plt.subplots_adjust(left=0.02, right=0.98, top=0.94, bottom=0.06)
 
     HELP = ("left=positive  right=negative   a-z/0-9=label  TAB=cycle\n"
+            "/=full label (library suggests)  .=reuse decision for this label\n"
             "u=undo  d=drop label  D=clear frame  c=copy prev\n"
             "→/space=next  ←/b=prev  n=next empty  h=help  q=quit")
 
@@ -191,12 +256,14 @@ def run_gui(frames, store: Store, start_label: str) -> None:
                             fontweight="bold", zorder=6,
                             path_effects=None)
 
+        dec = store.decision(scene, state["label"])
+        mark = f"  reuse:{dec['reuse']}" if dec else ""
         done = sum(1 for _, p in frames if store.n_points(frame_id_of(p)))
         summary = "  ".join(
             f"{l}:{len(o['points'])}" for l, o in sorted(objs.items())) or "—"
         ax.set_title(
             f"[{i+1}/{len(frames)}]  {fid}  ({scene})     "
-            f"label→ {state['label']}     this frame: {summary}     "
+            f"label→ {state['label']}{mark}     this frame: {summary}     "
             f"labelled {done}/{len(frames)}",
             fontsize=11, loc="left")
         if state["help"]:
@@ -260,6 +327,22 @@ def run_gui(frames, store: Store, start_label: str) -> None:
                     if state["label"] in labs else 0
                 state["label"] = labs[nxt]; draw()
             return
+        if k == "/":
+            lab = prompt_from(lib_classes, "label")
+            if lab:
+                state["label"] = lab
+            draw(); return
+        if k == ".":
+            scene = frames[state["i"]][0]
+            cur = store.decision(scene, state["label"])
+            opts = ([i for i in lib_ids
+                     if state["label"].lower() in i.lower()] or lib_ids)
+            print(f"\nreuse for '{state['label']}' in {scene} "
+                  f"(currently: {cur['reuse'] if cur else 'none'}; "
+                  "empty input clears)")
+            store.set_decision(scene, state["label"],
+                               prompt_from(opts, "reuse element id"))
+            store.save(); draw(); return
         if len(k) == 1 and (k.isalpha() or k.isdigit()):
             state["label"] = k.upper(); draw(); return
 
@@ -323,7 +406,9 @@ def main() -> None:
 
     print(f"{len(frames)} frame(s). Saving to {args.out} after every edit.")
     print("Press h in the window for the key list.")
-    run_gui(frames, store, args.label.upper())
+    lib_classes, lib_ids = load_library(Path(__file__).resolve().parent.parent)
+    print(f"library: {len(lib_classes)} classes, {len(lib_ids)} reusable elements")
+    run_gui(frames, store, args.label.upper(), lib_classes, lib_ids)
     print(f"saved: {args.out}")
 
 

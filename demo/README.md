@@ -20,6 +20,40 @@ placed on the source canvas, and how they are combined is an authoring
 decision. `10_compose_video.py` is the automatic union-composite when that is
 all you want.
 
+## Demo to real, in ten steps
+
+The whole line, footage to physical robots -- each step is one command and is
+detailed in its own section below:
+
+```bash
+python demo/run_demo.py --video <clip.mp4> --demo-id 03   # 1  scenes + frames
+python demo/03_label_keypoints.py                         # 2  label: / = full name
+                                                          #    from the library,
+                                                          #    . = reuse an element
+python demo/04_sam_segment.py                             # 3  masks (GPU box)
+python demo/run_demo.py --video <clip.mp4> --demo-id 03   # 4  resumes: clean, crop,
+                                                          #    index the track
+python demo/route_motion.py                               # 5  static / translation /
+                                                          #    dynamic per element
+#    static      -> demo/add_to_library.py --sequence <id>   (named library shape)
+#    translation -> scripts/stabilize_sequence.py --ids <id>, solve <id>_stab
+#    dynamic     -> solve the full clip                       # 6  solve (commands
+                                                          #    in "Routing")
+python demo/08_reassemble.py --all                        # 7  back on the canvas
+python demo/09_clip_score.py                              # 8  legibility check
+python demo/pack.py --name <show> --clip <id> ...     --library <id> ...                                    # 9  one folder: frames,
+                                                          #    joints, video, choreo
+cp demo/packages/<show>/choreo/*.json    ../fleet-shadow-art/choreographies/                    # 10 open Play: preview,
+                                                          #    arrange, deploy
+```
+
+Every shape and sequence carries a real NAME from step 2 onward -- the library
+suggests existing names so the same shape never gets two -- and whether an
+element reuses a library solve (step 2's `.` key) or is processed fresh is
+always the labeller's decision, recorded in `keypoints.json`. The pipeline
+decides only what it can measure: step 5's lanes come from the target's own
+step IoU and a real stabilisation derivation.
+
 Video in, animated shadow targets out, with exactly one human step in the middle.
 
 ```bash
@@ -33,7 +67,7 @@ re-running after fixing a few labels costs only the stages downstream of them.
 | | stage | script | |
 | --- | --- | --- | --- |
 | 1 | split scenes, extract frames | `01_split_scenes.py` | auto |
-| 2 | **label one object per glyph** | `03_label_keypoints.py` | **you** |
+| 2 | **label one object per glyph** — `/` names it from the library vocabulary (or free text), `.` records "reuse element X instead of processing" | `03_label_keypoints.py` | **you** |
 | 3 | segment from the keypoints | `04_sam_segment.py` | auto |
 | 4 | clean the masks | `06_clean_masks.py` | auto |
 | 5 | group into sequences, crop per clip | `07_make_sequences.py` | auto |
@@ -174,7 +208,13 @@ python demo/route_motion.py          # writes demo/out/motion_routing.json
   ```
 
   On the current ad this replaces 46 per-frame solves with 4 holds, and a held
-  clip's transitions are perfect by construction.
+  clip's transitions are perfect by construction. Better still, make it a
+  **named library shape**: `demo/add_to_library.py --sequence <id>` takes the
+  clip's medoid frame into `targets/demo/` and the benchmark index, so the
+  atlas shows it and every later show pulls it by name with `pack.py
+  --library`. The router also prints existing same-class library entries --
+  reusing one of those (the labeller's `.` decision in step 2) costs nothing
+  at all.
 
 * **translation** (stabilising shrinks the union ≥ 1.1×): the motion is travel,
   and travel is what made scene_06_L's letter tiny (one fit must cover the

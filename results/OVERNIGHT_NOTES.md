@@ -514,3 +514,19 @@ code, and the solves' true default rig is gap 0.2 / light 1.0 / wall 2.4
 (README gate rewritten; SR10x mapping is positional, calibration lives in
 the driver, ports are operator settings). Scene block mapped into the UI
 frame via optimize.py's documented transform so Play previews match.
+
+## Labeling closes the library loop (user's design, implemented)
+
+03_label_keypoints: `/` prompts a full label with prefix completion
+against the library vocabulary (157 classes; free text allowed -- the
+library suggests, the person decides), `.` records a per-(scene,label)
+REUSE decision into keypoints.json; 04 skips reused objects entirely.
+route_motion's static lane now points at demo/add_to_library.py (medoid
+frame -> targets/demo/ -> normalize/ground/build_metadata with backup)
+so every static shape becomes a named library row the atlas shows and
+pack.py can pull; the router also prints existing same-class library
+candidates, exact-case first. README opens with the ten-step
+demo-to-real runbook. Heredoc escape lesson: \n through JSON->bash->
+python triple-quote loses a backslash layer -- three broken string
+literals repaired; single-line anchors + per-tag FAIL prints are now
+the house style for scripted patches.

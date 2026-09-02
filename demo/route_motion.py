@@ -63,8 +63,8 @@ def lane(rec, seq_dir, static_iou, min_gain):
 def command(rec, which):
     sid = rec["id"]
     if which == "static":
-        return (f"solve sequences/{sid}/f00.png only, then: "
-                f"python demo/08_reassemble.py --sequence {sid} --hold")
+        return (f"python demo/add_to_library.py --sequence {sid}  # named "
+                f"library shape; or solve f00 alone + 08_reassemble --hold")
     if which == "translation":
         return (f"python scripts/stabilize_sequence.py --ids {sid}  # then solve "
                 f"sequences/{sid}_stab/ and reassemble {sid}_stab")
@@ -87,6 +87,17 @@ def main():
 
     recs = [json.loads(l) for l in
             open(BENCH / "sequences.jsonl", encoding="utf-8")]
+    # The library, keyed by class: a static element whose shape already has a
+    # solved namesake should say so -- reuse beats re-solving, and the choice
+    # stays with the person.
+    lib = {}
+    mp = BENCH / "metadata.jsonl"
+    if mp.exists():
+        for line in mp.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                r = json.loads(line)
+                lib.setdefault(str(r.get("class", "")).lower(), []).append(
+                    (str(r.get("class", "")), r["id"]))
     recs = [r for r in recs if not r["id"].endswith("_stab")
             and (a.all or r["id"].startswith("demo_"))]
 
@@ -96,9 +107,19 @@ def main():
         which, step, gain = lane(r, BENCH / "sequences", a.static_iou, a.min_gain)
         counts[which] += 1
         cmd = command(r, which)
+        cand = []
+        if which == "static":
+            cls = str(r.get("class", ""))
+            pool = lib.get(cls.lower(), [])
+            # exact-case class first: the demo's "A" should meet the library's
+            # upper-case A before the lower-case a
+            cand = [i for c, i in pool if c == cls][:3] or [i for _, i in pool][:3]
         routing[r["id"]] = {"lane": which, "mean_step_iou": step,
                             "stabilize_gain": gain, "n_frames": r["n_frames"],
-                            "next": cmd}
+                            "library_candidates": cand, "next": cmd}
+        if cand:
+            print(f"{'':<24}{'':>13}{'':>9}{'':>10}   library has this class: "
+                  + ", ".join(cand))
         print(f"{r['id']:<24}{which:<13}{step:>9.3f}"
               f"{(f'{gain:.2f}x' if gain else '-'):>10}   {cmd[:64]}")
 
