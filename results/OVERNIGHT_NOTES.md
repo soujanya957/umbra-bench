@@ -418,3 +418,19 @@ full metric panel. BUDGET.md files got an append-only pass ledger.
 Monitor false-complete en route (nested-quote PowerShell probe returned
 empty == "process gone") -- re-armed on the plain PID; same bug family
 as "check passed for a reason unrelated to what it was checking".
+
+## L_stab: the decomposition wins on every axis
+
+Same loss/budget as the tight L run (alpha 1.0 beta 0.3 gamma 0 delta 0,
+128/128/256, pop 192, sigma0 0.4; fit bounds left at defaults and the
+delta reported -- the original's non-default floor was the pathology).
+Fit: scale 0.831 AT BOUND, uncastable 43.7%  ->  scale 1.312 free,
+uncastable 2.5%. Solve: avg_iou 0.433 -> 0.719. Sequence metrics: the
+tracked L solve moved dq_max 64.7 deg (a hair under the 68.75 bound,
+arms chasing the traveling letter) with 245 deg total path; L_stab does
+20.9 deg worst step, 59.7 deg total, stability 1.0, zero infeasible.
+Because stab frames + trajectory_px == original frames exactly (verified
+at derivation), per-frame IoU carries over to the composite unchanged --
+the composited demo shows the SAME motion with a 1.6x bigger, 66%
+better-matched letter. Compositor-side trajectory playback in
+08_reassemble/10_compose_video is the remaining wiring.
