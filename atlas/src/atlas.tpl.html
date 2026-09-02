@@ -1911,8 +1911,11 @@ function ttally(){
   $("#ttally").innerHTML = `<span><b>${TEL.n}</b> captures segmented</span>`
     + `<span><b>${linked}</b> targets linked</span>`
     + `<span><b>${n}</b> re-marked here · ${pts} points</span>`
-    + `<span class="rev">${n ? "export → points.json, then: python3 scripts/segment_teleop.py --write"
-                            : "masks committed in Teleops/masks — click a card only to redo one"}</span>`;
+    + `<span class="rev">${n ? (TEL.src ? "export → " + TEL.src.replace(/masks\/manifest\.json$/, "points.json")
+                                        + ", then: python scripts/teleop_pipeline.py --teleop-root "
+                                        + TEL.src.replace(/\/masks\/manifest\.json$/, "")
+                                      : "export → points.json, then: python3 scripts/segment_teleop.py --write")
+                            : "committed masks shown — click a card only to redo one"}</span>`;
 }
 
 /* Exposed on purpose: the preview makes a claim about what the points will do,
@@ -1981,7 +1984,7 @@ function renderTeleop(){
       <span><b>${TEL.n}</b> captures</span>
       <span><b>${linked}</b> targets linked</span>
       <span><b>${(TEL.median_frac * 100).toFixed(1)}%</b> median shape fraction</span>
-      <span class="rev">masks committed in Teleops/masks</span>
+      <span class="rev">${TEL.src ? "set: " + TEL.src : "masks committed in Teleops/masks"}</span>
     </div></div>
     <div class="steps">${STEPS.map(([n, t, body, cmd]) => `
       <section class="step">
@@ -1996,8 +1999,11 @@ function renderTeleop(){
       if it is wrong: <b>click</b> to include a region, <b>shift-click</b> (or right-click) to
       exclude one. Both kinds of point compete for every pixel rather than one erasing the
       other's region, so an exclude refines the boundary instead of deleting the mask.
-      <b>Edge pull</b> sets what crossing a boundary costs. Export, then
-      <code>scripts/segment_teleop.py --write</code> replays the same points exactly.</p>
+      <b>Edge pull</b> sets what crossing a boundary costs. Export, then replay:
+      for the v1 wall set, <code>scripts/segment_teleop.py --write</code>; for a
+      tag-rectified set, save the export as <code>points.json</code> in the set's
+      folder and rerun <code>scripts/teleop_pipeline.py --teleop-root &lt;set&gt;</code>
+      &mdash; clicked points are in the tag frame and are used as-is.</p>
     <div class="tallybar"><div id="ttally" class="tally"></div>
       <span style="flex:1"></span>
       <button class="act" id="tExport">copy points</button>

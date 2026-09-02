@@ -247,6 +247,10 @@ def segment_sam2(rect_path: str, excl: np.ndarray, inner: np.ndarray, ckpt: str,
     on large shadows (the blur window normalises them away: letters_upperN,
     objects_glass), which is exactly why v1 shipped SAM2 masks.
     """
+    if hand and hand.get("pos") is not None and not hand["pos"]:
+        # a points entry exists but every seed fell outside the frame/inner
+        # region -- fall through to auto rather than segmenting from nothing
+        hand = None
     if hand and hand.get("pos"):
         # Hand markup wins, exactly as in auto_segment_teleop: these are the
         # dashboard-clicked seeds for the v1 frame, carried across. The faint
@@ -354,11 +358,19 @@ def process(path: str, out_root: str, det=None):
     if process.ckpt:
         try:
             hand = None
-            pts = process.points.get(stem)
-            if pts:
-                H1, H2 = v1_homography(polys), process.last_H
-                hand = {k: transfer_points(pts.get(k) or [], H1, H2)
+            own = process.set_points.get(stem)
+            if own:
+                # per-set points.json: clicked on the tag frame itself, used
+                # as-is (only bounds/inner-filtered downstream)
+                hand = {k: [(float(x), float(y)) for x, y in (own.get(k) or [])
+                            if 0 <= x < OUT_W and 0 <= y < OUT_H]
                         for k in ("pos", "neg")}
+            else:
+                pts = process.points.get(stem)
+                if pts:
+                    H1, H2 = v1_homography(polys), process.last_H
+                    hand = {k: transfer_points(pts.get(k) or [], H1, H2)
+                            for k in ("pos", "neg")}
             raw_m = segment_sam2(rect_path, excl, inner, process.ckpt, hand)
             if raw_m is not None:
                 mask = _postprocess(raw_m, excl, inner)
@@ -467,6 +479,14 @@ def main():
     det = detector()
     process.ckpt = None if a.backend == "otsu" else _resolve_ckpt()
     process.points = load_points()
+    sp = (os.path.join(a.teleop_root, "points.json") if a.teleop_root else None)
+    if sp and os.path.exists(sp):
+        with open(sp, encoding="utf-8") as f:
+            d = json.load(f)
+        process.set_points = d.get("captures", d)
+        print(f"[teleop-v2] per-set points: {len(process.set_points)} captures")
+    else:
+        process.set_points = {}
     process.no_3tag = a.no_3tag
     process.masks_dir = a.masks_dir
     # session median quad, for 3-tag inference
@@ -491,6 +511,22 @@ def main():
         (skipped if "error" in r else rows).append(r)
         tag = r.get("error") or (f"{r['mask_backend']:9} frac {r['shape_frac']:.3f}")
         print(f"  {r['capture']:44} {tag}")
+
+    # A partial run (--images) must not shrink the set's records to the subset
+    # it processed: merge by capture stem into the existing manifest, so
+    # relabelling one capture rewrites one record and leaves the other thirty.
+    man_path = os.path.join(a.masks_dir or os.path.join(a.out_dir, "masks"),
+                            "manifest.json")
+    n_run = len(rows)
+    if os.path.exists(man_path):
+        with open(man_path, encoding="utf-8") as f:
+            prev = json.load(f)
+        done = {r["capture"] for r in rows}
+        rows = ([r for r in prev.get("records", []) if r["capture"] not in done]
+                + rows)
+        rows.sort(key=lambda r: r["capture"])
+        skipped = ([r for r in prev.get("skipped", [])
+                    if r.get("capture") not in done] + skipped)
 
     # labels.csv -- the machine-readable class extraction the capture names
     # encode two different ways: set1's long stems resolve through the
@@ -521,9 +557,7 @@ def main():
             w.writerow([stem, cls, take, sid, r.get("quad_source", ""),
                         r["mask_backend"], r["shape_frac"], r["mask"]])
     print(f"[teleop-v2] labels -> {lab_path}")
-    with open(os.path.join(a.masks_dir or os.path.join(a.out_dir, "masks"),
-                           "manifest.json"), "w",
-              encoding="utf-8") as f:
+    with open(man_path, "w", encoding="utf-8") as f:
         json.dump({"out_size": [OUT_W, OUT_H], "tag_dilate_px": TAG_DILATE,
                    "n": len(rows), "records": rows, "skipped": skipped},
                   f, indent=1)
@@ -531,8 +565,8 @@ def main():
         raw_dir = (os.path.join(a.teleop_root, "raw") if a.teleop_root
                    else os.path.dirname(paths[0]))
         contact_sheet(rows, a.out_dir, raw_dir)
-    print(f"[teleop-v2] {len(rows)} processed, {len(skipped)} skipped "
-          f"-> {a.out_dir}")
+    print(f"[teleop-v2] {n_run} processed ({len(rows)} in manifest), "
+          f"{len(skipped)} skipped -> {a.out_dir}")
 
 
 if __name__ == "__main__":

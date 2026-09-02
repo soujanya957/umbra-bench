@@ -57,7 +57,15 @@ def png1(path, w=300):
     b = io.BytesIO(); im.save(b, "PNG", optimize=True)
     return base64.b64encode(b.getvalue()).decode("ascii")
 
-man = json.load(open(os.path.join(rc.BENCH, "Teleops", "masks", "manifest.json")))
+import argparse
+ap = argparse.ArgumentParser()
+ap.add_argument("--manifest",
+                default=os.path.join(rc.BENCH, "Teleops", "masks",
+                                     "manifest.json"),
+                help="which masks manifest to browse/label (v2 sets keep "
+                     "theirs at Teleops/source/teleop_setN/masks/)")
+a = ap.parse_args()
+man = json.load(open(a.manifest))
 live = {json.loads(l)["id"]: json.loads(l)
         for l in open(os.path.join(rc.BENCH, "metadata.jsonl"))}
 drop = {json.loads(l)["id"]: json.loads(l)
@@ -66,8 +74,11 @@ v2 = {r["rescue"]["derived_from"]: r for r in live.values() if r.get("version") 
 
 items = []
 for r in man["records"]:
-    e = {k: r[k] for k in ("capture", "subset", "class", "part", "otsu_thr",
-                           "shape_frac", "n_components", "holes_signif", "suspect", "match")}
+    # .get throughout: the v2 pipeline's manifest carries a different field
+    # set (quad_source instead of suspect/match); absent keys render as null.
+    e = {k: r.get(k) for k in ("capture", "subset", "class", "part", "otsu_thr",
+                               "shape_frac", "n_components", "holes_signif",
+                               "suspect", "match", "quad_source")}
     # How the committed mask was actually made. The view states it rather than
     # implying the browser's own segmenter produced what is on screen.
     e["mask_backend"] = r.get("mask_backend")
@@ -102,9 +113,15 @@ for r in man["records"]:
         e["target_status"] = "unmatched"
     items.append(e)
 
-out = {"n": len(items), "open_r": man["open_r"], "ff_window": [0.55, 1.15],
+src = os.path.relpath(os.path.abspath(a.manifest), rc.BENCH).replace(os.sep, "/")
+out = {"n": len(items),
+       # which manifest this payload was baked from -- the view shows it, so a
+       # one-set-at-a-time rebuild is never mistaken for the default v1 set
+       "src": None if src == "Teleops/masks/manifest.json" else src,
+       "open_r": man.get("open_r", 2),
+       "ff_window": [0.55, 1.15],
        "median_frac": float(np.median([i["shape_frac"] for i in items])),
-       "n_suspect": sum(1 for i in items if i["suspect"]),
+       "n_suspect": sum(1 for i in items if i.get("suspect")),
        "n_live": sum(1 for i in items if i["target_status"] == "live"),
        "items": items}
 p = os.path.join(rc.BENCH, "results", "teleop_payload.json")
