@@ -80,3 +80,13 @@ measures a config-vs-config difference, not the flag's effect. What
 if none of the remaining ten do, it is reported as an untriggered safeguard,
 not a fix. The card shows loop-close status per solve so "did not fire" and
 "was not run" cannot be conflated. (Framing per umbra-bench-9f.)
+
+## loop-close's first real firing (flower)
+
+The chained solve landed the wrap at 79.0° (out of bounds); the guard re-solved
+the final frame: wrap 68.2° (inside), previous neighbour 39.9° (not worsened),
+and that frame's IoU rose 0.6487 → 0.6498. Recorded attempted:true,
+accepted:true with all four numbers. The old config's flower wrap (95.5°, its
+only infeasible step) sits beside it as optimizer_v0. So the write-up has both
+stories with evidence: star_spin (the config fixed the wrap; the guard declined)
+and flower (the config fell short by 10°; the guard closed it for free).
