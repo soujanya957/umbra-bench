@@ -434,3 +434,18 @@ at derivation), per-frame IoU carries over to the composite unchanged --
 the composited demo shows the SAME motion with a 1.6x bigger, 66%
 better-matched letter. Compositor-side trajectory playback in
 08_reassemble/10_compose_video is the remaining wiring.
+
+## Y_stab and triangle_stab (user approved "可以重解"); GPU CLIP validated
+
+Same config as each original (identical across the family). triangle:
+0.649 -> 0.827 avg_iou, scale 0.735 -> 1.119. Y: 0.712 -> 0.812 at the
+SAME fit scale (0.638) -- its original was bound-constrained and the win
+is placement/castability, not size; scale-gain is sufficient but not
+necessary for the decomposition to pay. All transitions comfortable
+(worst 40.3 deg vs the 68.75 bound), stability 1.0, zero infeasible.
+Three for three.
+
+open_clip installed into fh_l1 by the user; GPU rerun of the full CLIP
+eval reproduces the CPU summaries with zero delta across all 30
+(subset, condition) rows -- future reruns cost seconds, no artifact
+churn needed.
