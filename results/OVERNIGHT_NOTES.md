@@ -273,3 +273,13 @@ for score_placement: its free optimum (0.638) LOST on frame IoU to a scale
 it would never choose (0.6458 vs 0.7235) — the proxy picked the worse of
 the two on the metric that matters, on the one clip measured both ways.
 The 0.638 version is retired to git history (d9d90fd carries its numbers).
+
+## User decision (morning): demo_01 is a RENDERED COMPOSITE — question closed
+
+Size and position are adjustable in post, per the user. Consequences, all
+already in place: the wide-fit (0.45) 13 demo solves are the ship set as
+they stand; export goes through 08_reassemble.py (fit inverse at composite,
+measured recovery); no per-clip camera constraints exist; the two
+grazing-margin transitions (68.4°, 68.6° vs the 68.75° bound) need no
+physical testing for the video. Asymmetric-dy fit tightening remains a
+benchmark-side question only — nothing blocks the demo.
