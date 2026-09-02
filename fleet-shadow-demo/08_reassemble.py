@@ -65,23 +65,33 @@ def invert(fit: dict) -> dict:
 
 
 def latest_summary(run_dir: Path):
+    """The newest summary, and the timestamp that selects its own frames."""
     j = sorted(run_dir.glob("summary_*.json"))
-    return json.loads(j[-1].read_text(encoding="utf-8")) if j else None
+    if not j:
+        return None, None
+    return json.loads(j[-1].read_text(encoding="utf-8")), j[-1].stem[len("summary_"):]
 
 
-def shadow_frames(run_dir: Path):
-    return sorted(run_dir.glob("frame_*/best_shadow.png"))
+def shadow_frames(run_dir: Path, ts: str | None):
+    """The frames of ONE run.
+
+    A clip solved more than once keeps every attempt as frame_NN_<timestamp>/,
+    so globbing frame_* interleaves them: a 14-frame clip re-solved twice
+    silently reassembles into 47 frames, in an order that is neither run.
+    """
+    return sorted(run_dir.glob(f"frame_*_{ts}/best_shadow.png" if ts
+                               else "frame_*/best_shadow.png"))
 
 
 def reassemble(name: str, out_root: Path, fps: float | None, check: bool):
     seq = BENCH / "sequences" / name
     run = BENCH / "optimized" / name
     src = json.loads((seq / "source.json").read_text(encoding="utf-8"))
-    summ = latest_summary(run)
+    summ, ts = latest_summary(run)
     if summ is None:
         print(f"  {name}: not solved yet, skipped")
         return None
-    shots = shadow_frames(run)
+    shots = shadow_frames(run, ts)
     if not shots:
         print(f"  {name}: no best_shadow.png, skipped")
         return None
@@ -105,6 +115,10 @@ def reassemble(name: str, out_root: Path, fps: float | None, check: bool):
 
     out = out_root / name
     out.mkdir(parents=True, exist_ok=True)
+    if summ.get("n_frames") and len(shots) != summ["n_frames"]:
+        print(f"  {name}: {len(shots)} frames on disk but the summary says "
+              f"{summ['n_frames']} — solve still in flight, skipped")
+        return None
     written = []
     for i, p in enumerate(shots):
         m = np.asarray(Image.open(p).convert("L")) > 128     # white = shadow
