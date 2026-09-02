@@ -283,3 +283,24 @@ measured recovery); no per-clip camera constraints exist; the two
 grazing-margin transitions (68.4°, 68.6° vs the 68.75° bound) need no
 physical testing for the video. Asymmetric-dy fit tightening remains a
 benchmark-side question only — nothing blocks the demo.
+
+## Scale sweep epilogue: the verdict, the 4.3x example, and a hypothesis tested
+
+Per-clip winners promoted (F all at scale 1.0; 04_M/06_M stay at the free
+fit; 05_M takes 1.0 on a vs-fitted tie and wins 4.3x END TO END — wide
+0.0847 vs s100 0.3640 vs-authored. Same clip, avg_iou and shipped result
+pointing opposite ways: the sharpest single demonstration that vs-fitted
+alone must never pick a shipped solve).
+
+The glyph-orientation hypothesis, TESTED against on-disk data rather than
+narrated (9f's demand, right one): proxy-chosen scale vs mean aspect_ratio
+rho=-0.26 (p=0.19, n=26); scale-up gain vs aspect rho=-0.43 (p=0.34, n=7).
+Direction suggestive, NOT significant, and star_spin (aspect 0.94, gain
++0.078) breaks the pure-aspect form outright. If vertical strokes eating the
+reach band is the mechanism, its measurable carrier is not bounding-box
+aspect — a vertical-ink-extent-vs-reach-band feature would be the next test,
+and it needs the reach map, so it is future work, stated as such.
+
+Also on record: lab_setup.json carries arm_gap 0.35 vs the 0.20 every solve
+assumes — the section-C gate now has direct evidence of a geometry conflict,
+with the user.
