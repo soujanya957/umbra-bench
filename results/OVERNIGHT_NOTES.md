@@ -174,3 +174,20 @@ for unrelated reasons; this one is a sound observation with an unsound
 inference — "byte-identical means it did not run" skipped "it ran and was
 overridden". Verification protocol upgraded both ways: process-version check
 before launch (optimizer.__file__ + fix marker), byte-comparison after.
+
+## The seam-fix verification, third run (daa5ad8) — valid, and the story completes
+
+Forward frames byte-identical again (seeded determinism; the fix is inert
+where feasibility never costs IoU — as designed). The closure differs, which
+proves the new code ran: the 66.5° feasible-wrap pose now SURVIVES to the
+return (the sixth site is dead), and the guard still rejects — closing the
+wrap blows the previous transition to 111.3°. Predictions: wrap≈66 achieved
+inside the candidate ✓; accepted:true ✗; avg_iou unchanged ✗; forward 0/7 ✓.
+
+The complete characterisation of --loop-close, now measured: a single-frame
+anchor can repair a LOCAL wrap overshoot (flower, 10° over, fixed free) and
+provably cannot repair a GLOBAL winding (windmills: the violation is
+conserved and relocates — the rotor's joint-space unwind must be distributed
+across all frames, a per-clip phase shift, out of scope tonight). daa5ad8
+remains correct and necessary: without it the candidate never even reached
+the guard.
