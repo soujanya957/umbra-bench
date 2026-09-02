@@ -158,3 +158,19 @@ chaining, measured, and it is one clip out of 26.
 Verdict for the demo video: keep the sequence pipeline; the static sweep's
 role is the benchmark lower bound, which it now serves on every card
 (source=optimizer_static, animated plates included).
+
+## The seam had a sixth site — and a lesson in the other direction
+
+The first seam-fix verification came back byte-identical to the pre-fix run.
+The observation was sound; my inference ("the new code never ran") was not —
+log strings introduced by the fix prove it ran, chose the reachable pose at
+the phase boundary ("taking the reachable pose on feasibility, not IoU"),
+and was then reversed by a global-best override applied after every boundary
+and tracked on IoU alone. Seeded CMA-ES made the reversal reproduce the old
+run bit for bit. Fixed in daa5ad8: all five comparisons in optimize_staged
+now use the same lexicographic (reachable, IoU) rule; inert when q_ref is
+None. Lessons list, inverse entry: the previous five were checks that passed
+for unrelated reasons; this one is a sound observation with an unsound
+inference — "byte-identical means it did not run" skipped "it ran and was
+overridden". Verification protocol upgraded both ways: process-version check
+before launch (optimizer.__file__ + fix marker), byte-comparison after.
