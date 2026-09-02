@@ -60,3 +60,17 @@ The tight-pass A/B (queued) answers the score half either way.
 
 All 13 clips: every transition feasible, zero arm swaps. Legibility CSV predates
 the last few solves, so some clips lack a row until stage 09 re-runs.
+
+## The headline A/B (star_spin, new config vs archaeological independent solve)
+
+| | independent (v0) | temporal chain + loop-aware |
+|---|---|---|
+| wrap dq | 212.5° | 63.8° (feasible) |
+| infeasible transitions | 5/5 | 0/5 |
+| arm swaps | 5/5 | 0/5 |
+| mean frame IoU (vs fitted) | 0.668 | 0.646 |
+
+Two IoU points buy the clip's entire playability. loop_anchor recorded
+{attempted: false, "wrap already reachable"} — the guard checked and declined,
+because the chain alone landed a feasible wrap. Both solves are on the board
+(source=optimizer / optimizer_v0).
