@@ -241,7 +241,9 @@ def _read_mas_run(run_dir: str) -> dict:
         # a 5-arm clip solved with 3 arms would otherwise just look like a bad
         # result -- the arm count belongs beside the IoU (umbra-bench-9f)
         "n_arms_solved": meta.get("n_robots") or n_arms or None,
-        "prior_iou": cfg.get("prior_iou"),
+        # top level first (where run_sequence writes it); 0.0 is a real
+        # measurement -- the benchmark pose casting nothing -- never a missing one
+        "prior_iou": meta.get("prior_iou", cfg.get("prior_iou")),
         "loop_anchor": (json.dumps(la) if isinstance(la, (dict, list))
                         else la if la is not None else None),
     }
