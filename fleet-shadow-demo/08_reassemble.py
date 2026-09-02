@@ -146,6 +146,96 @@ def reassemble(name: str, out_root: Path, fps: float | None, check: bool):
     return written, f
 
 
+def authored_on_canvas(seq: Path, i: int, crop, canvas) -> np.ndarray:
+    """The authored frame put through the same crop, for comparison."""
+    side = crop["pad_side"]
+    ox, oy = (side - crop["w"]) // 2, (side - crop["h"]) // 2
+    t = Image.open(seq / f"f{i:02d}.png").convert("L").resize(
+        (side, side), Image.NEAREST)
+    page = Image.new("L", (canvas["w"], canvas["h"]), 255)
+    page.paste(t.crop((ox, oy, ox + crop["w"], oy + crop["h"])),
+               (crop["x"], crop["y"]))
+    return np.asarray(page) < 128
+
+
+def sheet(names, out_root: Path, cols: int = 10, tile_w: int = 240,
+          full_canvas: bool = False):
+    """One row per sequence: authored glyph in grey, cast shadow in black.
+
+    Cropped to one window per sequence -- the union of both shapes over all its
+    frames, plus a margin -- not to each frame's own box. A per-frame crop
+    recentres every frame and plays back as a shape twitching in place, the
+    same trap stage 5 avoids. One window keeps the motion and keeps the grey
+    and black in a fixed relation, so a systematic offset still reads as one.
+
+    On the full 1920x1080 canvas a scene_06 letter is about fifty pixels wide
+    and the tile is mostly white, which shows placement and nothing else.
+    --full-canvas restores that view.
+    """
+    from PIL import ImageDraw
+    rows = []
+    for n in names:
+        seq, run = BENCH / "sequences" / n, out_root / n
+        fs = sorted(run.glob("f*.png"))
+        if not fs:
+            continue
+        src = json.loads((seq / "source.json").read_text(encoding="utf-8"))
+        idx = (list(range(len(fs))) if len(fs) <= cols
+               else [round(i * (len(fs) - 1) / (cols - 1)) for i in range(cols)])
+        pairs = []
+        for i in idx:
+            sh = np.asarray(Image.open(fs[i]).convert("L")) < 128
+            pairs.append((sh, authored_on_canvas(seq, i, src["crop"], src["canvas"])))
+
+        box = None
+        if not full_canvas:
+            for sh, au in pairs:
+                ys, xs = np.where(sh | au)
+                if not len(ys):
+                    continue
+                b = (xs.min(), ys.min(), xs.max(), ys.max())
+                box = b if box is None else (min(box[0], b[0]), min(box[1], b[1]),
+                                             max(box[2], b[2]), max(box[3], b[3]))
+        if box is not None:
+            H, W = pairs[0][0].shape
+            m = max(12, int(0.10 * max(box[2] - box[0], box[3] - box[1])))
+            box = (max(0, box[0] - m), max(0, box[1] - m),
+                   min(W, box[2] + m + 1), min(H, box[3] + m + 1))
+
+        tiles = []
+        for sh, au in pairs:
+            rgb = np.full(sh.shape + (3,), 255, np.uint8)
+            rgb[au] = (205, 205, 205)          # where the letter was authored
+            rgb[sh] = (20, 20, 20)             # where the rig casts it
+            im = Image.fromarray(rgb)
+            if box is not None:
+                im = im.crop(box)
+            th = max(1, round(tile_w * im.height / im.width))
+            tiles.append(im.resize((tile_w, th), Image.BILINEAR))
+        rows.append((n, tiles, len(fs)))
+    if not rows:
+        return None
+    # rows now differ in height, so lay them out cumulatively
+    tw = rows[0][1][0].width
+    heights = [max(t.height for t in tiles) for _, tiles, _ in rows]
+    W = 10 + max(len(t) for _, t, _ in rows) * (tw + 6)
+    H = 10 + sum(h + 24 for h in heights)
+    out = Image.new("RGB", (W, H), "white")
+    dr = ImageDraw.Draw(out)
+    y = 10
+    for r, (n, tiles, total) in enumerate(rows):
+        th = heights[r]
+        for c, t in enumerate(tiles):
+            out.paste(t, (10 + c * (tw + 6), y))
+        dr.text((10, y + th + 6), f"{n}   {total} frames"
+                + ("" if total <= len(tiles) else f", {len(tiles)} shown"),
+                fill=(0, 0, 0))
+        y += th + 24
+    f = out_root / "_all.png"
+    out.save(f)
+    return f
+
+
 def main():
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -153,6 +243,10 @@ def main():
     ap.add_argument("--all", action="store_true", help="every solved demo_* clip")
     ap.add_argument("--out", default=str(BENCH / "results" / "demo_reassembled"))
     ap.add_argument("--fps", type=float, default=None)
+    ap.add_argument("--no-sheet", action="store_true",
+                    help="skip the review sheet")
+    ap.add_argument("--full-canvas", action="store_true",
+                    help="review sheet on the whole 1920x1080 frame")
     ap.add_argument("--no-check", action="store_true",
                     help="skip the fit/inverse round-trip check")
     a = ap.parse_args()
@@ -172,6 +266,11 @@ def main():
         if reassemble(n, out_root, a.fps, not a.no_check):
             done += 1
     print(f"\n{done}/{len(names)} reassembled")
+    if done and not a.no_sheet:
+        f = sheet([n for n in names if (out_root / n).is_dir()], out_root,
+                  full_canvas=a.full_canvas)
+        if f:
+            print(f"review: {f}   (grey = authored, black = cast)")
     print("frames are 1-bit on the source canvas, dark = shadow.")
     print("to encode one:  ffmpeg -framerate <fps> -i f%02d.png -pix_fmt yuv420p out.mp4")
 
