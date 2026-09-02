@@ -198,6 +198,11 @@ def _read_mas_run(run_dir: str) -> dict:
     # recorded per-frame iou is vs the FITTED target while our recomputed iou
     # is vs the authored frames -- both real, and far apart for a big fit, so
     # the transform rides along for the aggregate row.
+    #
+    # Do NOT be tempted by the summaries' iou_original field: run_sequence.py
+    # declares it and never populates it (null in every frame of every run).
+    # The ref=original numbers this scorer computes are the only vs-authored
+    # measurements in either repo.
     fit = None
     sjson = summary[:-4] + ".json"
     if os.path.exists(sjson):
