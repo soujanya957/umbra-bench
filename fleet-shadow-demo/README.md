@@ -1,320 +1,209 @@
-# fleet-shadow-demo — frame prep pipeline
+# fleet-shadow-demo — a film clip becomes a sequences-track dataset
 
-Two scripts that take the CCTV *FAMILY* spot from mp4 to per-letter cutouts
-ready for shadow optimization.
+Video in, animated shadow targets out, with exactly one human step in the middle.
 
-Original source: 1920×1080, 25 fps, 90 s, 2250 frames. The working input is
-your edited cut — the edit *is* the frame selection, so every frame it
-contains gets extracted and segmented.
+```bash
+python run_demo.py --video FAMILY_trimmed.mp4 --demo-id 02
+```
+
+It runs every stage that can be automated, stops at the one that cannot, and
+resumes when you run it again. Stages whose output already exists are skipped, so
+re-running after fixing a few labels costs only the stages downstream of them.
+
+| | stage | script | |
+| --- | --- | --- | --- |
+| 1 | split scenes, extract frames | `01_split_scenes.py` | auto |
+| 2 | **label one object per glyph** | `03_label_keypoints.py` | **you** |
+| 3 | segment from the keypoints | `04_sam_segment.py` | auto |
+| 4 | clean the masks | `06_clean_masks.py` | auto |
+| 5 | group into sequences, crop per clip | `07_make_sequences.py` | auto |
+| 6 | index the track | `../scripts/build_sequence_metadata.py` | auto |
+
+Step 2 is manual because deciding *which* shape in a frame is the subject is not
+something the pixels answer. Everything else is.
+
+Output lands in the repo's **sequences track**, not in `targets/`. SEQUENCES.md is
+explicit that an animation is "a separate track, not a tenth subset": dropping
+frames into `targets/` scores them as unrelated static targets and discards the
+temporal information silently.
+
+```
+sequences/demo_01_scene_04_M/f00.png …    1-bit, dark = shape
+sequences/demo_01_scene_04_M/source.json  crop box, source frame ids, fps, loop
+sequences.jsonl                           the index, built by stage 6
+results/demo_review/_all.png              every sequence, one glance
+```
 
 ---
 
-## Step 1 — scenes + frames  (`01_split_scenes.py`)
-
-This is the script to use for the edited cut. `01_extract_frames.sh` is kept
-for the un-split case.
+## The manual step
 
 ```bash
-python3 01_split_scenes.py FAMILY_trimmed.mp4 --sample 5
+python 03_label_keypoints.py
 ```
 
-`--sample 5` keeps every 5th frame within each scene (25 fps source → 5 fps),
-anchored at each scene's first frame. Frame ids stay **global and true to the
-source**, so a sampled scene reads f0001, f0006, f0011… — the ids are not
-renumbered, and the gaps are real.
+**Label each glyph as its own named object** — `F`, `A`, `M`, `I`, `L`, `Y` — not
+several points inside one object.
 
-It finds the white frames you used between clips, uses them as the cut points,
-and leaves them **out** of the extracted frames.
+This is the single most consequential thing you do here, and getting it wrong is
+silent. SAM answers the question it is asked. Points for six glyphs inside one
+object asks for "the thing containing all of these", and it returns exactly that:
+one 38 000-pixel mask spanning x 1189→1794, the whole word as a single blob. No
+larger checkpoint fixes it — `sam2.1_hiera_large` already is the largest — because
+nothing is failing.
 
-Current result — 751 frames in, 5 separator runs of 12 frames each removed,
-then sampled to 5 fps: **140 frames across 6 scenes**.
+With one object per glyph, `04_sam_segment.py` prompts SAM once per object and the
+letters come out separate.
 
-| scene | frame range | @5fps | glyphs |
-|---|---|---|---|
-| scene_01 | f0001–f0086 | 18 | `I` |
-| scene_02 | f0102–f0207 | 22 | `F` bending into the father's back |
-| scene_03 | f0224–f0354 | 27 | `I` + bent figure with cane |
-| scene_04 | f0368–f0523 | 32 | `M` |
-| scene_05 | f0537–f0667 | 27 | `M` + `I` under the umbrella |
-| scene_06 | f0682–f0747 | 14 | `FAMILY` assembling |
-
-```
-scenes/scene_01/f0001.png …   frames, split by scene
-review/scene_01.jpg …         ONE contact sheet per scene
-frames_manifest.csv           frame_id, file, scene, timestamp, source_frame
-```
-
-Frame ids are **global** and skip the separators, so f0090–f0101 simply don't
-exist. That keeps ids unique once step 2 regroups cutouts into `by_letter/`,
-where per-scene numbering would collide.
-
-Useful flags:
-
-```bash
---scenes 3 4        # redo only these scenes
---no-extract        # rebuild sheets/manifest from existing frames
---mode scene        # ignore separators, cut on content change instead
---mode manual --cuts 90 212 356    # cut at these frames yourself
---fmt jpg           # ~8x smaller, much faster to write
-```
-
-### Two things worth knowing
-
-**White separators are Y=235, not 255.** Video is encoded limited-range, so
-"pure white" measures 235. The detector threshold is 225, which cleared your
-separators with margin — content in this spot tops out at 197. If you ever
-export full-range footage, raise `--white-yavg`.
-
-**This folder is on your Desktop, which iCloud syncs.** An earlier run left
-253 files named like `f0459 3.png` — iCloud conflict copies, created because
-frames were being written and deleted faster than sync could keep up. They're
-cleaned up now, and each scene is extracted in its own short ffmpeg call which
-avoids the churn. But ~1.4 GB of PNGs in a synced folder will upload. If that's
-unwanted, move the project somewhere outside iCloud, or use `--fmt jpg`.
+If you have already labelled a clip the other way, `05_split_objects.py` recovers
+it: it prompts once per point with the siblings as negatives, then merges the
+results that turn out to be the same object. The merge rule is read off the masks
+rather than guessed — two clicks refining one figure produce masks overlapping
+97.4%, two clicks on different glyphs produce 0.3%. It is a fallback; label
+properly and you never need it.
 
 ---
 
-## Step 1b — un-split video  (`01_extract_frames.sh`)
+## What the defaults encode
 
-```bash
-brew install ffmpeg          # if you don't have it
-./01_extract_frames.sh
-```
+Each of these was measured on this footage. They are the reason the stages have
+the shape they do.
 
-Drop the edited video in this folder (the script finds the only video here,
-or pass `VIDEO=edited.mp4`) and it extracts **every frame** at the file's own
-frame rate — no fps filter, so 1:1 with no resampling, no dropped frames and
-no duplicates. Verified against the original: ffprobe reports 2250 frames and
-the script writes exactly 2250.
+### SAM2 **small**, not large
 
-```bash
-SHEETS=0 ./01_extract_frames.sh        # skip contact sheets, just frames
-FPS=5 ./01_extract_frames.sh           # subsample instead, if you ever want to
-FMT=jpg ./01_extract_frames.sh         # smaller files
-OUT=take2 ./01_extract_frames.sh       # second cut, separate folder + manifest
-```
+Over the same 159 masks:
 
-Produces:
+| | interior holes | detached fragments | roughness | time |
+| --- | --- | --- | --- | --- |
+| `hiera_large` (898 MB) | 866 | 707 | 2.02 | ~3 min |
+| **`hiera_small` (184 MB)** | **213** | **54** | **1.96** | **66 s** |
 
-| path | what |
-|---|---|
-| `frames/f0001.png …` | full-resolution frames, 1:1 with the edit |
-| `frames_manifest.csv` | `frame_id, file, timestamp_sec, source_frame` |
-| `review/sheet_001.jpg …` | 6×5 contact sheets, frame id burned into each tile |
+Four times fewer holes, thirteen times fewer fragments, smoother, and three times
+faster. The large model resolves the glyph's own dark outline strokes and its
+anti-aliased edge and excludes them — precisely the detail a silhouette target
+does not want. Bigger is worse here. `--sam-model large` re-checks it on new
+footage.
 
-The manifest is named after the output folder, so `OUT=take2` writes
-`take2_manifest.csv` and won't clobber an earlier run.
+### One crop per sequence, never per frame
 
-**Export settings that matter:** render your cut at the *same* frame rate as
-the source (25 fps). Exporting 25 fps material to 30 fps makes the encoder
-duplicate frames, and you'd get near-identical neighbours in the frame set for
-no benefit. A high-bitrate or lossless export also keeps compression mush off
-the letter edges, which is what the segmentation keys on.
+A glyph travels 39–329 px horizontally and 39–233 px vertically inside its scene,
+and that motion **is** the content. Cropping each frame to its own bounding box
+would centre every frame identically and play back as a shape twitching in place.
 
-At 1080p PNG, budget roughly **2 MB per frame** — a 60-second cut at 25 fps is
-about 3 GB. `FMT=jpg` cuts that by ~8× if disk gets tight.
+Stage 5 computes one box over the union of each sequence and applies it unchanged
+to every frame, so relative position and relative size survive.
 
----
+The box is not squared before cropping. `scene_06`'s word is 1638×272; a square
+about its centre starts 564 px above the top of a 1080-line frame. The crop is the
+union rectangle clamped to the frame, and the squaring happens by padding
+afterwards — identically for every frame, so the padding cannot introduce motion
+of its own.
 
-## Step 2 — letter segmentation
+### Every target is one connected shadow
 
-Run **all scenes in one pass** — a separate run per scene would rewrite the
-manifest each time, leaving only the last scene's rows.
+A rig cannot cast a floating piece. Stage 4, in this order:
 
-```bash
-python3 -m pip install opencv-python numpy
+1. **keep parts** — anything ≥3% of the largest survives; specks go. The cane in
+   `scene_03` is 3.2–3.7k px against a 63k body, so "largest only" deleted it from
+   every frame while those same frames carry 280–390 single-pixel specks.
+2. **bridge** — whatever is still detached is joined to the body along the
+   shortest gap.
+3. **fill holes** — the dark outline strokes read as interior holes.
+4. **smooth** — Gaussian on the binary field, thresholded at 0.5. Symmetric, where
+   a morphological close alone grows the shape and an open alone shrinks it.
+5. **sweep again** — smoothing can shed a two-pixel speck off a thin tip.
 
-python3 02_segment_letters.py \
-  --frames-dir scenes/scene_01 scenes/scene_02 scenes/scene_03 \
-               scenes/scene_04 scenes/scene_05 scenes/scene_06 \
-  --all --word "" \
-  --scene-words scene_01=I scene_02=F scene_04=M scene_05=MI scene_06=FAMILY
-```
+Order matters: filling before dropping would keep the specks, smoothing before
+either would lock them into the shape.
 
-Current result: **271 components from 140 frames** — 197 labelled `ok`,
-49 `unlabelled` (scene_03, deliberately left positional), 25 flagged across
-just 7 transition frames.
+`--sigma` is the smoothing radius. 3 is the default; measured across 0–8, the
+letters keep their corners up to about 4 and visibly round past 6.
 
-| scene | components | frames | note |
-|---|---|---|---|
-| scene_01 | 18 | 18 | exactly one `I` per frame |
-| scene_02 | 27 | 22 | +5 on 4 dissolve frames |
-| scene_03 | 49 | 27 | `I` + figure, positional names |
-| scene_04 | 41 | 32 | +9 on 3 dissolve frames |
-| scene_05 | 54 | 27 | exactly `M`+`I` per frame |
-| scene_06 | 82 | 14 | 6 per frame once all letters are in |
+### The outline stays
 
-The flagged frames are f0102, f0197–f0207, f0368–f0378 — cross-dissolves at
-scene starts where the letters aren't formed yet. They're marked `mismatch` in
-the manifest, so they're easy to drop. f0682 is flagged too but is correct:
-only F, A, M, I have appeared at that point.
-
-<details><summary>Old per-scene form (don't use — overwrites the manifest)</summary>
-
-```bash
-python3 02_segment_letters.py --frames-dir scenes/scene_01 --all
-```
-</details>
-
-# a subset while you're tuning thresholds
-python3 02_segment_letters.py --frames-dir scenes/scene_01 --frames f0001 f0045
-```
-
-Tune on a handful of frames first, check `overlay/`, then run `--all`.
-
-Each scene here holds one or two glyphs rather than the whole word, so pass
-`--word` per scene (or use `words.csv`). From the overview strip:
-
-| scene | glyphs |
-|---|---|
-| scene_01 | `I` |
-| scene_02 | `F` bending into the father's hunched back |
-| scene_03 | `A` / `IA` in the city, father with a cane |
-| scene_04 | `M` |
-| scene_05 | `MI` under the red umbrella |
-| scene_06 | `FAMILY` assembling |
-
-```bash
-python3 02_segment_letters.py --frames-dir scenes/scene_01 --all --word I
-python3 02_segment_letters.py --frames-dir scenes/scene_06 --all --word FAMILY
-```
-
-### Output layout
-
-```
-letters/
-├── by_frame/
-│   └── f0092/
-│       ├── f0092_F.png          RGBA cutout, tight crop, transparent bg
-│       ├── f0092_F_mask.png     binary mask on the full 1920×1080 canvas
-│       └── f0092_A.png …
-├── by_letter/
-│   ├── F/  f0092_F.png  f0117_F.png  f0400_F.png …
-│   ├── A/  …
-│   └── …                        ← this is your optimization input
-├── overlay/
-│   └── f0092.jpg                QC render: boxes + labels. Check these first.
-└── letters_manifest.csv         frame, letter, bbox, area, thresholds used
-```
-
-`by_letter/` is the grouping for step 3: one folder per glyph, every frame's
-instance of that glyph inside it. Send a whole folder (or a slice of one) to
-the optimizer. `letters_manifest.csv` carries each cutout's `x,y,w,h`, which is
-what puts the optimized result back on the 1920×1080 canvas.
-
-### How it works, and why there's no GPU in the default path
-
-The glyphs are high-saturation yellow/gold; the backgrounds are desaturated
-warm beige. Measured on this footage, glyph pixels sit at S ≈ 195–255 and the
-background median is S ≈ 130, so a saturation floor at **165** splits them with
-margin on both sides. Two refinements were needed:
-
-- **Warm-channel test** (`--warm-tol 25`) — keeps pixels where `R ≥ G − 25`.
-  The park scenes have yellow-green trees that pass the hue window; foliage is
-  green-dominant (G > R) and glyphs are not, so this drops all five trees while
-  leaving the letters untouched. At tolerance 0 it starts eating holes in the
-  glyphs — 25 is the measured sweet spot.
-- **Auto-relax ladder** — the closing frames fade the word almost into the
-  background and return nothing at S=165. The script walks
-  S 165 → 130 → 110 → 95 and stops at the strictest rung that finds anything,
-  so clean frames never get a looser threshold than they need. The rung
-  actually used is recorded per row in the manifest.
-
-The channel bug at top-right overlaps the letters' vertical band, so it's
-removed as a corner box (`--exclude 0.85,0.0,1.0,0.16`) rather than a
-horizontal crop. Verified over 60 random frames that letters never enter it.
-
-On the clean studio frames this lands the glyphs pixel-tight — better than SAM
-will give you, and it runs at video speed on a laptop.
-
-### Labelling
-
-Blobs are ordered left-to-right by **bounding-box left edge**, not centroid:
-the F carries a long bar over the whole word, so its centroid lands mid-frame
-while its reading order is first.
-
-Frames don't all show the whole word — there are single-letter shots, and
-letters that have morphed into figures. When the blob count doesn't match
-`--word` (default `FAMILY`), nothing is dropped: blobs fall back to `c00, c01…`
-and the frame is listed at the end of the run. Fix those in a `words.csv`:
-
-```csv
-frame_id,word
-f0260,M
-f0330,IA
-f0361,MI
-```
-
-```bash
-python3 02_segment_letters.py --all --words words.csv
-```
-
-Repeated letters in one frame get suffixed — `L`, `L2`.
-
-### Optional SAM2 pass
-
-Worth it only for the frames where letters overlap busy background or have
-morphed into figures. The HSV blob boxes become SAM's box prompts.
-
-```bash
-pip install 'git+https://github.com/facebookresearch/sam2.git'
-
-python3 02_segment_letters.py --frames-file hard_frames.txt --sam2 \
-    --sam2-checkpoint checkpoints/sam2.1_hiera_large.pt \
-    --sam2-config configs/sam2.1/sam2.1_hiera_l.yaml
-```
-
-SAM's mask is accepted only if it still covers >60% of the colour blob and
-hasn't grown past 3×, otherwise the HSV mask is kept — that guard stops SAM
-latching onto the background. Refined rows are flagged `refined=1` in the
-manifest and marked `*` in the overlay.
-
-If you're on SAM3, check its current predictor API against the `Sam2Refiner`
-class — the box-prompt call there is written against SAM2's
-`SAM2ImagePredictor` and may need a small adapter.
-
-### Tuning
-
-Every threshold is a flag: `--s-lo`, `--v-lo`, `--warm-tol`, `--min-area`,
-`--merge-area`, `--close-px`, `--open-px`, `--bottom-crop`, `--exclude`.
-Run on 3–4 frames, look at `overlay/`, adjust, then commit to the full set.
-
-The defaults were measured on the *original* encode. If your edit re-grades,
-re-encodes hard, or changes resolution, the numbers may drift — run a few
-frames and check `overlay/` before trusting `--all`. The `--exclude` logo box
-is normalised, so it survives a resolution change, and is harmless if your cut
-crops the channel bug out.
-
-Three defaults were tuned against the trimmed cut specifically, and the
-reasoning matters if you re-tune:
-
-- **`--h-lo 18`** — the room set has a reddish-brown window frame and door
-  outline that used to come through as extra components. Across 405 measured
-  components, glyphs sit at hue 20–32 and those artifacts at 10–12, with
-  nothing in between. This was the single biggest fix: it took scene_01 from
-  2 components per frame down to exactly 1.
-- **`--min-area 3200`** — kills the leftover specks, which top out near
-  3.1k px. Do **not** raise it: in scene_06 the whole word is laid out small
-  and its smallest glyph is only ~3.8k px, so area alone cannot separate
-  glyphs from junk. Hue does that; area only cleans up.
-- **`--max-bbox-frac 0.45`** — on the cross-dissolves between clips the whole
-  washed-out set passes the colour test as one blob spanning 63–70% of the
-  frame. The widest real glyph is the F whose bar runs over the whole word,
-  at 37%, so 0.45 clears both.
-
-Common ones:
-
-- letters coming out fragmented → raise `--close-px`
-- picking up background → raise `--s-lo`, or add an `--exclude` box
-- accent marks landing as their own blob → raise `--merge-area`
-- small decorations counted as letters → raise `--min-area`
+`06_clean_masks.py --colour` shrinks each mask to the glyph's own hue (S ≥ 150,
+H 15–40, measured). It is **off by default**: the dark border is part of the
+shape, and removing it also severs the cane at the stroke where it meets the hand,
+opening a 5–8 px gap that then has to be bridged back. The flag remains for
+footage where the drop shadow really is inside the mask.
 
 ---
 
-## Step 3 — optimization (later)
+## Solving
 
-`by_letter/<glyph>/` is a ready batch directory. `letters_manifest.csv` has
-`frame_id`, `letter`, `x`, `y`, `w`, `h` per cutout — join it against
-`frames_manifest.csv` on `frame_id` to recover the source timestamp, then place
-optimized results back at `x,y` on a 1920×1080 canvas and re-encode at the
-original 25 fps.
+The targets are a sequence, so solve them as one. `run_sequence.py` keeps the
+renderer, the shadow forward model and the previous frame's pose across frames;
+`run.py` in a loop throws all of that away between frames.
+
+```bash
+cd ../../fleet-shadow-art/motion-aware-shadow
+python scripts/run_sequence.py --urdf urdf/SO101/so101_new_calib.urdf --targets ../../umbra-bench/sequences/demo_01_scene_04_M/f*.png --n-robots 3 --arm-gap 0.2 --size 128 --fit-target --fit-max-shift 0.45 --reach-samples 300 --prior ../../umbra-bench/optimized/big-budget-grounded/letters_upper/M_dejavuserif-bold_v2/results.json --popsize 192 --phase1-iters 128 --phase2-iters 128 --final-iters 256 --beta 0.3 --gamma 0 --delta 0 --reachability-penalty 100 --outdir ../../umbra-bench/optimized/demo_01_scene_04_M
+```
+
+Four flags carry most of the result:
+
+**`--arm-gap 0.2`** — not optional and not defaulted. `renderer.py` falls back to
+0.15, which is a different rig: the throw becomes 3.30 m instead of 3.40 and the
+shadow comes out the wrong size. Nothing errors; `summary.json` simply records
+`arm_gap: null`.
+
+**`--fit-target`** — one similarity transform for the whole clip. Without it the
+glyph spans rows 9–118 of a 128-row frame while the rig can only cast rows 81–127,
+so the solver is asked for something unreachable and more search does not help:
+the same clip scores 0.563 at popsize 192 and 0.605 at popsize 16. With it,
+`uncastable` drops 12.3% → 2.9% and IoU reaches 0.75–0.82.
+
+**`--prior`** — seeds frame 1 from the benchmark's solve for that letter. Frames
+2+ already chain off their predecessor, so only the first starts cold, and the
+benchmark has already solved every uppercase letter well (I 0.887, Y 0.829,
+L 0.798, A 0.797, F 0.787, M 0.756 under
+`optimized/big-budget-grounded/letters_upper/`).
+
+**`--reachability-penalty 100`** — the temporal barrier. Set it to 0 for the
+per-frame arm, where each frame is solved for its own best appearance and the
+transitions are allowed to be whatever they are.
+
+### Scoring
+
+```bash
+cd ../../umbra-bench
+python scripts/sequence_metrics.py --run optimized/demo_01_scene_04_M --sequence demo_01_scene_04_M --tag demo_01_scene_04_M
+python scripts/_build_sequences_payload.py
+python atlas/build_atlas.py
+```
+
+Two IoUs appear and they disagree on purpose: `summary.json`'s is against the
+*fitted* target, `sequence_metrics.py` recomputes against the authored frames in
+`sequences.jsonl`. That is the temporal form of the `ref=shown` / `ref=original`
+split in METRICS.md. Both are in the CSV.
+
+**`mean_frame_iou` is never quoted without `dq_infeasible_frac` beside it.**
+SEQUENCES.md §0 records why: a 5-frame clip scored 0.6679 per frame — a
+respectable static number — while 4 of its 4 transitions demanded a 291° swing
+from a single joint, against a 68.8° feasibility bound. Every frame was good and
+the clip was unplayable.
+
+---
+
+## Files
+
+```
+run_demo.py               the driver — start here
+01_split_scenes.py        video → scenes/<scene>/f####.png + frames_manifest.csv
+01_extract_frames.sh      the un-split variant, every frame at source fps
+02_segment_letters.py     HSV + hue/area segmentation. Superseded by SAM2 but kept:
+                          it is faster, needs no checkpoint, and separates letters
+                          by colour where SAM needs a prompt per object.
+03_label_keypoints.py     the manual step
+04_sam_segment.py         SAM2 (or HF SAM 1 via --backend hf), one prompt per object
+05_split_objects.py       FALLBACK for keypoints that lumped several glyphs into one
+06_clean_masks.py         specks, bridges, holes, smoothing — one connected shadow
+07_make_sequences.py      per-sequence crop → the sequences track
+scenes/                   extracted frames
+letters_sam2_small/       SAM output
+letters_clean/            final masks, flat, one directory
+review/                   per-scene contact sheets from stage 1
+```
+
+`keypoints.json` is the only file worth backing up by hand — everything else is
+regenerable from it and the video.
