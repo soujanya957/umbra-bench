@@ -319,3 +319,43 @@ letters_upperH's left stroke, amputated by v1's inner crop at the frame
 edge, restored in v2 (+7%). Review sheet: Teleops/rectified2/_contact_sheet.png.
 v1 outputs untouched; switching the atlas teleop payload to v2 frames is a
 follow-up decision, not made unilaterally.
+
+## Labeling loop for tag-rectified sets (post-restructure)
+
+User wants to hand-label the new sets. Wired end to end and verified in the
+browser: payload builder takes `--manifest` (v2 field set tolerated, `src`
+recorded and shown in the view), clicks land in the 654x548 tag frame and are
+used AS-IS via `<set>/points.json` (priority over the legacy v1-coordinate
+transfer), the tally prints the exact per-set rerun command. Verified: a click
+at (50%, 55%) exported as [327,300]; one-image rerun flipped candle_01 to
+sam2-points.
+
+Bug found by the test itself: a partial `--images` run rewrote the whole
+set's labels.csv/manifest with only the processed subset (my test truncated
+set2's labels.csv to one row -- restored from HEAD). Fixed with merge-by-stem
+into the existing manifest; labels regenerate from the merged records.
+Also discarded a jitter-only working-tree diff (a 14:53 rerun one minute after
+dfed981: shape_frac +-0.0002, byte-different masks, nothing semantic).
+
+Commits: 7299d2a (loop), d8a3b4b (atlas baked from set2 for the pass).
+
+## set2 hand-relabel (user's pass)
+
+User labeled all 31 in the dashboard and pasted the export; saved as
+`Teleops/source/teleop_set2/points.json`, full rerun -> 31/31 sam2-points.
+Reviewed every frac delta vs the auto masks: clear fixes at upperk_04
+(0.070->0.171, fragments -> clean K), whale_01 (0.033->0.128, fin-only ->
+full body), wrench_01 (spurious triangle gone), sneak_02 (left foot back).
+Two went wrong and were corrected with extra points (marked as Claude's in
+points.json "notes", scratch-tested first): upperp_01 leaked into the
+penumbra (0.530 -> 0.123, six negatives), upperg_01 lost its upper strokes
+to two low clicks (0.081 -> 0.138, three positives).
+
+Second member of the truncation bug family, same day: with --images set,
+output defaulting skipped the --teleop-root branch, so a two-capture
+touch-up landed in legacy Teleops/rectified2 and labels.csv regenerated
+from a fresh 2-record manifest. Fixed (defaults now follow the root
+regardless of --images), stray dir removed, reran into the set tree.
+No metrics rerun needed: set2 is still unlinked (31/31 unmatched), set1
+untouched. fh_l1 is the CUDA env per user -- future SAM2 runs need not
+crawl on CPU (saved to memory).

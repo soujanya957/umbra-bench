@@ -458,14 +458,18 @@ def main():
     ap.add_argument("--no-sheet", action="store_true")
     a = ap.parse_args()
 
-    if a.images:
-        paths = sorted(glob.glob(a.images))
-    elif a.teleop_root:
-        paths = sorted(glob.glob(os.path.join(a.teleop_root, "raw", "*.png")))
+    # Output defaulting follows the set whenever a root is named, whether or
+    # not --images narrows the file list -- a two-capture touch-up must land
+    # in the set's own tree, not the legacy Teleops/rectified2.
+    if a.teleop_root:
         if a.out_dir is None:
             a.out_dir = os.path.join(a.teleop_root, "tag_rectified")
         if a.masks_dir is None:
             a.masks_dir = os.path.join(a.teleop_root, "masks")
+    if a.images:
+        paths = sorted(glob.glob(a.images))
+    elif a.teleop_root:
+        paths = sorted(glob.glob(os.path.join(a.teleop_root, "raw", "*.png")))
     else:
         paths = [p for p in sorted(glob.glob(os.path.join(TELEOP, "*.png")))
                  if "_rectified" not in p and "_mask" not in p
