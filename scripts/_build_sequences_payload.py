@@ -107,6 +107,47 @@ def _stats(row: dict, metric: str):
     return out if any(v is not None for v in out.values()) else None
 
 
+def read_legibility(bench: str):
+    """results/demo_clip_legibility.csv (umbra-bench-9f's stage 09) -> joins.
+
+    Aggregate rows have frame_idx empty; input=authored rows (source empty) are
+    the per-clip CLIP ceiling, input=reassembled rows the cast score per solve
+    source. A zero ceiling has no denominator: the authored frames themselves
+    are unread as the folded class (I/l/1 -> "digit 1" prompts miss a serif
+    capital I), so the ratio is None and the card must say so, not show 0.
+    """
+    path = os.path.join(bench, "results", "demo_clip_legibility.csv")
+    if not os.path.exists(path):
+        return {}
+    ceil, cast, frames = {}, {}, {}
+    with open(path, encoding="utf-8", newline="") as fh:
+        for r in csv.DictReader(fh):
+            sid = r["sequence_id"]
+            if r["input"] == "authored":
+                if not r.get("frame_idx"):
+                    ceil[sid] = r
+            elif not r.get("frame_idx"):
+                cast[(sid, r["source"])] = r
+            else:
+                frames.setdefault((sid, r["source"]), []).append(
+                    (int(r["frame_idx"]), _f(r["clip_rr"])))
+    out = {}
+    for (sid, src), c in cast.items():
+        ce = ceil.get(sid)
+        t1, rr = _f(c["clip_top1"]), _f(c["clip_rr"])
+        ct1 = _f(ce["clip_top1"]) if ce else None
+        crr = _f(ce["clip_rr"]) if ce else None
+        out[(sid, src)] = {
+            "top1": t1, "rr": rr,
+            "ceiling_top1": ct1, "ceiling_rr": crr,
+            "ratio_top1": (round(t1 / ct1, 4) if t1 is not None and ct1 else None),
+            "ratio_rr": (round(rr / crr, 4) if rr is not None and crr else None),
+            "n_classes": _f(c["n_classes"]), "chance_top1": _f(c["chance_top1"]),
+            "frames_rr": [v for _, v in sorted(frames.get((sid, src), []))] or None,
+        }
+    return out
+
+
 def read_solves(bench: str):
     """(sequence_id, source) -> aggregate row + frame rows, from ONE CSV each.
 
@@ -253,6 +294,7 @@ def main():
         raise SystemExit(f"[!] {index} not found; run build_sequence_metadata.py")
 
     agg, frames = read_solves(a.bench)
+    legibility = read_legibility(a.bench)
     seqs = []
     for line in open(index, encoding="utf-8"):
         r = json.loads(line)
@@ -275,6 +317,9 @@ def main():
         solves = {s: solve_block(agg[(i, s)], frames.get((i, s), {}),
                                  a.bench, a.px, authored)
                   for (i, s) in agg if i == sid and "original" in agg[(i, s)]}
+        for sname, so in solves.items():
+            if (sid, sname) in legibility:
+                so["legibility"] = legibility[(sid, sname)]
         rec = {
             "id": sid,
             "cls": r.get("class"),

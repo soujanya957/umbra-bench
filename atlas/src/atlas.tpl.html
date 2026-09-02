@@ -2223,6 +2223,20 @@ function seqCard(q){
         so.s3.loop_closure && so.s3.loop_closure.dq_max_deg != null
           ? ` · wrap ${so.s3.loop_closure.dq_max_deg.toFixed(0)}°` : ""} vs the ${
         num(h.dq_infeasible_thr_deg, 2)}° bound</div>` : ""}
+      ${(() => {
+        // Legibility: does the cast clip READ as the letter (CLIP retrieval,
+        // folded 49-class glyph set, authored frames as the ceiling). A zero
+        // ceiling has no denominator — the authored serif I is itself unread
+        // as the folded "digit 1" class — so those clips say so explicitly
+        // rather than showing a 0 that would read as "illegible shadow".
+        const lg = so.legibility;
+        if(!lg) return "";
+        if(!lg.ceiling_top1) return `<div class="warnline">legibility: no ceiling — the authored
+          frames are also unread as this folded class (I/l/1); ratios undefined, not zero</div>`;
+        return `<div class="warnline">reads as <b>${q.cls}</b>: top-1 ${num(lg.top1)} /
+          ceiling ${num(lg.ceiling_top1)} → ratio <b>${num(lg.ratio_top1)}</b> ·
+          MRR ratio ${num(lg.ratio_rr)} · chance ${num(lg.chance_top1)}</div>`;
+      })()}
       ${fitNote}
       ${armWarn}
       ${mism}`;
@@ -2467,7 +2481,10 @@ function renderGuide(){
     does not inherit that penalty, because the fit is an invertible similarity and reassembly
     (<span class="mono">08_reassemble.py</span>) applies fit⁻¹ before compositing onto the source
     canvas, measured to recover the fitted score to within resampling. The same clip legitimately
-    has two quality numbers; say which column you are reading.</p>
+    has two quality numbers; say which column you are reading. The demo section quotes
+    <b>legibility</b> (CLIP retrieval over the folded glyph set, cast frames over the authored
+    ceiling) rather than IoU — the two rank clips differently, and legibility is what a viewer
+    of the video experiences; the benchmark section keeps IoU primary.</p>
     <p style="max-width:78ch; margin-top:8px">A separate GPU path exists
     (<span class="mono">run_sequence_jax.py</span> — this is where JAX comes in: a differentiable MJX renderer
     with batched Adam restarts), and it currently solves every frame independently with no warm start and no
