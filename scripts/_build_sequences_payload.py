@@ -142,11 +142,21 @@ def solve_block(by_ref: dict, frames_by_ref: dict, bench: str, px: int) -> dict:
         "target_step_iou": _f(row.get("loop_closure_target_step_iou")),
     } if loop_scored else None)
     s3["dq_max_deg_by_transition"] = by_tr
+    la = row.get("loop_anchor")
+    if la:
+        try:
+            la = json.loads(la)
+        except (json.JSONDecodeError, TypeError):
+            pass
     out = {
         "csv": row.get("_csv"),
         "solve_size": _f(row.get("size")),
         "loop_scored": loop_scored,
         "n_transitions": _f(row.get("n_transitions")),
+        "n_arms_solved": _f(row.get("n_arms_solved")),
+        "n_arms_declared": _f(row.get("n_arms_declared")),
+        "prior_iou": _f(row.get("prior_iou")),
+        "loop_anchor": la or None,
         # mean IoU is never quoted without infeasibility beside it (SEQUENCES.md).
         # iou_mean is vs the AUTHORED frames; iou_reported_mean is the run's own
         # number, which for a clip solved with a --fit-target transform is vs

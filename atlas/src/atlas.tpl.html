@@ -2201,9 +2201,16 @@ function seqCard(q){
          <div><span>worst frame</span><b>${num(h.iou_min)}</b></div>`;
     const fitNote = so.fit
       ? `<div class="warnline">clip fit: scale ${so.fit.scale} · dx ${so.fit.dx} · dy ${so.fit.dy}${
-          so.fit.at_bound ? " · <b>at search bound</b>" : ""} — the shadow casts the fitted target,
-          so the vs-authored number carries the fit as error</div>` : "";
-    box.innerHTML = `<div class="src">${src} · ${so.n_transitions} transitions${sizeNote}</div>
+          so.fit.at_bound ? " · <b>at search bound</b>" : ""} — the benchmark column charges the fit
+          as error; the demo video does not inherit it (reassembly applies fit⁻¹, 08_reassemble.py)</div>` : "";
+    // a 5-arm clip solved with 3 arms is a different problem, not a bad solve
+    const armChip = so.n_arms_solved ? ` · ${so.n_arms_solved} arms` : "";
+    const priorChip = so.prior_iou != null ? ` · prior ${num(so.prior_iou)}` : "";
+    const armWarn = (so.n_arms_declared && so.n_arms_solved
+                     && so.n_arms_declared !== so.n_arms_solved)
+      ? `<div class="warnline">⚠ clip declares ${so.n_arms_declared} arms; solved with ${
+          so.n_arms_solved} — a different problem, not a bad result</div>` : "";
+    box.innerHTML = `<div class="src">${src} · ${so.n_transitions} transitions${sizeNote}${armChip}${priorChip}</div>
       <div class="seqnums">
         ${iouCells}
         <div><span>infeasible</span><b class="${infeas > 0 ? "bad" : ""}">${
@@ -2217,6 +2224,7 @@ function seqCard(q){
           ? ` · wrap ${so.s3.loop_closure.dq_max_deg.toFixed(0)}°` : ""} vs the ${
         num(h.dq_infeasible_thr_deg, 2)}° bound</div>` : ""}
       ${fitNote}
+      ${armWarn}
       ${mism}`;
     card.appendChild(box);
   }
@@ -2449,6 +2457,13 @@ function renderGuide(){
     with every transition infeasible. Between keyframes, smoothness is manufactured after the fact:
     the planner builds collision-checked paths and retimes them, but it cannot repair keyframes the solver
     placed too far apart.</p>
+    <p style="max-width:78ch; margin-top:8px">When a clip is solved with a clip-level
+    <span class="mono">--fit-target</span>, two columns must not be conflated: the <b>benchmark
+    column</b> charges the fit as error (vs-authored), and it should — but the <b>demo video</b>
+    does not inherit that penalty, because the fit is an invertible similarity and reassembly
+    (<span class="mono">08_reassemble.py</span>) applies fit⁻¹ before compositing onto the source
+    canvas, measured to recover the fitted score to within resampling. The same clip legitimately
+    has two quality numbers; say which column you are reading.</p>
     <p style="max-width:78ch; margin-top:8px">A separate GPU path exists
     (<span class="mono">run_sequence_jax.py</span> — this is where JAX comes in: a differentiable MJX renderer
     with batched Adam restarts), and it currently solves every frame independently with no warm start and no

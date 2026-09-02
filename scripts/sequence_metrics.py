@@ -203,14 +203,15 @@ def _read_mas_run(run_dir: str) -> dict:
     # declares it and never populates it (null in every frame of every run).
     # The ref=original numbers this scorer computes are the only vs-authored
     # measurements in either repo.
-    fit = None
+    fit, meta = None, {}
     sjson = summary[:-4] + ".json"
     if os.path.exists(sjson):
         try:
             with open(sjson, encoding="utf-8") as f:
-                fit = json.load(f).get("target_fit")
+                meta = json.load(f)
+            fit = meta.get("target_fit")
         except Exception:
-            fit = None
+            fit, meta = None, {}
     with open(summary, encoding="utf-8", newline="") as f:
         rows = list(csv.DictReader(f))
     qcols = {}
@@ -234,8 +235,18 @@ def _read_mas_run(run_dir: str) -> dict:
             "shadow_path": shadow if os.path.exists(shadow) else None,
             "q": q,
         })
+    cfg = meta.get("config") or {}
+    la = meta.get("loop_anchor", cfg.get("loop_anchor"))
+    extras = {
+        # a 5-arm clip solved with 3 arms would otherwise just look like a bad
+        # result -- the arm count belongs beside the IoU (umbra-bench-9f)
+        "n_arms_solved": meta.get("n_robots") or n_arms or None,
+        "prior_iou": cfg.get("prior_iou"),
+        "loop_anchor": (json.dumps(la) if isinstance(la, (dict, list))
+                        else la if la is not None else None),
+    }
     return {"name": os.path.basename(os.path.normpath(run_dir)), "frames": frames,
-            "fit": fit}
+            "fit": fit, "extras": {k: v for k, v in extras.items() if v is not None}}
 
 
 def _joints_array(joints) -> np.ndarray | None:
@@ -300,7 +311,7 @@ def _agg(vals: list, prefix: str) -> dict:
 def score_sequence(seq_id: str, source: str, shadow_paths: list, q_frames: list,
                    target_paths: list, loop: bool, size: int,
                    thr_deg: float | None, iou_reported: list | None = None,
-                   fit: dict | None = None) -> list[dict]:
+                   fit: dict | None = None, extras: dict | None = None) -> list[dict]:
     """All three groups for one (sequence, source) pair -> its CSV rows."""
     n = len(shadow_paths)
     if target_paths and len(target_paths) != n:
@@ -378,6 +389,8 @@ def score_sequence(seq_id: str, source: str, shadow_paths: list, q_frames: list,
         for k in ("scale", "dx", "dy", "clip_frac", "at_bound"):
             if k in fit:
                 agg[f"fit_{k}"] = fit[k]
+    if extras:
+        agg.update(extras)
 
     stable = [t["assignment_stable"] for t in transitions
               if t["assignment_stable"] is not None]
@@ -426,6 +439,8 @@ def score_sequence(seq_id: str, source: str, shadow_paths: list, q_frames: list,
         for k in ("scale", "dx", "dy", "clip_frac", "at_bound"):
             if k in fit:
                 sagg[f"fit_{k}"] = fit[k]
+        if extras:
+            sagg.update(extras)
         rows.append(sagg)
     return rows
 
@@ -449,7 +464,10 @@ def rows_from_run(a, seq_index: dict, thr_deg: float | None) -> list[dict]:
         [f["q"] for f in run["frames"]],
         target_paths, loop, a.size, thr_deg,
         iou_reported=[f["iou_reported"] for f in run["frames"]],
-        fit=run.get("fit"))
+        fit=run.get("fit"),
+        extras=dict(run.get("extras") or {},
+                    **({"n_arms_declared": (rec.get("rig") or {}).get("n_arms")}
+                       if rec and (rec.get("rig") or {}).get("n_arms") else {})))
 
 
 def rows_from_static_sweep(a, seq_index: dict, thr_deg: float | None) -> list[dict]:
