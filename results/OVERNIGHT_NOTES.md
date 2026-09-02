@@ -191,3 +191,7 @@ conserved and relocates — the rotor's joint-space unwind must be distributed
 across all frames, a per-clip phase shift, out of scope tonight). daa5ad8
 remains correct and necessary: without it the candidate never even reached
 the guard.
+Instrument caveat (9f): hash-identical poses are diagnostic only alongside
+the recorded reason — "the run did not change" and "the run changed and the
+guard declined" produce the same hashes; the evidence for the latter lives
+in loop_anchor, not in the poses.
