@@ -69,7 +69,7 @@ def iou(a: np.ndarray, b: np.ndarray) -> float:
     return float((a & b).sum() / u) if u else 1.0
 
 
-def motion_stats(masks: list[np.ndarray]) -> dict:
+def motion_stats(masks: list[np.ndarray], declared_loop: bool | None = None) -> dict:
     """How much the target itself moves -- the denominator for every shadow metric."""
     steps = [iou(masks[i], masks[i + 1]) for i in range(len(masks) - 1)]
     wrap = iou(masks[-1], masks[0])
@@ -80,7 +80,11 @@ def motion_stats(masks: list[np.ndarray]) -> dict:
         "max_step_iou": round(float(np.max(steps)), 4),
         "wrap_iou": round(wrap, 4),
         # A closed loop wraps with a step the same size as its interior steps.
-        "loop": bool(wrap >= 0.90 * mean_step),
+        # A declaration from the importer wins: the test cannot tell a slow shot
+        # from a loop, and getting it wrong makes the metrics score a wrap that
+        # is never performed.
+        "loop": bool(wrap >= 0.90 * mean_step) if declared_loop is None else bool(declared_loop),
+        "loop_source": "wrap-test" if declared_loop is None else "declared",
         "step_iou": [round(s, 4) for s in steps],
     }
 
@@ -105,6 +109,19 @@ def main():
         d = os.path.join(root, sid)
         if not os.path.isdir(d):
             continue
+        # A sequence may declare what it is. The wrap test is a good heuristic
+        # for generated loops and a bad one for a film cut, which moves slowly
+        # enough between frames that its wrap looks like an interior step. An
+        # importer that knows the answer writes it into source.json.
+        source = {}
+        sj = os.path.join(d, "source.json")
+        if os.path.exists(sj):
+            try:
+                with open(sj, encoding="utf-8") as f:
+                    source = json.load(f)
+            except Exception:
+                source = {}
+        declared = source.get("loop")
         files = sorted(f for f in os.listdir(d) if f.endswith(".png"))
         if len(files) < 2:
             continue
@@ -112,15 +129,22 @@ def main():
         masks = [load(os.path.join(d, f)) for f in files]
         H, W = masks[0].shape
         base = sid.rsplit("_n", 1)[0] if sid.endswith(("_n3", "_n5")) else sid
+        # A film-cut letter carries its glyph in source.json; use the static
+        # track's class convention (the bare letter) so the CLIP machinery can
+        # score these frames against the same glyph set as letters_upper.
+        cls = source.get("letter", base)
+        prompt = (f"the letter {cls}, moving as it does in the source footage"
+                  if "letter" in source
+                  else PROMPTS.get(base, f"an animated {base.replace('_', ' ')}"))
         rec = {
             "id": sid,
             "track": "sequences",
-            "class": base,
-            "prompt": PROMPTS.get(base, f"an animated {base.replace('_', ' ')}"),
+            "class": cls,
+            "prompt": prompt,
             "n_frames": len(files),
             "frame_size": [W, H],
             "frames": paths,
-            "target_motion": motion_stats(masks),
+            "target_motion": motion_stats(masks, declared),
             "frame_attributes": (
                 None if (_attrs is None or a.no_attributes)
                 else [_attrs(m.astype(np.uint8) * 255) for m in masks]

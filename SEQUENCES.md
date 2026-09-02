@@ -1,7 +1,10 @@
 # umbra-bench — the sequences track
 
-13 animated targets, 119 frames. A separate track, not a tenth subset, and the
-reason is a measurement rather than a preference.
+26 animated targets, 276 frames, in two families: 13 generated motions
+(128×128, from the parametric generators) and 13 film-cut letters
+(512×512, extracted from the demo ad by `fleet-shadow-demo/07_make_sequences.py`
+— one letter in one scene is one sequence). A separate track, not a tenth
+subset, and the reason is a measurement rather than a preference.
 
 ## 0. Why per-frame IoU is not enough
 
@@ -52,11 +55,18 @@ sequences.jsonl                        the index — one JSON line per sequence
 `windmill` differ and are kept as separate sequences. The importer decides by
 hashing rather than by assumption.
 
-**Frames are 128×128, while `targets/` is 512×512.** These are the original
-artefacts, imported as they are. All of them come from parametric generators
-(`generate_targets.py`, `generate_rig_targets.py`) that take `--size` and a
-continuous phase parameter, so regenerating the family at 512 with a controlled
-frame count is the natural next step — see §4.
+The demo family, `demo_01_scene_XX_<letter>`, is 3–24 frames per sequence at
+5 fps (every 5th source frame), each with a `source.json` beside the frames:
+the crop that puts a solved shadow back on the 1920×1080 canvas, the source
+frame ids, the fps, the glyph — and `loop: false`, which §2 explains. Their
+`class` is the bare letter, the same convention as `letters_upper`, so the CLIP
+recognizability machinery can score these frames against the same glyph set.
+
+**The generated frames are 128×128 (imported as-is), the demo frames 512×512,
+while `targets/` is 512×512.** The generated family comes from parametric
+generators (`generate_targets.py`, `generate_rig_targets.py`) that take
+`--size` and a continuous phase parameter, so regenerating it at 512 with a
+controlled frame count is the natural next step — see §4.
 
 ## 2. Schema — `sequences.jsonl`
 
@@ -91,13 +101,27 @@ Three fields carry the weight:
 uninterpretable without it: `wiper` changes by IoU 0.21 per step and `plant` by
 0.91, so the same amount of shadow movement means opposite things in the two.
 
-**`loop` is detected, and it changes what must be scored.** A loop returns to the
-same *appearance*, which for a rotationally symmetric shape happens before the
-frames repeat — `star_spin`'s last frame is nowhere near identical to its first
-(IoU 0.565), yet its wrap step is the same size as every interior step
-(0.558–0.573). The test is `wrap_iou ≥ 0.9 × mean_step_iou`, not
-`last == first`. **If the wrap is not scored, a solver can unwind an entire
-rotation in the gap between the last frame and the first and pay nothing.**
+**`loop` changes what must be scored, and it is declared where the source knows
+and detected only where it doesn't.** A loop returns to the same *appearance*,
+which for a rotationally symmetric shape happens before the frames repeat —
+`star_spin`'s last frame is nowhere near identical to its first (IoU 0.565),
+yet its wrap step is the same size as every interior step (0.558–0.573). The
+detection test is `wrap_iou ≥ 0.9 × mean_step_iou`, not `last == first`.
+**If the wrap is not scored, a solver can unwind an entire rotation in the gap
+between the last frame and the first and pay nothing.**
+
+The test cannot tell a slow shot from a loop, and it failed exactly that way on
+the demo family: `demo_01_scene_05_I` moves so little (mean step IoU 0.994)
+that its wrap (0.991) passes the ratio with no loop present, and
+`demo_01_scene_06_I` genuinely returns to its starting appearance (wrap 0.912
+against steps of 0.447) — a loop by any appearance-based test, except that the
+film it was cut from runs once and no last-to-first transition is ever
+performed. Scoring a wrap that never happens is as wrong as skipping one that
+does. So an importer that knows the answer writes `loop` into `source.json`
+and the declaration wins; the wrap test remains for sequences with no
+declaration (the generated 13, whose labels it gets right). `target_motion.
+loop_source` records which path produced the label — `declared` or
+`wrap-test` — so a reader can tell a fact from a heuristic.
 
 `shadows.*.joints` holds the pose per frame. Joint-space continuity is the thing
 per-frame IoU cannot see and it is unrecoverable from the masks alone, so the
