@@ -164,6 +164,9 @@ def _read_mas_run(run_dir: str) -> dict:
     best_shadow.png; the recorded per-frame IoU rides along as iou_reported,
     the way compute_metrics.py carries best_iou_reported.
     """
+    # Absolute, so the shadow paths recorded in the CSV survive a change of
+    # working directory between scoring and payload building.
+    run_dir = os.path.abspath(run_dir)
     summaries = sorted(glob.glob(os.path.join(run_dir, "summary_*.csv")))
     if not summaries:
         raise FileNotFoundError(f"no summary_*.csv in {run_dir}")
@@ -379,10 +382,11 @@ def rows_from_static_sweep(a, seq_index: dict, thr_deg: float | None) -> list[di
     solve of the same clip rather than overwriting it.
     """
     rows = []
+    sweep = os.path.abspath(a.static_sweep)   # CWD-independent CSV paths
     for sid, rec in seq_index.items():
         if a.sequence and sid != a.sequence:
             continue
-        d = os.path.join(a.static_sweep, sid)
+        d = os.path.join(sweep, sid)
         if not os.path.isdir(d):
             continue
         stems = [os.path.splitext(os.path.basename(p))[0] for p in rec["frames"]]

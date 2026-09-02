@@ -88,13 +88,31 @@ def _stats(row: dict, metric: str):
 
 
 def read_solves(bench: str):
-    """(sequence_id, source) -> {aggregate row, frame rows} from every CSV."""
-    agg, frames = {}, {}
-    for path in sorted(glob.glob(os.path.join(bench, "results",
-                                              "sequence_metrics_*.csv"))):
+    """(sequence_id, source) -> aggregate row + frame rows, from ONE CSV each.
+
+    Two CSVs can legitimately cover the same (sequence, source) -- a --run
+    score and a later index-mode re-score, say. Mixing them would interleave
+    two solves' frame lists under one aggregate, so the newest file (by mtime,
+    not by name -- a default-tag re-score sorts before an older tagged one)
+    wins the whole key, aggregate and frames together, and the collision is
+    printed rather than swallowed.
+    """
+    agg, frames, owner = {}, {}, {}
+    paths = sorted(glob.glob(os.path.join(bench, "results",
+                                          "sequence_metrics_*.csv")),
+                   key=os.path.getmtime)
+    for path in paths:
         with open(path, encoding="utf-8", newline="") as fh:
             for row in csv.DictReader(fh):
                 key = (row["sequence_id"], row["source"])
+                if owner.get(key) not in (None, path):
+                    print(f"[!] {os.path.basename(path)} re-scores "
+                          f"{key[0]}/{key[1]}; replacing the rows from "
+                          f"{os.path.basename(owner[key])} (older mtime)")
+                if owner.get(key) != path:
+                    owner[key] = path
+                    agg.pop(key, None)
+                    frames.pop(key, None)
                 if row["row"] == "aggregate":
                     row["_csv"] = os.path.basename(path)
                     agg[key] = row
@@ -148,22 +166,24 @@ def solve_block(row: dict, frame_rows: list, bench: str, px: int) -> dict:
         # The cast shadow per frame, for the shadow and overlay plates. The CSV
         # records the path the scorer read; resolve relative paths against the
         # benchmark root (a run dir usually sits in the sibling checkout).
-        sf, found = [], 0
+        # Keyed by frame_idx, not position, so the list lines up with the
+        # target frames even if the CSV is ever partial or duplicated.
+        n_f = int(float(row.get("n_frames") or len(ordered)))
+        sf, found = [None] * n_f, 0
         for r in ordered:
+            i = int(r["frame_idx"])
             p = r.get("shadow") or ""
             if p and not os.path.isabs(p):
                 cand = os.path.normpath(os.path.join(bench, p))
                 p = cand if os.path.exists(cand) else p
-            if p and os.path.exists(p):
-                sf.append(thumb(p, px))
+            if 0 <= i < n_f and p and os.path.exists(p):
+                sf[i] = thumb(p, px)
                 found += 1
-            else:
-                sf.append(None)
         if found:
             out["sf"] = sf
-        if found < len(ordered):
+        if found < n_f:
             print(f"[!] {row.get('sequence_id', '?')}/{row.get('source', '?')}: "
-                  f"{len(ordered) - found} shadow frames missing on disk")
+                  f"{n_f - found} shadow frames missing on disk")
     return out
 
 
@@ -189,8 +209,14 @@ def main():
         src = {}
         sj = os.path.join(a.bench, "sequences", sid, "source.json")
         if os.path.exists(sj):
-            with open(sj, encoding="utf-8") as fh:
-                src = json.load(fh)
+            # A declaration that exists but cannot be read is a build error,
+            # not a shrug: losing it silently reverts loop/class to the
+            # heuristics (the mislabel the declaration exists to prevent).
+            try:
+                with open(sj, encoding="utf-8") as fh:
+                    src = json.load(fh)
+            except (json.JSONDecodeError, OSError) as e:
+                raise SystemExit(f"[!] {sj} exists but is unreadable: {e}")
 
         solves = {s: solve_block(agg[(i, s)], frames.get((i, s), []), a.bench, a.px)
                   for (i, s) in agg if i == sid}

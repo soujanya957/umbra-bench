@@ -116,11 +116,14 @@ def main():
         source = {}
         sj = os.path.join(d, "source.json")
         if os.path.exists(sj):
+            # A declaration that exists but cannot be parsed must not degrade
+            # to the wrap test: that silently reverts the exact mislabel the
+            # declaration was written to prevent. Fail with the filename.
             try:
                 with open(sj, encoding="utf-8") as f:
                     source = json.load(f)
-            except Exception:
-                source = {}
+            except Exception as e:
+                sys.exit(f"[!] {sj} exists but is unreadable: {e}")
         declared = source.get("loop")
         files = sorted(f for f in os.listdir(d) if f.endswith(".png"))
         if len(files) < 2:

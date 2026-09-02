@@ -84,11 +84,18 @@ def wrap(fragment: str) -> str:
 
 def load(path: str) -> str:
     """Read as text, but parse first: a truncated payload is a syntax error in
-    the browser, hours after the build, with no line number worth having."""
+    the browser, hours after the build, with no line number worth having.
+
+    Every `<` is then escaped to `\\u003c`. The payloads land inside inline
+    `<script>` tags, where a literal `</script>` in any string value would end
+    the tag and truncate the whole page; in JSON a `<` can only occur inside a
+    string, so the global replace is safe and closes the hazard for every slot
+    at once instead of trusting each builder to sanitise.
+    """
     with open(path, encoding="utf-8") as f:
         raw = f.read()
     json.loads(raw)
-    return raw
+    return raw.replace("<", "\\u003c")
 
 
 def main() -> int:

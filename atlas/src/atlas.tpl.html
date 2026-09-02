@@ -399,7 +399,7 @@ button.act:hover{border-color:var(--accent); color:var(--accent-ink)}
 .hint{font-size:11px; color:var(--muted)}
 
 /* ── sequences track ─────────────────────────────────────────────────────── */
-.seqwrap{padding:22px 26px 60px; display:flex; flex-direction:column; gap:18px}
+.seqwrap{display:flex; flex-direction:column; gap:18px}
 .seqwrap h2{margin:0 0 4px; font-size:17px; font-weight:600; letter-spacing:-.01em}
 .seqwrap>.intro{margin:0; font-size:13px; line-height:1.6; color:var(--ink-2); max-width:78ch}
 .seqgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px}
@@ -417,8 +417,9 @@ button.act:hover{border-color:var(--accent); color:var(--accent-ink)}
 .seqctl{display:flex; gap:14px; align-items:center; flex-wrap:wrap}
 .seqctl .hint{font-size:11px; color:var(--muted)}
 .seqmeta{padding:10px 12px 11px; display:flex; flex-direction:column; gap:7px}
-.seqmeta .idline{display:flex; align-items:baseline; gap:8px; flex-wrap:wrap}
-.seqmeta .sid{font-family:"IBM Plex Mono",monospace; font-size:11.5px; font-weight:600}
+.seqmeta .idline{display:flex; align-items:baseline; justify-content:flex-start; gap:8px; flex-wrap:wrap}
+.seqmeta .sid{font-family:"IBM Plex Mono",monospace; font-size:11.5px; font-weight:600;
+  color:var(--ink); overflow:visible; text-overflow:clip; white-space:normal}
 .seqmeta .prompt{font-size:11.5px; color:var(--muted); line-height:1.45}
 .seqbadges{display:flex; gap:5px; flex-wrap:wrap}
 .sbadge{font-family:"IBM Plex Mono",monospace; font-size:9px; letter-spacing:.05em;
@@ -2127,7 +2128,8 @@ function seqTick(){
     seqDrawFrame(a, show);
     a.lbl.textContent = "f" + String(show).padStart(2, "0")
                       + (!a.loop && a.i >= a.n ? " · end" : "");
-    a.next = now + a.period;
+    a.next += a.period;                       // drift-free; re-anchor after a stall
+    if(a.next < now) a.next = now + a.period;
   }
 }
 
@@ -2147,7 +2149,9 @@ function seqCard(q){
   const card = document.createElement("div"); card.className = "seqcard";
   const period = Math.max(1000 / (q.fps || 6), 200);
   const loopBadge = q.loop
-    ? `<span class="sbadge loop" title="wrap step ${q.motion.wrap_iou} vs 0.9 × mean step ${q.motion.mean_step_iou} — the wrap is a real transition and is scored">loop · ${q.loop_source}</span>`
+    ? `<span class="sbadge loop" title="${q.loop_source === "declared"
+        ? "declared in source.json — the source performs the wrap, so it is scored (wrap step " + q.motion.wrap_iou + ", mean step " + q.motion.mean_step_iou + " for reference)"
+        : "wrap step " + q.motion.wrap_iou + " vs 0.9 × mean step " + q.motion.mean_step_iou + " — the wrap is a real transition and is scored"}">loop · ${q.loop_source}</span>`
     : `<span class="sbadge" title="${q.loop_source === "declared"
         ? "declared in source.json — the film runs once; a wrap is never performed, so none is scored (the wrap test alone would misread slow clips)"
         : "wrap step " + q.motion.wrap_iou + " fails 0.9 × mean step " + q.motion.mean_step_iou}">runs once · ${q.loop_source}</span>`;
@@ -2218,6 +2222,7 @@ function seqCard(q){
     next: performance.now() + period,
   };
   if(REDUCED || q.f.length < 2) a.next = Infinity;   // static first frame
+  else a.next = performance.now() + period * (seqAnims.length % 5) / 5;  // stagger the beats
   seqAnims.push(a);
   seqDrawFrame(a, 0);
   return card;
@@ -2231,7 +2236,7 @@ function renderSequences(){
   head.innerHTML = `<h2>The sequences track</h2>
     <p class="intro">${SEQ.n} animated targets (${SEQ.sequences.filter(s => s.family === "generated").length}
     generated motions, ${SEQ.sequences.filter(s => s.family === "demo").length} film-cut letters from the demo ad),
-    ${SEQ.n_solved} solved so far. A clip is not a bag of frames: <b>spinning_star averages 0.6679 per-frame IoU
+    ${SEQ.n_solved} solved so far. A clip is not a bag of frames: <b>star_spin averages 0.6679 per-frame IoU
     and cannot be performed</b> — one transition needs a 291° single-joint swing. So every solve here shows its
     mean frame IoU only next to <span class="mono">dq_infeasible_frac</span>, and previews only wrap around when
     the sequence actually loops. The guide view explains each number.</p>`;
@@ -2290,11 +2295,11 @@ function renderGuide(){
 
   const shape = [
     ["iou", "[0,1]", UP, "how much area agrees: |T∩S| / |T∪S|",
-     "the headline, but it correlates ρ=+0.64 with stroke width — it mostly measures how fat the target is; never rank by it alone"],
+     "the headline, but it correlates ρ=+0.75 with stroke width on the grounded sweeps (+0.63 fitted) — it mostly measures how fat the target is; never rank by it alone"],
     ["dice", "[0,1]", UP, "pixel F1; monotone in IoU",
      "adds no ranking information — here because segmentation readers look for it"],
     ["boundary_iou", "[0,1]", UP, "is the outline in the right place, with the interior's vote removed",
-     "IoU inside a band 2% of the diagonal along each outline; undoes the stroke-width bias (truck: 0.633 IoU, 0.198 here)"],
+     "IoU inside a band 2% of the diagonal along each outline; undoes the stroke-width bias (truck_mpeg7-01: 0.807 IoU, 0.234 here)"],
     ["nsd", "[0,1]", UP, "share of outline within a set tolerance (1% of the diagonal) of the other's",
      "the tolerance is physical: on a 1 m screen it reads 'outline within ~1 cm'"],
     ["chamfer", "[0,1] of diag", DOWN, "mean outline-to-outline distance",
@@ -2334,11 +2339,11 @@ function renderGuide(){
     ["clip_rank / clip_rr", "1..n / (0,1]", "↓ / ↑", "where the true class ranks when CLIP scores the image against the subset's prompts",
      "rr = 1/rank; the mean of rr over any filter IS that filter's MRR, so card and table cannot disagree"],
     ["top1 (+ chance)", "[0,1]", UP, "the true class wins outright",
-     "chance runs 0.038–0.500 across subsets — never compare raw top1 down a column; use top1_over_chance"],
+     "chance runs 0.037–0.500 across subsets — never compare raw top1 down a column; use top1_over_chance"],
     ["mrr", "[1/n, 1]", UP, "how much of the rank position survives",
      "keeps signal top-1 discards: hand_shadow shadows rank ~4th of 9 (top1 0.000, mrr ratio 0.407)"],
     ["ratio_vs_target / mrr_ratio", "[0,∞)", UP, "the number to quote: shadow recognizability over the target's own",
-     "CLIP is weak on 1-bit silhouettes, so the target scored through the identical path is the ceiling; null where the ceiling is at chance (abstract, teleop — the null controls)"],
+     "CLIP is weak on 1-bit silhouettes, so the target scored through the identical path is the ceiling; nulled only when the target never ranks first — abstract and teleop ceilings sit at chance, so their ratios are noise, not signal"],
     ["clip_top1_similarity", "[-1,1]", DIAG, "the raw cosine of the top guess — what it failed AS",
      "no softmax, no logit scale: not a confidence, does not sum to 1 — which is exactly why the metric is a rank"],
   ];
@@ -2347,7 +2352,7 @@ function renderGuide(){
     ["&lt;m&gt;_mean/min/max/std", "as base", "as base", "S1 — per-frame quality over the clip, every pairwise metric aggregated",
      "min is what a viewer sees (the worst frame); for lower-better metrics the worst frame is the max column"],
     ["dq_max_deg", "deg ≥ 0", DOWN, "S2 — largest single-joint step per transition",
-     "the number frame IoU cannot see: spinning_star needs 291° between two individually-good frames"],
+     "the number frame IoU cannot see: star_spin needs 291° between two individually-good frames"],
     ["dq_infeasible_frac", "[0,1]", DOWN + " · headline", "S2 — share of transitions where any joint exceeds the planner's bound",
      "LARGE_Q_JUMP = 1.2 rad = 68.75°, read live from motion_planner.py, never copied; the wrap counts whenever loop=true; null means no joint data, not zero"],
     ["shadow/target_step_iou", "[0,1]", DIAG, "S2 — how much the shadow / the animation moved per step",
@@ -2355,7 +2360,7 @@ function renderGuide(){
     ["motion_excess", "[-1,1]", DIAG, "S2 — thrashing, normalised: target_step_iou − shadow_step_iou",
      "positive = the rig moved more than the animation asked; negative = under-moved (the clip looks frozen); both are failures"],
     ["assignment_stability", "[0,1]", UP, "S3 — do the arms keep their roles, or trade regions mid-clip",
-     "Hungarian on per-arm joint vectors per transition; arms crossing on screen — spinning_star scores 0.0 with healthy frame IoU"],
+     "Hungarian on per-arm joint vectors per transition; arms crossing on screen — star_spin scores 0.0 with healthy frame IoU"],
     ["loop_closure_*", "as base", "as base", "S3 — the wrap transition broken out",
      "only for loops; already counted inside the aggregates — skip it and a solver can unwind a full rotation between last and first frame for free"],
     ["total_path_length_deg", "deg ≥ 0", DOWN, "S3 — what performing the whole clip costs in joint motion",
@@ -2386,7 +2391,7 @@ function renderGuide(){
   const rules = document.createElement("div"); rules.className = "fig";
   rules.innerHTML = `<h3>Reading rules — the ways these numbers lie if quoted alone</h3>
     <ul class="guide-rules">
-      <li><b>Mean frame IoU never travels without dq_infeasible_frac.</b> spinning_star averages 0.6679 and
+      <li><b>Mean frame IoU never travels without dq_infeasible_frac.</b> star_spin averages 0.6679 and
         cannot be performed — averaging per-frame quality is precisely the statistic that cannot see a 291°
         joint swing.</li>
       <li><b>ref=shown vs ref=original.</b> On a fitted sweep the solver was asked to cast the <em>placed</em>
@@ -2395,7 +2400,7 @@ function renderGuide(){
         mean IoU without its ref is meaningless.</li>
       <li><b>On fitted sweeps, plain IoU mostly reports the fit.</b> Use tc_iou for the shape-only question.
         Do not reach for aligned_iou — its search (scale 0.85–1.15, shift ≤ 12%) cannot reach the fits it
-        would need to undo (scale down to 0.35).</li>
+        would need to undo (fits recorded down to scale 0.54; the search floor is 0.35).</li>
       <li><b>IoU needs company, not replacement.</b> Boundary, thin-structure, topology and placement answer
         different questions; a featureless disc outscores a recognisable car on IoU alone.</li>
       <li><b>CLIP scores are ratios, not absolutes.</b> The judge is half-blind on silhouettes, so shadow
@@ -2423,7 +2428,7 @@ function renderGuide(){
     (weight 100) fires when any joint would move more than <span class="mono">LARGE_Q_JUMP</span> = 1.2 rad —
     the same threshold below which <span class="mono">motion_planner.py</span> can connect two keyframes with
     a direct quintic. All of that coupling is soft, one-directional, and active only when a previous pose is
-    supplied, so frames solved independently never see the barrier at all — which is how spinning_star ended
+    supplied, so frames solved independently never see the barrier at all — which is how star_spin ended
     with every transition infeasible. Between keyframes, smoothness is manufactured after the fact:
     the planner builds collision-checked paths and retimes them, but it cannot repair keyframes the solver
     placed too far apart.</p>
@@ -2458,7 +2463,7 @@ function renderGuide(){
       "downstream comparison.", fit),
     mkfig("CLIP recognizability — can a frozen judge name the shape",
       "One prompt per class per subset, cosine ranks, no softmax. Chance level rides along because class " +
-      "lists run from 2 to 26 entries.", clip),
+      "lists run from 2 to 27 entries.", clip),
     solver,
     mkfig("Sequence metrics — S1 frames, S2 transitions, S3 the clip",
       "From scripts/sequence_metrics.py: one row per frame plus one aggregate row per (sequence, source), " +
