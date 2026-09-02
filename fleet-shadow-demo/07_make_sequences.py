@@ -120,11 +120,13 @@ def main() -> None:
                          "on its own which source it came from.")
     ap.add_argument("--prefix", default=None,
                     help="override the whole prefix instead of just the id")
-    ap.add_argument("--exclude", nargs="*", default=["f0259_I", "f0264_I"],
+    ap.add_argument("--exclude", nargs="*", default=[],
                     help="drop these (frame, object) pairs, as <frame>_<letter>. "
-                         "Scoped to the object, not the frame: f0259_I goes and "
-                         "f0259_F stays, since only the I is bad there. Defaults "
-                         "to the two broken I frames at the head of scene_03.")
+                         "Scoped to the object, not the frame, so f0259_I can go "
+                         "while f0259_F stays. Empty by default: this used to "
+                         "carry f0259_I and f0264_I, which were mislabelled at "
+                         "the time and have since been re-clicked -- a hardcoded "
+                         "exclusion outlives the problem it was added for.")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
 
