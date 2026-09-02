@@ -401,3 +401,20 @@ changes -- ratios shift for the existing 29 too). fh_l1 has CUDA torch
 (RTX 5070 Ti) but no open_clip; installing a package into the user's env
 without them present is not my call. Queued CPU rerun after the sweeps
 unless the user okays pip install open_clip_torch into fh_l1.
+
+## Data run complete: set2 is fully in the benchmark
+
+Both sweeps done (big 310 solves, small 310; zero extras triggered).
+Big-budget best-of-10 on the 31 new capture-targets: mean 0.759, range
+0.565 (upperh) to 0.897 (pencil) -- human-posed shadows are
+in-distribution by construction and the solver confirms it. Metrics
+recomputed for both grounded sweeps (1204 rows each, teleop shown = 60);
+master_table rebuilt with the four-sweep whitelist (teleop-v2 excluded
+from optimizer statistics -- hazard H3); CLIP full rerun (1806 images,
+teleop now 60 samples over 50 classes, chance 0.02 -- every teleop ratio
+shifted with the class list, including the original 29's, as predicted).
+Atlas rebuilt and browser-verified: 602 cards, candle card carries the
+full metric panel. BUDGET.md files got an append-only pass ledger.
+Monitor false-complete en route (nested-quote PowerShell probe returned
+empty == "process gone") -- re-armed on the plain PID; same bug family
+as "check passed for a reason unrelated to what it was checking".
