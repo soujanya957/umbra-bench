@@ -449,3 +449,13 @@ open_clip installed into fh_l1 by the user; GPU rerun of the full CLIP
 eval reproduces the CPU summaries with zero delta across all 30
 (subset, condition) rows -- future reruns cost seconds, no artifact
 churn needed.
+
+## CORRECTION: triangle_stab solve was 5/10 frames -- retracted and re-run
+
+A head-truncated directory listing made me pass only f00-f04 to the
+solver; the committed 0.649 -> 0.827 triangle comparison was 5 stab
+frames against the original's 10 and is void. L (4/4) and Y (3/3) were
+complete and stand. Full 10-frame triangle_stab re-launched; the ledger
+keeps this entry so the wrong number cannot be quoted from the earlier
+one. Lesson filed next to the 3-frame byte-sampling one: a listing
+piped through head is a sample, not an inventory.
