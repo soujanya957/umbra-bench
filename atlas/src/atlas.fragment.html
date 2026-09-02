@@ -2202,7 +2202,8 @@ function seqCard(q){
     const fitNote = so.fit
       ? `<div class="warnline">clip fit: scale ${so.fit.scale} · dx ${so.fit.dx} · dy ${so.fit.dy}${
           so.fit.at_bound ? " · <b>at search bound</b>" : ""} — the benchmark column charges the fit
-          as error; the demo video does not inherit it (reassembly applies fit⁻¹, 08_reassemble.py)</div>` : "";
+          as error; being one similarity per clip it is recoverable — in post for a rendered
+          demo (08_reassemble.py), as a per-clip camera reframe for a filmed rig</div>` : "";
     // a 5-arm clip solved with 3 arms is a different problem, not a bad solve
     const armChip = so.n_arms_solved ? ` · ${so.n_arms_solved} arms` : "";
     const priorChip = so.prior_iou != null ? ` · prior ${num(so.prior_iou)}` : "";
@@ -2477,10 +2478,11 @@ function renderGuide(){
     placed too far apart.</p>
     <p style="max-width:78ch; margin-top:8px">When a clip is solved with a clip-level
     <span class="mono">--fit-target</span>, two columns must not be conflated: the <b>benchmark
-    column</b> charges the fit as error (vs-authored), and it should — but the <b>demo video</b>
-    does not inherit that penalty, because the fit is an invertible similarity and reassembly
-    (<span class="mono">08_reassemble.py</span>) applies fit⁻¹ before compositing onto the source
-    canvas, measured to recover the fitted score to within resampling. The same clip legitimately
+    column</b> charges the fit as error (vs-authored), and it should — but being one similarity
+    transform per clip it is <b>recoverable</b>: in post for a rendered demo
+    (<span class="mono">08_reassemble.py</span> applies fit⁻¹, measured to recover the fitted
+    score to within resampling), or as a per-clip camera reframe — a zoom plus a pan — for a
+    filmed rig, where it is realizable but not free. The same clip legitimately
     has two quality numbers; say which column you are reading. The demo section quotes
     <b>legibility</b> (CLIP retrieval over the folded glyph set, cast frames over the authored
     ceiling) rather than IoU — the two rank clips differently, and legibility is what a viewer
