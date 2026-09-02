@@ -471,3 +471,13 @@ authored letter BEFORE composing: 0.0/0.15/0.01/0.01 instead of a gain.
 Fixed and re-measured: L mean 0.560 -> 0.729 on canvas (entering frame
 0.291 -> 0.686), Y 0.741 -> 0.797. scene_06 and the whole cut
 re-composed; FAMILY reads with L and Y at authored size and position.
+
+## Full triangle_stab lands; stab variants live in the atlas
+
+10-frame triangle_stab: 0.649 -> 0.825 (coincidentally near the retracted
+5-frame number, but earned on the full clip), scale 0.735 -> 1.119.
+Caveat stated on the card: two transitions run 68.5/67.6 deg against the
+68.75 bound -- feasible, but with no margin. Sequences track now 29 rows
+(26 + 3 _stab, loop declarations inherited from parents); payload joins
+all three solves via --sequence-pinned ids; atlas rebuilt and the L_stab
+card browser-verified (declared-loop provenance, full solve block).
