@@ -233,3 +233,23 @@ signature-matching alone is unsound once a fix can legitimately break
 upstream determinism. Prediction scorecard kept honestly: 3 right, 5 wrong
 (9f's own tally), registered before outcomes precisely so wanted results
 could not pass unexamined — which they twice did not.
+
+## Close-out (05:0x): the experimental program is complete
+
+flower regression: clean — all 8 frames byte-identical, loop_anchor field-
+for-field unchanged; the fix altered nothing where nothing needed altering.
+Final prediction scorecard: 4 right, 5 wrong, all registered before outcomes.
+A standing invariant found in passing: wrap_forecast.dq_max must equal
+loop_anchor.dq_wrap_deg_closed (two independent computations of the same
+quantity; 68.2° both ways on flower) — if they ever disagree, something
+moved the pose after the closure.
+
+Final --loop-close tally, 11 looping clips: 7 needed nothing, 1 closed and
+accepted (flower), 2 correct refusals (windmill_n3, wiper), 1 inconclusive
+(windmill_n5, forked). The acceptance-seam fix's one clean demonstration is
+windmill_n3's wrap going from immovable to closable — that, not a closed
+clip, is what daa5ad8 gets credited with.
+
+Both repos: everything committed locally, nothing pushed. The anomalous
+message(s) are documented above and with the user; neither session acted on
+them and nothing from them touched either repo.

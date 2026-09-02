@@ -342,3 +342,26 @@ So feeding raw masks -- Simin's choice -- costs nothing measurable here, and the
 - Nothing here has a human arm yet. `build_human_study()` writes the manifest and
   has never been run.
 
+
+
+## 7. Overnight 2026-09-02 — the sequences track went end to end
+
+Two sessions in coordination (this one: metrics + atlas; umbra-bench-9f:
+solving + pipeline). The full narrative, every number, the open user
+decisions (render-vs-filmed fit policy first among them) and the security
+event are in **results/OVERNIGHT_NOTES.md** — read that before this repo's
+sequence numbers get quoted anywhere. State on handoff: 26/26 sequences
+solved and on the atlas (three sources deep where A/Bs exist), the static
+baseline measured (chained beats independent on both axes at practiced
+budgets; wiper the one genuine trade), the loop-close scope characterised
+(closes small wrap overshoots free, correctly refuses global windings), and
+fleet-shadow-art carries the acceptance-seam fix (all five optimize_staged
+comparisons lexicographic on (reachable, IoU), instrumented).
+
+Engineering lessons paid for tonight, in one line each: assert count==1
+before scripted replaces; pipefail on verification chains; verify off the
+live process, not the script; scan all frames and report the first divergent
+index; hash-identity is diagnostic only beside a recorded reason; a check
+that passes for a reason unrelated to what it checks is the night's
+recurring bug shape, in both directions; and when you fix a decision site,
+making it log is part of the fix.
