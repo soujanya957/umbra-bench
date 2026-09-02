@@ -2186,10 +2186,23 @@ function seqCard(q){
       ? `<div class="warnline">⚠ scored with loop=${so.loop_scored} but the track says loop=${q.loop} — re-run sequence_metrics.py</div>` : "";
     const sizeNote = so.solve_size && so.solve_size !== q.frame_size[0]
       ? ` · solved at ${so.solve_size}px` : "";
+    // A clip solved against a fitted target has two honest IoUs: vs the
+    // authored frames (end to end, fit counted as error) and vs what the
+    // solver was actually asked to cast. Show both whenever they diverge.
+    const fitted = h.iou_reported_mean != null && h.iou_mean != null
+                && Math.abs(h.iou_reported_mean - h.iou_mean) > 0.02;
+    const iouCells = fitted
+      ? `<div><span>IoU vs authored</span><b>${num(h.iou_mean)}</b></div>
+         <div><span>vs fitted target</span><b>${num(h.iou_reported_mean)}</b></div>`
+      : `<div><span>mean frame IoU</span><b>${num(h.iou_mean)}</b></div>
+         <div><span>worst frame</span><b>${num(h.iou_min)}</b></div>`;
+    const fitNote = so.fit
+      ? `<div class="warnline">clip fit: scale ${so.fit.scale} · dx ${so.fit.dx} · dy ${so.fit.dy}${
+          so.fit.at_bound ? " · <b>at search bound</b>" : ""} — the shadow casts the fitted target,
+          so the vs-authored number carries the fit as error</div>` : "";
     box.innerHTML = `<div class="src">${src} · ${so.n_transitions} transitions${sizeNote}</div>
       <div class="seqnums">
-        <div><span>mean frame IoU</span><b>${num(h.iou_mean)}</b></div>
-        <div><span>worst frame</span><b>${num(h.iou_min)}</b></div>
+        ${iouCells}
         <div><span>infeasible</span><b class="${infeas > 0 ? "bad" : ""}">${
           infeas == null ? "no joint data" : (100 * infeas).toFixed(0) + "%"}</b></div>
         <div><span>arm swaps</span><b class="${so.s3.n_arm_swaps > 0 ? "bad" : ""}">${
@@ -2200,6 +2213,7 @@ function seqCard(q){
         so.s3.loop_closure && so.s3.loop_closure.dq_max_deg != null
           ? ` · wrap ${so.s3.loop_closure.dq_max_deg.toFixed(0)}°` : ""} vs the ${
         num(h.dq_infeasible_thr_deg, 2)}° bound</div>` : ""}
+      ${fitNote}
       ${mism}`;
     card.appendChild(box);
   }

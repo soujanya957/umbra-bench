@@ -141,13 +141,21 @@ def solve_block(row: dict, frame_rows: list, bench: str, px: int) -> dict:
         "solve_size": _f(row.get("size")),
         "loop_scored": loop_scored,
         "n_transitions": _f(row.get("n_transitions")),
-        # mean IoU is never quoted without infeasibility beside it (SEQUENCES.md)
+        # mean IoU is never quoted without infeasibility beside it (SEQUENCES.md).
+        # iou_mean is vs the AUTHORED frames; iou_reported_mean is the run's own
+        # number, which for a clip solved with a --fit-target transform is vs
+        # the fitted target -- the two are far apart exactly when the fit is big.
         "headline": {
             "dq_infeasible_frac": _f(row.get("dq_infeasible_frac")),
             "dq_infeasible_thr_deg": _f(row.get("dq_infeasible_thr_deg")),
             "iou_mean": _f(row.get("iou_mean")),
             "iou_min": _f(row.get("iou_min")),
+            "iou_reported_mean": _f(row.get("iou_reported_mean")),
         },
+        "fit": ({k: _f(row.get(f"fit_{k}")) for k in
+                 ("scale", "dx", "dy", "clip_frac")} |
+                {"at_bound": row.get("fit_at_bound") in ("True", "true", "1")}
+                if row.get("fit_scale") not in (None, "") else None),
         "s1": {m: st for m in S1 if (st := _stats(row, m))},
         "s2": {m: st for m in S2 if (st := _stats(row, m))},
         "s3": s3,

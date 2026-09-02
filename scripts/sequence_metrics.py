@@ -172,6 +172,18 @@ def _read_mas_run(run_dir: str) -> dict:
         raise FileNotFoundError(f"no summary_*.csv in {run_dir}")
     summary = summaries[-1]
     ts = re.search(r"summary_(.+)\.csv$", os.path.basename(summary)).group(1)
+    # run_sequence.py fits ONE similarity transform per clip; when it did, the
+    # recorded per-frame iou is vs the FITTED target while our recomputed iou
+    # is vs the authored frames -- both real, and far apart for a big fit, so
+    # the transform rides along for the aggregate row.
+    fit = None
+    sjson = summary[:-4] + ".json"
+    if os.path.exists(sjson):
+        try:
+            with open(sjson, encoding="utf-8") as f:
+                fit = json.load(f).get("target_fit")
+        except Exception:
+            fit = None
     with open(summary, encoding="utf-8", newline="") as f:
         rows = list(csv.DictReader(f))
     qcols = {}
@@ -195,7 +207,8 @@ def _read_mas_run(run_dir: str) -> dict:
             "shadow_path": shadow if os.path.exists(shadow) else None,
             "q": q,
         })
-    return {"name": os.path.basename(os.path.normpath(run_dir)), "frames": frames}
+    return {"name": os.path.basename(os.path.normpath(run_dir)), "frames": frames,
+            "fit": fit}
 
 
 def _joints_array(joints) -> np.ndarray | None:
@@ -259,7 +272,8 @@ def _agg(vals: list, prefix: str) -> dict:
 
 def score_sequence(seq_id: str, source: str, shadow_paths: list, q_frames: list,
                    target_paths: list, loop: bool, size: int,
-                   thr_deg: float | None, iou_reported: list | None = None) -> list[dict]:
+                   thr_deg: float | None, iou_reported: list | None = None,
+                   fit: dict | None = None) -> list[dict]:
     """All three groups for one (sequence, source) pair -> its CSV rows."""
     n = len(shadow_paths)
     if target_paths and len(target_paths) != n:
@@ -330,6 +344,13 @@ def score_sequence(seq_id: str, source: str, shadow_paths: list, q_frames: list,
     feas = [t["dq_infeasible"] for t in transitions if t["dq_infeasible"] is not None]
     agg["dq_infeasible_frac"] = (round(sum(feas) / len(feas), 4) if feas else None)
     agg["dq_infeasible_thr_deg"] = round(thr_deg, 2) if thr_deg is not None else None
+    if fit:
+        # the clip-level similarity transform the run solved against, when any:
+        # it is why iou (vs authored frames) and iou_reported (vs the fitted
+        # target) can be far apart, and both belong in the row
+        for k in ("scale", "dx", "dy", "clip_frac", "at_bound"):
+            if k in fit:
+                agg[f"fit_{k}"] = fit[k]
 
     stable = [t["assignment_stable"] for t in transitions
               if t["assignment_stable"] is not None]
@@ -367,7 +388,8 @@ def rows_from_run(a, seq_index: dict, thr_deg: float | None) -> list[dict]:
         [f["shadow_path"] for f in run["frames"]],
         [f["q"] for f in run["frames"]],
         target_paths, loop, a.size, thr_deg,
-        iou_reported=[f["iou_reported"] for f in run["frames"]])
+        iou_reported=[f["iou_reported"] for f in run["frames"]],
+        fit=run.get("fit"))
 
 
 def rows_from_static_sweep(a, seq_index: dict, thr_deg: float | None) -> list[dict]:
