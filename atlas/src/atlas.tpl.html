@@ -2216,13 +2216,17 @@ function seqCard(q){
         ${iouCells}
         <div><span>infeasible</span><b class="${infeas > 0 ? "bad" : ""}">${
           infeas == null ? "no joint data" : (100 * infeas).toFixed(0) + "%"}</b></div>
+        ${so.s2 && so.s2.dq_max_deg && so.s2.dq_max_deg.max != null ? `<div><span>worst step</span>
+          <b class="${h.dq_infeasible_thr_deg && so.s2.dq_max_deg.max > h.dq_infeasible_thr_deg - 2
+            ? "bad" : ""}">${so.s2.dq_max_deg.max.toFixed(1)}°<span style="text-transform:none">
+            / ${h.dq_infeasible_thr_deg ?? "?"}°</span></b></div>` : ""}
         <div><span>arm swaps</span><b class="${so.s3.n_arm_swaps > 0 ? "bad" : ""}">${
           so.s3.assignment_stability == null ? "—" : so.s3.n_arm_swaps + "/" + so.n_transitions}</b></div>
       </div>
       ${so.s3.dq_max_deg_by_transition ? `<div class="warnline">dq_max per step:
-        <span class="mono">[${so.s3.dq_max_deg_by_transition.map(d => d.toFixed(0)).join(", ")}]°</span>${
+        <span class="mono">[${so.s3.dq_max_deg_by_transition.map(d => d.toFixed(1)).join(", ")}]°</span>${
         so.s3.loop_closure && so.s3.loop_closure.dq_max_deg != null
-          ? ` · wrap ${so.s3.loop_closure.dq_max_deg.toFixed(0)}°` : ""} vs the ${
+          ? ` · wrap ${so.s3.loop_closure.dq_max_deg.toFixed(1)}°` : ""} vs the ${
         num(h.dq_infeasible_thr_deg, 2)}° bound</div>` : ""}
       ${(() => {
         // Legibility: does the cast clip READ as the letter (CLIP retrieval,

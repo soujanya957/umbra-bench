@@ -90,3 +90,12 @@ accepted:true with all four numbers. The old config's flower wrap (95.5°, its
 only infeasible step) sits beside it as optimizer_v0. So the write-up has both
 stories with evidence: star_spin (the config fixed the wrap; the guard declined)
 and flower (the config fell short by 10°; the guard closed it for free).
+
+Caveat that travels with flower (9f): it is feasible by a hair on TWO
+transitions — closed wrap 68.2° (margin 0.55°) and an untouched forward step
+68.4° (margin 0.35°) against the 68.75° bound, which is a planner model, not a
+physical guarantee; sub-degree margins sit inside modelling error. "0/7
+infeasible" is true and is the thinnest version of true — the card now shows
+the worst step beside the count, flagged when within 2° of the bound. What the
+flag cannot do: make a clip comfortable. That would need a margin-seeking
+penalty rather than a hinge that fires past the bound — open solver item.
