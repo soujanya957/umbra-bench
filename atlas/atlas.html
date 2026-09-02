@@ -1957,8 +1957,9 @@ window.__teleop = { get TEL(){ return TEL; }, get tpts(){ return tpts; }, TELSET
 const STEPS = [
   ["1", "Rig", `Three SO-101 arms, one point light, the wall screen. Four AprilTags
     (<code>36h11</code>, ids 0–3) go at the corners of the projection area — their
-    <b>inner</b> corners define the quad, which is what makes the rectification
-    reproducible without measuring anything.`, null],
+    <b>outer</b> corners define the crop, so the tags ride along INSIDE the frame
+    and nothing between them is ever trimmed off. The pipeline detects them, warps,
+    and later excludes their footprints from every statistic and segmentation.`, null],
   ["2", "Capture", `Pose the arms by hand until the shadow reads, then grab the frame.
     The script refuses a frame in which it cannot see all four tags, so a capture that
     lands in the folder is always rectifiable.`,
@@ -1967,33 +1968,39 @@ python3 scripts/capture_teleop.py
 # or rectify frames you already have
 python3 scripts/capture_teleop.py --from-images 'raw/*.png'
 # --record-pose also writes joint angles to <name>_capture.json`],
-  ["3", "Rectify", `Warped to 500×383 fronto-parallel off those inner corners. This runs
-    inside step 2; it is called out because the number to check afterwards is the aspect
-    ratio of the detected quad — it should sit near 1.30, and a capture far off that had
-    the camera somewhere it should not have been.`, null],
-  ["4", "Binarise", `Illumination is divided out by a heavily blurred copy of the frame,
-    then CLAHE stretches what is left. Both steps are needed: the shadow sits only 30–60
-    grey levels under the wall, and the lamp's own falloff across the frame is the same
-    magnitude, so no global threshold separates them. Seeds are found automatically; the
-    cards below are for the ones that come out wrong.`,
-    `# no interaction; writes masks + a contact sheet
-python3 scripts/auto_segment_teleop.py --write
-# replays hand-placed points from points.json
-python3 scripts/segment_teleop.py --write`],
+  ["3", "Rectify + binarise", `One command per set: detect tags, warp to the pinned
+    654×548 tag frame (measured aspect 1.196; three visible tags are enough — the fourth
+    is inferred from the session median), learn the threshold statistics on the region
+    inside the tags only, and hand SAM2 positive seeds plus the tag centres as negatives.
+    Hand points in <code>&lt;set&gt;/points.json</code> (tag-frame coordinates, from the
+    cards below) win over every automatic tier. A run limited by <code>--images</code>
+    merges into the set's manifest and labels by capture stem — it never truncates.`,
+    `python scripts/teleop_pipeline.py --teleop-root Teleops/source/teleop_set2
+# touch up two captures only
+python scripts/teleop_pipeline.py --teleop-root Teleops/source/teleop_set2 \
+  --images 'Teleops/source/teleop_set2/raw/teleop_upper[pg]_01.png'`],
+  ["4", "Fix by hand, from this page", `The cards below segment ON the flat-fielded
+    frame (illumination divided out, CLAHE — the shadow sits only 30–60 grey levels
+    under the wall, so both steps are needed). Serve the atlas through
+    <code>scripts/teleop_studio.py</code> and the loop closes without a terminal:
+    <b>save to folder</b> merges your points into the set's <code>points.json</code>,
+    <b>re-segment marked</b> runs SAM2 on exactly those captures and rebuilds this
+    page. On a plain static server the same points export via <b>copy points</b>.`,
+    `~/miniconda3/envs/umbra-bench/python.exe scripts/teleop_studio.py
+# then open http://localhost:8479/atlas.html`],
   ["5", "Link", `A capture is not a target — it is a shadow somebody produced <i>for</i> one.
     It fills <code>shadows.teleop</code> on that target's row and the row gains the tag
     <code>SO101_fleet_teleop</code>, so both halves share one <code>sample_id</code>.
     Matching is by capture name against the selection CSVs; class names come from the
     source dataset and are not always the English spelling (MPEG-7 ships <code>glas</code>),
     so exceptions go in <code>CLASS_ALIAS</code> rather than into a renamed photograph.`,
-    `# re-resolve sample_id only — keeps the committed masks
-python3 scripts/binarize_teleop.py --rematch --write
-python3 scripts/link_teleop.py            # dry run
-python3 scripts/link_teleop.py --write    # fill the slot, add the tag`],
+    `python scripts/link_teleop.py --manifest Teleops/source/teleop_set1/masks/manifest.json          # dry run
+python scripts/link_teleop.py --manifest Teleops/source/teleop_set1/masks/manifest.json --write`],
   ["6", "Rebuild", `The payload is read from the mask manifest, so anything the steps above
     changed reaches the dashboard here and nowhere else.`,
-    `python3 scripts/_build_teleop_payload.py
-python3 atlas/build_atlas.py`],
+    `python scripts/_build_teleop_payload.py     # bakes every set under Teleops/source/
+python atlas/build_atlas.py
+# (the studio's re-segment button runs both for you)`],
 ];
 
 function renderTeleop(){
