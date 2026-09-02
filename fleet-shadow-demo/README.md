@@ -365,19 +365,26 @@ a new machine runs the five-command chain in atlas/README.md once first.
 
 ### B. The demo video — the atlas does not produce this
 
-The video is its own two commands, downstream of the solves in `optimized/`
-(present here; gitignored, so a fresh checkout re-solves via ## Solving):
+The video is its own two commands, downstream of the solves in `optimized/`.
+That directory is **not** gitignored -- most of it is committed, 15849 files of
+earlier sweeps -- but the demo solves in it are untracked, so a fresh checkout
+has the sweeps and not these, and re-solves via ## Solving. (`results/` *is*
+gitignored, line 7; the CSVs under it are committed anyway because a tracked
+file overrides the rule.)
 
 ```bash
 python fleet-shadow-demo/08_reassemble.py --all     # fit-inverse, back onto the 1920x1080 canvas
 python fleet-shadow-demo/10_compose_video.py        # -> results/demo_video/*.mp4, one per scene + full cut
 ```
 
-Stage 8 applies each clip's recorded fit inverse so the letters land where
-the ad drew them (recovery measured to within resampling; `--check`
-round-trips it). Stage 10 composites letters that shared a shot back into
-one frame, aligned by source frame id — scene_06 is F A M I L Y assembling,
-not six separate clips. Output is real-time 5 fps by construction; it looks
+Stage 7 (`08_reassemble.py` — the file numbers and the stage numbers differ,
+since stages 1-6 use scripts 01-07) applies each clip's recorded fit inverse so
+the letters land where the ad drew them: 0.187 -> 0.825 IoU against the
+authored frames on scene_06_A, against the solver's own 0.828, so the recovery
+is complete to within resampling. `--check` round-trips the transform rather
+than trusting the derivation. Stage 9 (`10_compose_video.py`) composites
+letters that shared a shot back into one frame, aligned by source frame id —
+scene_06 is F A M I L Y assembling, not six separate clips. Output is real-time 5 fps by construction; it looks
 slow because it is.
 
 Decisions already taken (see results/OVERNIGHT_NOTES.md): the demo is a
