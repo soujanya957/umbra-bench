@@ -20,6 +20,7 @@ re-running after fixing a few labels costs only the stages downstream of them.
 | 6 | index the track | `../scripts/build_sequence_metadata.py` | auto |
 | 7 | *(after solving)* put the shadows back on the source canvas | `08_reassemble.py` | auto |
 | 8 | score whether the shadow reads as the letter | `09_clip_score.py` | auto |
+| 9 | composite the scenes back into video | `10_compose_video.py` | auto |
 
 Step 2 is manual because deciding *which* shape in a frame is the subject is not
 something the pixels answer. Everything else is.
@@ -258,6 +259,34 @@ because they are the same picture, and the prompt then asks for "the digit 1",
 which a serif capital I from a title card is not — so the authored frame misses
 too and there is no denominator. That is the class design, not the solve.
 
+### The video
+
+```bash
+python 10_compose_video.py
+```
+
+The sequences track holds one letter per clip, but the ad does not: scene_06 is
+F A M I L Y being spelled out, with L entering at source frame 0712 and Y at
+0717. Stage 7 put every shadow back at its true position on the 1920x1080
+canvas, which is what makes reassembling the shot possible — the letters go
+back into the same frame and the word assembles.
+
+**Alignment is by source frame id, never by index.** A letter is only tracked
+while it is on screen, so scene_06 has four frames of L against ten of A;
+pairing f03 with f03 would put different moments of the ad in one picture.
+`reassembly.json` carries `source_frame_ids` and that is the key.
+
+Written with OpenCV rather than ffmpeg, which is not installed here. One mp4 per
+scene plus `demo_01.mp4` for the whole cut, 92 frames. The rate is the
+sequences' own 5 fps — the shot was sampled every 5th frame of 25 fps footage,
+so that is real time, and playing it faster would show motion nothing was
+solved for.
+
+```
+results/demo_video/scene_01.mp4 … scene_06.mp4
+results/demo_video/demo_01.mp4
+```
+
 ### Scoring
 
 ```bash
@@ -296,6 +325,7 @@ run_demo.py               the driver — start here
 07_make_sequences.py      per-sequence crop → the sequences track
 08_reassemble.py          solved shadows → the 1920x1080 canvas, fit inverted
 09_clip_score.py          retrieval rank: does the shadow read as the letter
+10_compose_video.py       scenes recomposited from the per-letter clips -> mp4
 scenes/                   extracted frames
 letters_sam2_small/       SAM output
 letters_clean/            final masks, flat, one directory
