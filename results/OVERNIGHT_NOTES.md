@@ -61,16 +61,22 @@ The tight-pass A/B (queued) answers the score half either way.
 All 13 clips: every transition feasible, zero arm swaps. Legibility CSV predates
 the last few solves, so some clips lack a row until stage 09 re-runs.
 
-## The headline A/B (star_spin, new config vs archaeological independent solve)
+## The headline A/B (star_spin) — with its attribution stated carefully
 
-| | independent (v0) | temporal chain + loop-aware |
+| | archaeological config (v0) | current config |
 |---|---|---|
 | wrap dq | 212.5° | 63.8° (feasible) |
 | infeasible transitions | 5/5 | 0/5 |
 | arm swaps | 5/5 | 0/5 |
 | mean frame IoU (vs fitted) | 0.668 | 0.646 |
 
-Two IoU points buy the clip's entire playability. loop_anchor recorded
-{attempted: false, "wrap already reachable"} — the guard checked and declined,
-because the chain alone landed a feasible wrap. Both solves are on the board
-(source=optimizer / optimizer_v0).
+Two IoU points buy the clip's entire playability — but the credit belongs to
+the WHOLE current configuration (clip fit + chained warm starts + penalties),
+not to --loop-close: loop_anchor recorded {attempted: false, "wrap already
+reachable"} — the guard checked and declined because there was nothing to fix.
+The old wrap failure was a symptom of the old config, and the v0 baseline
+measures a config-vs-config difference, not the flag's effect. What
+--loop-close is worth stays open until a looping clip actually triggers it;
+if none of the remaining ten do, it is reported as an untriggered safeguard,
+not a fix. The card shows loop-close status per solve so "did not fire" and
+"was not run" cannot be conflated. (Framing per umbra-bench-9f.)

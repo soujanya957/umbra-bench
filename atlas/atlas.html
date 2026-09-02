@@ -2250,6 +2250,19 @@ function seqCard(q){
           ceiling ${num(lg.ceiling_top1)} → ratio <b>${num(lg.ratio_top1)}</b> ·
           MRR ratio ${num(lg.ratio_rr)} · chance ${num(lg.chance_top1)}</div>`;
       })()}
+      ${(() => {
+        // loop-close status, only for clips scored with the wrap: "did not
+        // fire" and "was not run" must not be conflated — an untriggered
+        // safeguard is not a fix (attribution rule, umbra-bench-9f).
+        if(!so.loop_scored) return "";
+        const la = so.loop_anchor;
+        if(la == null) return `<div class="warnline">loop-close: not run (pre-flag solve)</div>`;
+        if(typeof la === "object")
+          return `<div class="warnline">loop-close: ${la.attempted
+            ? (la.accepted ? "fired, accepted" : "fired, declined (would worsen a neighbour)")
+            : "not needed"} — ${la.reason || ("wrap " + (la.dq_wrap_deg ?? "?") + "°")}</div>`;
+        return `<div class="warnline">loop-close: ${la}</div>`;
+      })()}
       ${fitNote}
       ${armWarn}
       ${mism}`;
