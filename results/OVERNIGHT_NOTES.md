@@ -106,14 +106,19 @@ penalty rather than a hinge that fires past the bound — open solver item.
   (flower, 79.0→68.2°, free), 1 correctly refused (wiper: closing the wrap to
   68.7° would blow the previous step to 131.7° — the guard's design working),
   2 defeated (windmills: closure returned identical wrap distances).
-- Root cause of the 2 defeats (9f, from the logs): **optimize_staged accepts
-  each phase on raw IoU, not the penalised loss** — windmill_n3's log shows a
-  feasible pose at IoU 0.384 discarded for an infeasible one at 0.411. The
-  reachability penalty steers the search and the acceptance rule throws away
-  what it bought. This seam affects every chained frame, not just loop-close;
-  fix in flight (lexicographic (feasible, iou) acceptance, matching the rule
-  run_sequence already uses across restarts). --loop-close is NOT weak; two of
-  its failures are downstream of this seam.
+- The acceptance seam (9f, from the logs): **optimize_staged accepts each
+  phase on raw IoU, not the penalised loss** — windmill_n3's log shows a
+  feasible pose at IoU 0.384 discarded for an infeasible one at 0.411.
+  Evidence audit (strict adjacency, after a first regex pass overclaimed):
+  **1 verified instance across 26 clips; windmill_n5 and reeds_n5
+  undeterminable** — the Manifold path logs no dq for the discarded candidate.
+  Honest characterisation: real, demonstrated once, rare (it only bites when
+  feasibility genuinely costs IoU); the fix (6a9b285, lexicographic
+  (reachable, IoU) at all three phase boundaries) is correct at n=1 — a rule
+  that can discard a playable clip for 0.027 IoU is wrong regardless of
+  frequency. Sober predictions on record: windmill_n3 changes materially
+  under re-solve; the other fired clips may not, and that would not be the
+  fix failing.
 - planner_forecast in the summaries covers only forward steps (no wrap) — a
   summary-side gap; the atlas scorer computes dq from the joint columns and
   has counted the wrap from day one (star_spin validation: 5/5 with wrap).
