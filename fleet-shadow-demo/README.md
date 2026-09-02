@@ -19,6 +19,7 @@ re-running after fixing a few labels costs only the stages downstream of them.
 | 5 | group into sequences, crop per clip | `07_make_sequences.py` | auto |
 | 6 | index the track | `../scripts/build_sequence_metadata.py` | auto |
 | 7 | *(after solving)* put the shadows back on the source canvas | `08_reassemble.py` | auto |
+| 8 | score whether the shadow reads as the letter | `09_clip_score.py` | auto |
 
 Step 2 is manual because deciding *which* shape in a frame is the subject is not
 something the pixels answer. Everything else is.
@@ -208,6 +209,35 @@ can reach, and the letter still lands where the ad put it.
 inverse instead of trusting the derivation -- 0.988 on `scene_06_A`, 0.951 on
 the thinner `scene_06_L`, the difference being resampling.
 
+### Is it legible?
+
+```bash
+python 09_clip_score.py
+```
+
+IoU is not the demo's quality number and this set shows why. `scene_05_M`
+scores 0.681 and CLIP cannot name it; `scene_06_A` scores 0.828 and is read
+correctly as often as the authored frame is. IoU measures overlap with a
+silhouette the clip fit was free to move — legibility is a different question.
+
+Retrieval rank over the benchmark's own 49 classes, top-1 and MRR, chance
+0.0204. The class set, the alias map and `recognizability_ratio` all come from
+`tests/clip_eval.py` and `scripts/semantic_metrics.py` rather than being
+rewritten here, and the authored frames are scored through the identical path
+in the same run as the ceiling — CLIP is half-blind to 1-bit silhouettes, so a
+low absolute score cannot separate "the shadow is poor" from "the judge cannot
+see either". **The ratio is the quotable number, not the raw score.**
+
+Passing the repo's `glyph_prompt` is not a detail. With the default template
+the prompt reads "a shadow of a A", which never says the label is a letter, and
+the ranking is noise: a clean authored A scored top-1 0.000 while an illegible
+four-pixel L fragment scored 1.000.
+
+The three I clips print `--` rather than a ratio. I/l/1 fold to one class
+because they are the same picture, and the prompt then asks for "the digit 1",
+which a serif capital I from a title card is not — so the authored frame misses
+too and there is no denominator. That is the class design, not the solve.
+
 ### Scoring
 
 ```bash
@@ -245,6 +275,7 @@ run_demo.py               the driver — start here
 06_clean_masks.py         specks, bridges, holes, smoothing — one connected shadow
 07_make_sequences.py      per-sequence crop → the sequences track
 08_reassemble.py          solved shadows → the 1920x1080 canvas, fit inverted
+09_clip_score.py          retrieval rank: does the shadow read as the letter
 scenes/                   extracted frames
 letters_sam2_small/       SAM output
 letters_clean/            final masks, flat, one directory
