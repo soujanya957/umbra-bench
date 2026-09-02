@@ -18,6 +18,7 @@ re-running after fixing a few labels costs only the stages downstream of them.
 | 4 | clean the masks | `06_clean_masks.py` | auto |
 | 5 | group into sequences, crop per clip | `07_make_sequences.py` | auto |
 | 6 | index the track | `../scripts/build_sequence_metadata.py` | auto |
+| 7 | *(after solving)* put the shadows back on the source canvas | `08_reassemble.py` | auto |
 
 Step 2 is manual because deciding *which* shape in a frame is the subject is not
 something the pixels answer. Everything else is.
@@ -32,6 +33,7 @@ sequences/demo_01_scene_04_M/f00.png …    1-bit, dark = shape
 sequences/demo_01_scene_04_M/source.json  crop box, source frame ids, fps, loop
 sequences.jsonl                           the index, built by stage 6
 results/demo_review/_all.png              every sequence, one glance
+results/demo_reassembled/<seq>/f00.png …  stage 7, on the 1920x1080 canvas
 ```
 
 ---
@@ -163,6 +165,49 @@ L 0.798, A 0.797, F 0.787, M 0.756 under
 per-frame arm, where each frame is solved for its own best appearance and the
 transitions are allowed to be whatever they are.
 
+**`--loop-close`** — for a clip that loops, and only then. The frame loop is a
+forward pass, so every frame is anchored to its predecessor and the last-to-first
+transition is anchored to nothing — which is the transition that fails: in the
+two archive runs whose only infeasible step was the wrap, it jumped 95.5° and
+71.2° against a 68.75° bound. The flag re-solves the final frame against frame
+1's pose and keeps the result only if it is reachable from *both* neighbours, so
+the wrap can improve or stay as it was but never quietly get worse; `loop_anchor`
+in the summary records which happened. The demo clips are cuts from a film and do
+not loop, so they do not want it. `--export-clip-loop` is a different thing — it
+adds a closing morph at bake time, which makes an unplayable wrap look smooth.
+
+### Back onto the source canvas
+
+```bash
+python 08_reassemble.py --all
+```
+
+Solving is not the last step, and the step after it is not a paste.
+
+`source.json` ties each sequence to a rectangle on the 1920x1080 source, so a
+solved shadow can go back where the glyph was. But `--fit-target` applied a
+similarity transform to the whole clip before solving, so the shadow lives in
+fitted coordinates -- scale 0.64-1.02, shift 8-41 px in a 128 px frame -- and
+pasted through the crop unchanged it lands visibly displaced and resized
+against the footage it came from.
+
+The fit is a similarity transform, so it inverts exactly. Inverting it per frame
+before the crop recovers the placement in full:
+
+| clip | pasted as solved | inverted first | the solve, vs its fitted target |
+| --- | --- | --- | --- |
+| `scene_06_A` | 0.187 | **0.825** | 0.828 |
+| `scene_06_L` | 0.000 | **0.561** | 0.548 |
+
+So the gap between scoring against the authored frame and against the fitted one
+is placement, not solve quality, and it does not reach the video. It also keeps
+two things apart that the pipeline had run together: the rig casts wherever it
+can reach, and the letter still lands where the ad put it.
+
+`--check` (on by default) round-trips an authored frame through the fit and its
+inverse instead of trusting the derivation -- 0.988 on `scene_06_A`, 0.951 on
+the thinner `scene_06_L`, the difference being resampling.
+
 ### Scoring
 
 ```bash
@@ -199,6 +244,7 @@ run_demo.py               the driver — start here
 05_split_objects.py       FALLBACK for keypoints that lumped several glyphs into one
 06_clean_masks.py         specks, bridges, holes, smoothing — one connected shadow
 07_make_sequences.py      per-sequence crop → the sequences track
+08_reassemble.py          solved shadows → the 1920x1080 canvas, fit inverted
 scenes/                   extracted frames
 letters_sam2_small/       SAM output
 letters_clean/            final masks, flat, one directory
