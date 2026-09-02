@@ -144,6 +144,28 @@ def load_mask(path: str, size: int | None = None) -> np.ndarray:
     return m.astype(np.uint8)
 
 
+def _apply_fit(mask: np.ndarray, fit: dict) -> np.ndarray:
+    """Re-apply a run's recorded clip-level target_fit to an authored frame.
+
+    Mirrors fleet-shadow-art target_fit.warp_target exactly (similarity about
+    the canvas centre, inverse-mapped, bilinear, thresholded at 0.5), so the
+    reconstructed "shown" frame is the target the solver was actually given.
+    Fit units are the run's render-size pixels -- apply at that size.
+    """
+    from scipy.ndimage import affine_transform
+    t = mask.astype(np.float32)
+    H, W = t.shape
+    c = np.array([(H - 1) / 2.0, (W - 1) / 2.0])
+    d = np.array([float(fit.get("dy", 0.0)), float(fit.get("dx", 0.0))])
+    rot = float(fit.get("rot", 0.0) or 0.0)
+    scale = float(fit.get("scale", 1.0) or 1.0)
+    ct, st = np.cos(-rot), np.sin(-rot)
+    M = np.array([[ct, -st], [st, ct]], dtype=float) / max(scale, 1e-6)
+    off = c - M @ (c + d)
+    out = affine_transform(t, M, offset=off, order=1, mode="constant", cval=0.0)
+    return (out > 0.5).astype(np.uint8)
+
+
 def _read_sequence_index(bench: str, path: str) -> dict:
     out = {}
     fp = os.path.join(bench, path)
@@ -292,8 +314,8 @@ def score_sequence(seq_id: str, source: str, shadow_paths: list, q_frames: list,
     targets = [load_mask(p, size) for p in target_paths[:n]] if target_paths else []
     qs = [(_joints_array(q_frames[i]) if q_frames else None) for i in range(n)]
 
-    stub = {"sequence_id": seq_id, "source": source, "n_frames": n,
-            "loop": int(loop), "size": size}
+    stub = {"sequence_id": seq_id, "source": source, "ref": "original",
+            "n_frames": n, "loop": int(loop), "size": size}
 
     # S1 -- per-frame quality
     frame_rows, per_metric = [], {}
@@ -367,7 +389,40 @@ def score_sequence(seq_id: str, source: str, shadow_paths: list, q_frames: list,
     # interior steps as one cell, for eyeballing a clip without the frame rows
     agg["dq_max_deg_by_transition"] = json.dumps(
         [t["dq_max_deg"] for t in transitions if t["label"] != "wrap"])
-    return frame_rows + [agg]
+    rows = frame_rows + [agg]
+
+    # The static benchmark's answer to the same problem, borrowed whole
+    # (compute_metrics.py refs): when the run solved a FITTED target, score
+    # against that target too. ref=original above is the end-to-end read with
+    # the fit counted as error; ref=shown is "did it solve the problem it was
+    # given", reconstructed by re-applying the recorded transform to the
+    # authored frames. S2/S3 are not repeated -- transitions live in joint and
+    # shadow space and the clip-level transform does not change them.
+    if fit and targets:
+        shown = [_apply_fit(t, fit) for t in targets]
+        s_metric = {}
+        for i in range(n):
+            row = dict(stub, ref="shown", row="frame", frame_idx=i)
+            if iou_reported and i < len(iou_reported):
+                row["iou_reported"] = iou_reported[i]
+            if shadows[i] is not None:
+                m = all_metrics(shown[i], shadows[i])
+                row.update(m)
+                for k, v in m.items():
+                    if isinstance(v, (int, float)):
+                        s_metric.setdefault(k, []).append(v)
+            rows.append(row)
+        sagg = dict(stub, ref="shown", row="aggregate",
+                    n_transitions=len(transitions))
+        if iou_reported:
+            sagg.update(_agg(iou_reported, "iou_reported"))
+        for k, vals in s_metric.items():
+            sagg.update(_agg(vals, k))
+        for k in ("scale", "dx", "dy", "clip_frac", "at_bound"):
+            if k in fit:
+                sagg[f"fit_{k}"] = fit[k]
+        rows.append(sagg)
+    return rows
 
 
 # --- drivers ------------------------------------------------------------------

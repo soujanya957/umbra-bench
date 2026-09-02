@@ -2188,12 +2188,15 @@ function seqCard(q){
       ? ` · solved at ${so.solve_size}px` : "";
     // A clip solved against a fitted target has two honest IoUs: vs the
     // authored frames (end to end, fit counted as error) and vs what the
-    // solver was actually asked to cast. Show both whenever they diverge.
-    const fitted = h.iou_reported_mean != null && h.iou_mean != null
-                && Math.abs(h.iou_reported_mean - h.iou_mean) > 0.02;
+    // solver was actually asked to cast. Show both whenever they diverge —
+    // preferring the recomputed ref=shown number (validated against the run's
+    // recorded IoU to within resampling noise) over the run's own report.
+    const vsShown = h.iou_shown_mean ?? h.iou_reported_mean;
+    const fitted = vsShown != null && h.iou_mean != null
+                && Math.abs(vsShown - h.iou_mean) > 0.02;
     const iouCells = fitted
       ? `<div><span>IoU vs authored</span><b>${num(h.iou_mean)}</b></div>
-         <div><span>vs fitted target</span><b>${num(h.iou_reported_mean)}</b></div>`
+         <div><span>vs fitted target</span><b>${num(vsShown)}</b></div>`
       : `<div><span>mean frame IoU</span><b>${num(h.iou_mean)}</b></div>
          <div><span>worst frame</span><b>${num(h.iou_min)}</b></div>`;
     const fitNote = so.fit

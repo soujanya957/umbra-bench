@@ -105,6 +105,7 @@ def read_solves(bench: str):
         with open(path, encoding="utf-8", newline="") as fh:
             for row in csv.DictReader(fh):
                 key = (row["sequence_id"], row["source"])
+                ref = row.get("ref") or "original"
                 if owner.get(key) not in (None, path):
                     print(f"[!] {os.path.basename(path)} re-scores "
                           f"{key[0]}/{key[1]}; replacing the rows from "
@@ -115,13 +116,18 @@ def read_solves(bench: str):
                     frames.pop(key, None)
                 if row["row"] == "aggregate":
                     row["_csv"] = os.path.basename(path)
-                    agg[key] = row
+                    agg.setdefault(key, {})[ref] = row
                 elif row["row"] == "frame":
-                    frames.setdefault(key, []).append(row)
+                    frames.setdefault(key, {}).setdefault(ref, []).append(row)
     return agg, frames
 
 
-def solve_block(row: dict, frame_rows: list, bench: str, px: int) -> dict:
+def solve_block(by_ref: dict, frames_by_ref: dict, bench: str, px: int) -> dict:
+    """One source's solve, from its ref=original rows plus, when the run solved
+    a fitted target, the ref=shown reconstruction (see sequence_metrics.py)."""
+    row = by_ref["original"]
+    frame_rows = frames_by_ref.get("original", [])
+    shown = by_ref.get("shown")
     by_tr = None
     if row.get("dq_max_deg_by_transition"):
         try:
@@ -151,7 +157,12 @@ def solve_block(row: dict, frame_rows: list, bench: str, px: int) -> dict:
             "iou_mean": _f(row.get("iou_mean")),
             "iou_min": _f(row.get("iou_min")),
             "iou_reported_mean": _f(row.get("iou_reported_mean")),
+            "iou_shown_mean": _f(shown.get("iou_mean")) if shown else None,
+            "iou_shown_min": _f(shown.get("iou_min")) if shown else None,
         },
+        # shape metrics vs what the solver was actually asked to cast
+        "s1_shown": ({m: st for m in ("iou", "boundary_iou", "cldice", "nsd")
+                      if (st := _stats(shown, m))} if shown else None),
         "fit": ({k: _f(row.get(f"fit_{k}")) for k in
                  ("scale", "dx", "dy", "clip_frac")} |
                 {"at_bound": row.get("fit_at_bound") in ("True", "true", "1")}
@@ -226,8 +237,9 @@ def main():
             except (json.JSONDecodeError, OSError) as e:
                 raise SystemExit(f"[!] {sj} exists but is unreadable: {e}")
 
-        solves = {s: solve_block(agg[(i, s)], frames.get((i, s), []), a.bench, a.px)
-                  for (i, s) in agg if i == sid}
+        solves = {s: solve_block(agg[(i, s)], frames.get((i, s), {}),
+                                 a.bench, a.px)
+                  for (i, s) in agg if i == sid and "original" in agg[(i, s)]}
         rec = {
             "id": sid,
             "cls": r.get("class"),
