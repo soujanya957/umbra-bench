@@ -59,7 +59,9 @@ TELEOP = os.path.join(_BENCH, "Teleops")
 
 TAG_DICT = cv2.aruco.DICT_APRILTAG_36h11
 TAG_IDS = (0, 1, 2, 3)          # clockwise from top-left; 29/29 captures agree
-OUT_W, OUT_H = 560, 468         # pinned from the measured outer-quad aspect 1.1956
+OUT_W, OUT_H = 654, 548         # pinned from the measured outer-quad aspect 1.1956;
+                                # matches the pre-existing tag_rectified/ images
+                                # (my warp reproduces them to ~2 grey levels)
 TAG_DILATE = 6                  # px of margin around each tag footprint
 
 
@@ -299,8 +301,45 @@ def process(path: str, out_root: str, det=None):
         return dict(capture=stem, error="unreadable")
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     quad, polys = find_outer_quad(gray, det)
+    quad_source = "4tag"
     if quad is None:
-        return dict(capture=stem, error=f"tags found: {sorted(polys)} (need 0-3)")
+        found = polys if isinstance(polys, set) else set()
+        median_q = getattr(process, "median_quad", None)
+        if (median_q is not None and len(found) == 3
+                and not getattr(process, "no_3tag", False)):
+            # Three tags seen, camera near-fixed across the session (corner
+            # std 2-4 px): fit an affine from the median quad's three matched
+            # corners to the detected ones and infer only the missing corner.
+            # Recorded as quad_source=3tag-inferred, never silently.
+            corners, ids, _ = det.detectMarkers(gray)
+            centre = np.mean([c.mean(axis=1)[0] for c in corners], axis=0)
+            det_outer, polys = {}, {}
+            for tid, c in zip(ids.flatten(), corners):
+                pts = c[0]
+                det_outer[int(tid)] = pts[
+                    np.argmax(np.linalg.norm(pts - centre, axis=1))]
+                polys[int(tid)] = pts
+            have = sorted(det_outer)
+            src = np.array([median_q[i] for i in have], np.float32)
+            dst_ = np.array([det_outer[i] for i in have], np.float32)
+            A = cv2.getAffineTransform(src, dst_)
+            missing = (set(TAG_IDS) - set(have)).pop()
+            inferred = (A @ np.array([*median_q[missing], 1.0]))[:2]
+            det_outer[missing] = inferred.astype(np.float32)
+            # the missing tag's footprint, for exclusion/inner: the session's
+            # median polygon for that id, moved by the same affine
+            mp = getattr(process, "median_polys", {}).get(missing)
+            if mp is not None:
+                ones = np.hstack([mp, np.ones((len(mp), 1))])
+                polys[missing] = (ones @ A.T).astype(np.float32)
+            else:
+                return dict(capture=stem,
+                            error="3-tag capture but no session median poly")
+            quad = np.array([det_outer[i] for i in TAG_IDS], np.float32)
+            quad_source = "3tag-inferred"
+        else:
+            return dict(capture=stem,
+                        error=f"tags found: {sorted(found)} (need 0-3)")
 
     rect, tag_polys = rectify(img, quad, polys)
     dst = np.array([[0, 0], [OUT_W, 0], [OUT_W, OUT_H], [0, OUT_H]], np.float32)
@@ -331,7 +370,7 @@ def process(path: str, out_root: str, det=None):
         mask, thr, _ = binarize_v2(rect_path, excl, inner)
         backend = "otsu"
 
-    masks_dir = os.path.join(out_root, "masks")
+    masks_dir = process.masks_dir or os.path.join(out_root, "masks")
     os.makedirs(masks_dir, exist_ok=True)
     # dark = shadow on white, the benchmark convention
     Image.fromarray(((1 - mask) * 255).astype(np.uint8)).save(
@@ -345,27 +384,35 @@ def process(path: str, out_root: str, det=None):
             "out_size": [OUT_W, OUT_H],
             "tag_family": "36h11",
             "tag_ids": list(TAG_IDS),
+            "quad_source": quad_source,
             "quad_outer_corners": quad.tolist(),
             "tag_polys_rectified": {str(t): p.tolist()
                                     for t, p in tag_polys.items()},
             "tag_dilate_px": TAG_DILATE,
         }, f, indent=1)
 
-    return dict(capture=stem, mask_backend=backend,
+    rel = lambda q: os.path.relpath(q, _BENCH).replace("\\", "/")
+    return dict(capture=stem, mask_backend=backend, quad_source=quad_source,
                 otsu_thr=None if thr is None else round(thr, 4),
                 shape_frac=round(float(mask.mean()), 4),
-                n_components=int(cv2.connectedComponents(mask)[0]) - 1)
+                n_components=int(cv2.connectedComponents(mask)[0]) - 1,
+                raw=rel(path), rectified=rel(rect_path),
+                mask=rel(os.path.join(masks_dir, f"{stem}_mask.png")))
 
 
-def contact_sheet(rows: list, out_root: str, thumb_h: int = 160):
+def contact_sheet(rows: list, out_root: str, raw_dir: str, thumb_h: int = 160):
     tiles = []
     for r in rows:
         if "error" in r:
             continue
         stem = r["capture"]
-        raw = cv2.imread(os.path.join(TELEOP, f"{stem}.png"))
+        raw = cv2.imread(os.path.join(raw_dir, f"{stem}.png"))
+        if raw is None:
+            continue
         rect = cv2.imread(os.path.join(out_root, f"{stem}_rectified.png"))
-        mask = cv2.imread(os.path.join(out_root, "masks", f"{stem}_mask.png"))
+        mask = cv2.imread(os.path.join(process.masks_dir or
+                                       os.path.join(out_root, "masks"),
+                                       f"{stem}_mask.png"))
         row = [cv2.resize(x, (int(x.shape[1] * thumb_h / x.shape[0]), thumb_h))
                for x in (raw, rect, mask)]
         tiles.append(cv2.hconcat(row))
@@ -380,10 +427,19 @@ def contact_sheet(rows: list, out_root: str, thumb_h: int = 160):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--teleop-root", default=None,
+                    help="a dataset dir with raw/ inside (e.g. "
+                         "Teleops/teleop_set1); outputs go to its "
+                         "tag_rectified/ and masks/")
     ap.add_argument("--images", default=None,
-                    help="glob of raw captures (default: every Teleops/*.png "
-                         "that is not a _rectified, _mask or montage file)")
-    ap.add_argument("--out-dir", default=os.path.join(TELEOP, "rectified2"))
+                    help="explicit glob of raw captures (overrides --teleop-root)")
+    ap.add_argument("--out-dir", default=None)
+    ap.add_argument("--masks-dir", default=None,
+                    help="default: <out-dir>/masks, or <root>/masks with "
+                         "--teleop-root")
+    ap.add_argument("--no-3tag", action="store_true",
+                    help="refuse captures with only three tags instead of "
+                         "inferring the fourth corner from the session quad")
     ap.add_argument("--backend", choices=["auto", "sam2", "otsu"], default="auto",
                     help="auto = SAM2 when available (v1's production tier), "
                          "otsu fallback")
@@ -392,10 +448,18 @@ def main():
 
     if a.images:
         paths = sorted(glob.glob(a.images))
+    elif a.teleop_root:
+        paths = sorted(glob.glob(os.path.join(a.teleop_root, "raw", "*.png")))
+        if a.out_dir is None:
+            a.out_dir = os.path.join(a.teleop_root, "tag_rectified")
+        if a.masks_dir is None:
+            a.masks_dir = os.path.join(a.teleop_root, "masks")
     else:
         paths = [p for p in sorted(glob.glob(os.path.join(TELEOP, "*.png")))
                  if "_rectified" not in p and "_mask" not in p
                  and "montage" not in p]
+    if a.out_dir is None:
+        a.out_dir = os.path.join(TELEOP, "rectified2")
     if not paths:
         raise SystemExit("[!] no raw captures matched")
 
@@ -403,6 +467,20 @@ def main():
     det = detector()
     process.ckpt = None if a.backend == "otsu" else _resolve_ckpt()
     process.points = load_points()
+    process.no_3tag = a.no_3tag
+    process.masks_dir = a.masks_dir
+    # session median quad, for 3-tag inference
+    qs, polys_acc = [], {i: [] for i in TAG_IDS}
+    for p_ in paths:
+        g = cv2.imread(p_)
+        if g is None: continue
+        q, pl = find_outer_quad(cv2.cvtColor(g, cv2.COLOR_BGR2GRAY), det)
+        if q is not None:
+            qs.append(q)
+            for i in TAG_IDS: polys_acc[i].append(pl[i])
+    process.median_quad = np.median(np.stack(qs), axis=0) if len(qs) >= 3 else None
+    process.median_polys = ({i: np.median(np.stack(v), axis=0)
+                             for i, v in polys_acc.items()} if len(qs) >= 3 else {})
     if a.backend == "sam2" and not process.ckpt:
         raise SystemExit("[!] --backend sam2 but no checkpoint found")
     if process.ckpt is None and a.backend == "auto":
@@ -414,13 +492,45 @@ def main():
         tag = r.get("error") or (f"{r['mask_backend']:9} frac {r['shape_frac']:.3f}")
         print(f"  {r['capture']:44} {tag}")
 
-    with open(os.path.join(a.out_dir, "masks", "manifest.json"), "w",
+    # labels.csv -- the machine-readable class extraction the capture names
+    # encode two different ways: set1's long stems resolve through the
+    # selection CSVs (binarize_teleop.match, the v1 mechanism, which also
+    # yields the benchmark sample_id), set2's short stems parse as
+    # teleop_<class>_<take>.
+    import csv as _csv
+    import re as _re
+    from binarize_teleop import load_selection, resolve as _resolve
+    sel = load_selection()
+    lab_path = os.path.join(a.masks_dir or a.out_dir, "..", "labels.csv")         if a.teleop_root else os.path.join(a.out_dir, "labels.csv")
+    lab_path = os.path.normpath(os.path.join(a.teleop_root, "labels.csv"))         if a.teleop_root else os.path.normpath(lab_path)
+    with open(lab_path, "w", newline="", encoding="utf-8") as f:
+        w = _csv.writer(f)
+        w.writerow(["capture", "class", "take", "sample_id",
+                    "quad_source", "mask_backend", "shape_frac", "mask"])
+        for r in rows:
+            stem = r["capture"]
+            cls, take, sid = "", "", ""
+            m2 = _re.match(r"^teleop_([A-Za-z0-9]+)_(\d+)$", stem)
+            if m2:
+                cls, take = m2.group(1), m2.group(2)
+            else:
+                hit = _resolve(stem, sel)
+                cls = hit.get("class") or ""
+                sid = hit.get("sample_id") or ""
+            r["class"], r["sample_id"] = cls, sid
+            w.writerow([stem, cls, take, sid, r.get("quad_source", ""),
+                        r["mask_backend"], r["shape_frac"], r["mask"]])
+    print(f"[teleop-v2] labels -> {lab_path}")
+    with open(os.path.join(a.masks_dir or os.path.join(a.out_dir, "masks"),
+                           "manifest.json"), "w",
               encoding="utf-8") as f:
         json.dump({"out_size": [OUT_W, OUT_H], "tag_dilate_px": TAG_DILATE,
                    "n": len(rows), "records": rows, "skipped": skipped},
                   f, indent=1)
     if not a.no_sheet:
-        contact_sheet(rows, a.out_dir)
+        raw_dir = (os.path.join(a.teleop_root, "raw") if a.teleop_root
+                   else os.path.dirname(paths[0]))
+        contact_sheet(rows, a.out_dir, raw_dir)
     print(f"[teleop-v2] {len(rows)} processed, {len(skipped)} skipped "
           f"-> {a.out_dir}")
 

@@ -29,6 +29,11 @@ BLANK = {"path": None, "captured_at": None, "operator": None, "n_arms": None,
 ap = argparse.ArgumentParser(description=__doc__,
                              formatter_class=argparse.RawDescriptionHelpFormatter)
 ap.add_argument("--write", action="store_true")
+ap.add_argument("--manifest",
+                default=os.path.join(rc.BENCH, "Teleops", "masks",
+                                     "manifest.json"),
+                help="which masks manifest to link (the v2 sets keep theirs "
+                     "at Teleops/source/teleop_setN/masks/manifest.json)")
 a = ap.parse_args()
 
 MP = os.path.join(rc.BENCH, "metadata.jsonl")
@@ -36,7 +41,7 @@ rows = [json.loads(l) for l in open(MP)]
 index = {r["id"]: r for r in rows}
 v2_of = {r["rescue"]["derived_from"]: r["id"] for r in rows if r.get("version") == 2}
 
-man = json.load(open(os.path.join(rc.BENCH, "Teleops", "masks", "manifest.json")))
+man = json.load(open(a.manifest))
 linked, retargeted, orphan, repeats = [], [], [], []
 touched = set()
 for rec in man["records"]:
@@ -62,7 +67,7 @@ for rec in man["records"]:
         row.setdefault("shadows", {})["teleop"] = dict(BLANK)
     entry = {
         "path": rec.get("mask", cap + "_mask.png"),
-        "photo": cap + ".png",
+        "photo": rec.get("raw", cap + ".png"),
         "rectified": rec["rectified"],
         "captured_at": None,
         "operator": None,
