@@ -2263,8 +2263,11 @@ function seqCard(q){
         if(la == null) return `<div class="warnline">loop-close: not run (pre-flag solve)</div>`;
         if(typeof la === "object")
           return `<div class="warnline">loop-close: ${la.attempted
-            ? (la.accepted ? "fired, accepted" : "fired, declined (would worsen a neighbour)")
-            : "not needed"} — ${la.reason || ("wrap " + (la.dq_wrap_deg ?? "?") + "°")}</div>`;
+            ? (la.accepted ? "fired, accepted" : "fired, declined")
+            : "not needed"} — ${la.reason || ("wrap " + (la.dq_wrap_deg ?? "?") + "°"
+              + (la.attempted && la.dq_wrap_deg_closed != null
+                 ? " → " + la.dq_wrap_deg_closed + "°, neighbour " + (la.dq_prev_deg_closed ?? "?") + "°"
+                 : ""))}</div>`;
         return `<div class="warnline">loop-close: ${la}</div>`;
       })()}
       ${fitNote}
