@@ -367,6 +367,54 @@ def rows_from_run(a, seq_index: dict, thr_deg: float | None) -> list[dict]:
         iou_reported=[f["iou_reported"] for f in run["frames"]])
 
 
+def rows_from_static_sweep(a, seq_index: dict, thr_deg: float | None) -> list[dict]:
+    """Score a run_base_optimizer sweep over `targets_sequences/` as clips.
+
+    The frame-independent solve is the baseline the temporal metrics exist to
+    condemn: nothing couples consecutive frames, so per-frame IoU comes out
+    healthy and the transitions do not. Each frame dir carries results.json
+    with the best run's q_rad (flat, 6 dof per arm, radians) -- everything S2
+    needs -- and <stem>_best.png for the mask side. Emitted with
+    source="optimizer_static" so it sits beside a sequence-aware "optimizer"
+    solve of the same clip rather than overwriting it.
+    """
+    rows = []
+    for sid, rec in seq_index.items():
+        if a.sequence and sid != a.sequence:
+            continue
+        d = os.path.join(a.static_sweep, sid)
+        if not os.path.isdir(d):
+            continue
+        stems = [os.path.splitext(os.path.basename(p))[0] for p in rec["frames"]]
+        shadow_paths, q_frames, iou_rep = [], [], []
+        for stem in stems:
+            fd = os.path.join(d, stem)
+            shadow = os.path.join(fd, f"{stem}_best.png")
+            shadow_paths.append(shadow if os.path.exists(shadow) else None)
+            q = best = None
+            rj = os.path.join(fd, "results.json")
+            if os.path.exists(rj):
+                with open(rj, encoding="utf-8") as f:
+                    r = json.load(f)
+                best = r.get("best_iou")
+                runs = r.get("runs") or []
+                if runs:
+                    q_rad = runs[r.get("best_run", 0)].get("q_rad")
+                    if q_rad is not None:
+                        q = [math.degrees(v) for v in q_rad]
+            q_frames.append(q)
+            iou_rep.append(best)
+        if not any(shadow_paths):
+            print(f"[!] {sid}: no solved frames under {d}; skipped")
+            continue
+        rows += score_sequence(
+            sid, "optimizer_static", shadow_paths, q_frames,
+            [os.path.join(a.bench, p) for p in rec["frames"]],
+            bool(rec["target_motion"]["loop"]), a.size, thr_deg,
+            iou_reported=iou_rep)
+    return rows
+
+
 def rows_from_index(a, seq_index: dict, thr_deg: float | None) -> list[dict]:
     rows = []
     for sid, rec in seq_index.items():
@@ -390,6 +438,10 @@ def main():
     p.add_argument("--run", default=None,
                    help="a fleet-shadow-art clip run dir "
                         "(summary_*.csv + frame_*/best_shadow.png)")
+    p.add_argument("--static-sweep", default=None,
+                   help="a run_base_optimizer sweep over targets_sequences/ "
+                        "(<sequence>/<fXX>/); scored as the frame-independent "
+                        "baseline, source=optimizer_static")
     p.add_argument("--sequence", default=None,
                    help="sequences.jsonl id the --run solves, for targets + loop")
     p.add_argument("--source", default="optimizer")
@@ -406,16 +458,22 @@ def main():
               "dq_infeasible columns will be null")
 
     seq_index = _read_sequence_index(a.bench, a.seq_index)
-    rows = (rows_from_run(a, seq_index, thr_deg) if a.run
-            else rows_from_index(a, seq_index, thr_deg))
+    if a.run:
+        rows = rows_from_run(a, seq_index, thr_deg)
+    elif a.static_sweep:
+        rows = rows_from_static_sweep(a, seq_index, thr_deg)
+    else:
+        rows = rows_from_index(a, seq_index, thr_deg)
     if not rows:
-        print("[!] nothing to score: no --run given and no shadows.*.frames "
-              "filled in sequences.jsonl")
+        print("[!] nothing to score: no --run or --static-sweep given and no "
+              "shadows.*.frames filled in sequences.jsonl")
         return
 
     out_dir = a.out or os.path.join(a.bench, "results")
     os.makedirs(out_dir, exist_ok=True)
-    tag = a.tag or (os.path.basename(os.path.normpath(a.run)) if a.run else "shadows")
+    tag = a.tag or (os.path.basename(os.path.normpath(a.run)) if a.run
+                    else os.path.basename(os.path.normpath(a.static_sweep))
+                    if a.static_sweep else "shadows")
     path = os.path.join(out_dir, f"sequence_metrics_{tag}.csv")
 
     cols = []

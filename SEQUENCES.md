@@ -204,6 +204,31 @@ the first thirteen did: frames into `sequences/<id>/f00.png …`, then
 `spinning_star` numbers: mean frame IoU 0.6679, per-transition dq_max
 [160.9, 291.0, 116.6, 157.6]°, infeasible 5/5 with the wrap.
 
+### The static baseline — the other way of solving the same clip
+
+Every clip supports two solves, and the comparison between them is the track's
+point. The sequence-aware solve (`run_sequence.py`, warm starts + temporal
+terms) is the pipeline; the frame-independent solve — each frame handed to the
+static optimizer as an unrelated target — is the baseline the temporal metrics
+exist to condemn: healthy per-frame IoU, catastrophic transitions
+(`spinning_star` is exactly this baseline, and reads 0.6679 / 291°). To run it:
+
+```bash
+python scripts/make_sequence_frame_targets.py     # sequences/ -> targets_sequences/
+python scripts/run_base_optimizer.py --repo ../fleet-shadow-art     --targets-dir targets_sequences --out optimized/sequences-static     --subsets <sequence ids> --runs 3 --n-workers 0 ...
+python scripts/sequence_metrics.py --static-sweep optimized/sequences-static
+```
+
+Solve WITHOUT `--fit-target`: each frame's position inside the canvas is the
+animation's content, and a per-frame fit re-places frames independently —
+inventing motion the animation never had, the artefact run_sequence.py's
+one-fit-per-clip rule exists to avoid. The baseline lands in the CSVs as
+`source=optimizer_static`, so it sits beside a sequence-aware `optimizer`
+solve of the same clip in every table and on the atlas card, rather than
+overwriting it. The static-sweep reader is validated: fed `spinning_star`'s
+own frames and joints through the results.json path, it reproduces the run
+reader's numbers exactly.
+
 ## 4. Not done yet
 
 1. **Regenerate at 512 with controlled frame counts.** These 13 are hand-authored
