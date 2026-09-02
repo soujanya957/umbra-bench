@@ -443,8 +443,9 @@ def main():
                     help="a dataset dir with raw/ inside (e.g. "
                          "Teleops/teleop_set1); outputs go to its "
                          "tag_rectified/ and masks/")
-    ap.add_argument("--images", default=None,
-                    help="explicit glob of raw captures (overrides --teleop-root)")
+    ap.add_argument("--images", default=None, nargs="+",
+                    help="explicit glob(s) of raw captures (overrides the "
+                         "--teleop-root file list, not its output dirs)")
     ap.add_argument("--out-dir", default=None)
     ap.add_argument("--masks-dir", default=None,
                     help="default: <out-dir>/masks, or <root>/masks with "
@@ -467,7 +468,7 @@ def main():
         if a.masks_dir is None:
             a.masks_dir = os.path.join(a.teleop_root, "masks")
     if a.images:
-        paths = sorted(glob.glob(a.images))
+        paths = sorted({p for g in a.images for p in glob.glob(g)})
     elif a.teleop_root:
         paths = sorted(glob.glob(os.path.join(a.teleop_root, "raw", "*.png")))
     else:

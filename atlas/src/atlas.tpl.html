@@ -648,7 +648,9 @@ const PAGES = ["atlas", "bench", "sequences", "teleop", "guide"];
 const TELEOP = payload("teleop");
 const SEQ = payload("sequences");
 const TELBY = new Map();
-for(const it of (TELEOP.items || [])) if(it.sample_id && !TELBY.has(it.sample_id)) TELBY.set(it.sample_id, it);
+for(const ts of (TELEOP.sets || [TELEOP]))
+  for(const it of (ts.items || []))
+    if(it.sample_id && !TELBY.has(it.sample_id)) TELBY.set(it.sample_id, it);
 
 const st = {
   page:  (p => PAGES.includes(p) ? p : "atlas")(store.get("page", "atlas")),
@@ -1527,18 +1529,19 @@ function figB2(){
    thin enough to make a claim about it unsafe. */
 function telBlock(){
   const wrap = document.createElement("div"); wrap.className = "telbench";
+  const TB = TELSETS.find(x => x.n_live > 0) || TEL;
   const bySub = new Map();
-  for(const it of TEL.items){
+  for(const it of TB.items){
     if(!it.sample_id) continue;
     const k = it.subset || "—";
     bySub.set(k, (bySub.get(k) || 0) + 1);
   }
   const rows = [...bySub.entries()].sort((a, b) => b[1] - a[1]);
-  const linked = new Set(TEL.items.filter(i => i.sample_id).map(i => i.sample_id)).size;
+  const linked = new Set(TB.items.filter(i => i.sample_id).map(i => i.sample_id)).size;
   const withResults = S.filter(x => TELBY.has(x.id) && iou(x) != null).length;
   wrap.innerHTML = `
     <h3>The hand-cast reference set <code>SO101_fleet_teleop</code></h3>
-    <p>${TEL.n} shadows a person produced by posing the same three arms, one per target, spread
+    <p>${TB.n} shadows a person produced by posing the same three arms, one per target, spread
     across the parts A–D of the selection rather than sampled at random. They are a supplement to
     the benchmark, not a stratum of it: they change no score and sit on the cards of the targets
     they were posed for. ${linked} targets carry one; ${withResults} of those also have solver
@@ -1659,8 +1662,11 @@ function clipBlock(){
    each negative one. `copy points` exports exactly what
    `scripts/segment_teleop.py` consumes, and that script runs the same points
    through SAM 2 on a machine with the checkpoint. Same markup, better edges.  */
-const TEL = TELEOP;
-const tpts = store.get("teleopPts", {});
+const TELSETS = TELEOP.sets || [Object.assign({ name: "teleop_v1" }, TELEOP)];
+let telIdx = Math.min(store.get("telSet", TELSETS.length - 1), TELSETS.length - 1);
+let TEL = TELSETS[telIdx];
+const tkey = () => "teleopPts:" + TEL.name;
+let tpts = store.get(tkey(), {});
 const ffCache = new Map();
 
 function ffData(it){
@@ -1749,7 +1755,7 @@ function brushAt(x, y, w, h, r){                 // a seed is a small disc, not 
   }
   return out;
 }
-function segment(ff, w, h, d){
+function segment(ff, w, h, d, tags){
   const out = new Uint8Array(w * h);
   if(!d.pos.length) return out;
   const R = 4, gamma = (d.tol ?? 55) / 12;       // higher = edges cost more to cross
@@ -1758,18 +1764,28 @@ function segment(ff, w, h, d){
   for(const [x, y] of d.neg) bg.push(...brushAt(Math.round(x), Math.round(y), w, h, R));
   for(let x = 0; x < w; x++){ bg.push(x); bg.push((h - 1) * w + x); }   // the frame is wall
   for(let y = 0; y < h; y++){ bg.push(y * w); bg.push(y * w + w - 1); }
+  /* The AprilTags are IN the crop by design (the outer frame includes them),
+     and they are ink-dark, so a flood would happily claim them. Seed their
+     padded footprints as background — the same exclusion the pipeline applies
+     when it hands SAM2 the tag centres as negatives. */
+  for(const poly of (tags || [])){
+    const xs = poly.map(q => q[0]), ys = poly.map(q => q[1]), PAD = 6;
+    const x0 = Math.max(0, Math.min(...xs) - PAD), x1 = Math.min(w - 1, Math.max(...xs) + PAD);
+    const y0 = Math.max(0, Math.min(...ys) - PAD), y1 = Math.min(h - 1, Math.max(...ys) + PAD);
+    for(let y = y0; y <= y1; y++) for(let x = x0; x <= x1; x++) bg.push(y * w + x);
+  }
   const Df = geodesic(ff, w, h, fg, gamma), Db = geodesic(ff, w, h, bg, gamma);
   for(let i = 0; i < out.length; i++) out[i] = Df[i] < Db[i] ? 1 : 0;
   return out;
 }
 const tdec = (it) => tpts[it.capture] || { pos: [], neg: [], tol: 70 };
-function tset(it, d){ tpts[it.capture] = d; store.set("teleopPts", tpts); }
+function tset(it, d){ tpts[it.capture] = d; store.set(tkey(), tpts); }
 
 const tcards = new Map();
 async function tdraw(it){
   const c = tcards.get(it.capture); if(!c) return;
   const ff = await ffData(it), d = tdec(it);
-  const m = d.pos.length ? segment(ff, it.w, it.h, d) : null;
+  const m = d.pos.length ? segment(ff, it.w, it.h, d, it.tags) : null;
   const g = c.cv.getContext("2d");
   g.clearRect(0, 0, it.w, it.h);
   g.drawImage(c.photo, 0, 0, it.w, it.h);
@@ -1920,7 +1936,7 @@ function ttally(){
 
 /* Exposed on purpose: the preview makes a claim about what the points will do,
    and a claim you cannot inspect is one you cannot trust. */
-window.__teleop = { TEL, ffData, wallLevel, geodesic, segment, tdec, tpts };
+window.__teleop = { get TEL(){ return TEL; }, get tpts(){ return tpts; }, TELSETS, ffData, wallLevel, geodesic, segment, tdec };
 
 /* The teleop view is the pipeline, not a second copy of the dataset. The captures
    themselves surface in the atlas, on the cards of the targets they were posed
@@ -1980,6 +1996,8 @@ function renderTeleop(){
       a separate dataset — each one attaches to the target it was posed for and shows up on
       that target's card in the atlas, under the <b>human</b> plate. This page is what to run
       to add more. Full prose in <code>Teleops/README.md</code>.</p>
+    ${TELSETS.length > 1 ? `<div style="display:flex;gap:6px;margin:0 0 10px">${TELSETS.map((x, i) =>
+      `<button class="chip" aria-pressed="${i === telIdx}" data-si="${i}">${x.name}<span class="ct">${x.n}</span></button>`).join("")}</div>` : ""}
     <div class="tallybar"><div class="tally">
       <span><b>${TEL.n}</b> captures</span>
       <span><b>${linked}</b> targets linked</span>
@@ -2007,6 +2025,8 @@ function renderTeleop(){
     <div class="tallybar"><div id="ttally" class="tally"></div>
       <span style="flex:1"></span>
       <button class="act" id="tExport">copy points</button>
+      <button class="act" id="tSave" hidden>save to folder</button>
+      <button class="act" id="tRerun" hidden>re-segment marked</button>
       <button class="act" id="tClear">clear all</button></div>`;
   const list = document.createElement("div"); list.className = "tlist";
   [...TEL.items].sort((a, b) => (b.suspect - a.suspect) || a.capture.localeCompare(b.capture))
@@ -2021,9 +2041,57 @@ function renderTeleop(){
   });
   $("#tClear").addEventListener("click", () => {
     for(const k of Object.keys(tpts)) delete tpts[k];
-    store.set("teleopPts", tpts);
+    store.set(tkey(), tpts);
     TEL.items.forEach(it => tqueue(it)); ttally();
   });
+  head.querySelectorAll("[data-si]").forEach(b => b.addEventListener("click", () => {
+    telIdx = +b.dataset.si; store.set("telSet", telIdx);
+    TEL = TELSETS[telIdx]; tpts = store.get(tkey(), {});
+    tcards.clear(); ffCache.clear();
+    v.replaceChildren(); renderTeleop();
+  }));
+  /* The studio server (scripts/teleop_studio.py) turns the preview into the
+     deliverable: save writes the active set's points into its folder, rerun
+     sends the marked captures through SAM2 and rebuilds this page. Served as
+     a plain static file, neither button appears and export/copy still works. */
+  const marked = () => {
+    const captures = {};
+    TEL.items.forEach(it => { const d = tdec(it);
+      if(d.pos.length) captures[it.capture] = { pos: d.pos, neg: d.neg, tol: d.tol }; });
+    return captures;
+  };
+  const studio = async (path, body, btn, busy) => {
+    const t = btn.textContent; btn.disabled = true; btn.textContent = busy;
+    try{
+      const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify(body) });
+      const j = await r.json();
+      if(!r.ok || j.error) throw new Error(j.error || r.status);
+      return j;
+    } finally { btn.disabled = false; btn.textContent = t; }
+  };
+  fetch("/api/ping").then(r => r.ok ? r.json() : null).then(j => {
+    if(!j || !TEL.src) return;
+    const sv = $("#tSave"), rr = $("#tRerun");
+    sv.hidden = rr.hidden = false;
+    sv.addEventListener("click", async (e) => {
+      const caps = marked();
+      if(!Object.keys(caps).length) return;
+      await studio("/api/points/" + TEL.name, { ff_window: TEL.ff_window, captures: caps },
+                   e.target, "saving…");
+      e.target.textContent = "saved ✓";
+      setTimeout(() => { e.target.textContent = "save to folder"; }, 1500);
+    });
+    rr.addEventListener("click", async (e) => {
+      const caps = marked();
+      if(!Object.keys(caps).length) return;
+      if(!confirm(Object.keys(caps).length + " capture(s) will be re-segmented with SAM2 and the committed masks in " +
+                  TEL.name + " overwritten. Continue?")) return;
+      await studio("/api/rerun/" + TEL.name, { ff_window: TEL.ff_window, captures: caps },
+                   e.target, "running SAM2… (stay on this page)");
+      location.reload();
+    });
+  }).catch(() => {});
 }
 
 /* ── sequences track ─────────────────────────────────────────────────────────
