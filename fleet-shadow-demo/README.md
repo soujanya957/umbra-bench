@@ -138,6 +138,26 @@ The targets are a sequence, so solve them as one. `run_sequence.py` keeps the
 renderer, the shadow forward model and the previous frame's pose across frames;
 `run.py` in a loop throws all of that away between frames.
 
+Measured across all 26 clips against a per-frame-independent baseline, the
+chained solve wins on both axes at once: 0.629 mean frame IoU against 0.564,
+and 2% of transitions infeasible against 97%. The expectation that independent
+per-frame solving buys frame quality at the cost of playability did not
+survive contact — it lost on frame quality too, in 19 of the 26.
+
+**The exception is worth knowing before you trust the default.** On `wiper`,
+the fastest-stepping clip in the set — consecutive targets overlap at IoU 0.21
+— the independent baseline scores 0.472 per frame against the chain's 0.327.
+Three separate mechanisms pull each frame toward its predecessor: the ICP
+warm-start from `prev_q`, the reachability hinge against `prev_q`, and
+`skip_greedy` when that warm start is accepted. On a slowly-moving clip all
+three are right. On a target that genuinely moves a long way each frame they
+are three reasons not to follow it, and the clip under-moves. The same clip is
+the one where closing the loop pushed the previous transition to 131.7 deg:
+where the frames really do demand large joint travel, the continuity anchor and
+the target are pulling against each other, and that shows up in both
+measurements. If a clip steps that fast, check the per-frame arm before
+assuming the chain.
+
 ```bash
 cd ../../fleet-shadow-art/motion-aware-shadow
 python scripts/run_sequence.py --urdf urdf/SO101/so101_new_calib.urdf --targets ../../umbra-bench/sequences/demo_01_scene_04_M/f*.png --n-robots 3 --arm-gap 0.2 --size 128 --fit-target --fit-max-shift 0.45 --reach-samples 300 --prior ../../umbra-bench/optimized/big-budget-grounded/letters_upper/M_dejavuserif-bold_v2/results.json --popsize 192 --phase1-iters 128 --phase2-iters 128 --final-iters 256 --beta 0.3 --gamma 0 --delta 0 --reachability-penalty 100 --outdir ../../umbra-bench/optimized/demo_01_scene_04_M
