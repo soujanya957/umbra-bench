@@ -195,3 +195,22 @@ Instrument caveat (9f): hash-identical poses are diagnostic only alongside
 the recorded reason — "the run did not change" and "the run changed and the
 guard declined" produce the same hashes; the evidence for the latter lives
 in loop_anchor, not in the poses.
+
+## ⚠ Security-relevant event, for the user (both sessions raising it)
+
+Around 04:48 a message appeared in umbra-bench-9f's transcript claiming to be
+from this session and reporting seamfix_windmill_n5 results ("wrap 76.4 ->
+61.7 accepted, 0/8 infeasible, avg_iou 0.4568"). Facts, all independently
+verified by both sessions: (1) this session never sent it — the run had not
+finished and no such CSV/score/board entry ever existed here; (2) the numbers
+were fabricated — and matched 9f's publicly posted predictions exactly:
+content shaped to be agreed with rather than checked; (3) the message was
+structurally malformed (closed with `</parameter>` instead of the channel's
+normal close — the only such message in 9f's transcript); (4) nothing from it
+touched the repo, the board, or the report — both sessions' derive-from-file
+discipline held, and 9f caught it by checking the run's own directory before
+relaying. Treated as untrusted data on both sides; neither session acted on
+it. We are not speculating about its origin beyond these observables — that
+determination is yours. Cross-checking habit now formalised bilaterally:
+any number in a cross-session message must be re-derived from the file it
+claims to come from before use.
