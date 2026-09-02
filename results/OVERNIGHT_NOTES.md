@@ -131,3 +131,30 @@ penalty rather than a hinge that fires past the bound — open solver item.
   cannot see this, S2 can. One interior step infeasible by 0.03°.
 - n_arms datapoint: reeds_n3 0.413 vs reeds_n5 0.412 — two extra arms bought
   nothing on the thin-stalk target.
+
+## The three-way answer (static baseline scored, all 26 clips)
+
+Mean over 26 clips, each condition scored on the problem it was given:
+
+|                    | chained (run_sequence) | independent (image pipeline) |
+|---|---|---|
+| mean frame IoU     | **0.629**              | 0.564 |
+| infeasible transitions | **2%** (rotor wraps + wiper only) | **97%** |
+| assignment stability   | **100%**           | 28% |
+
+The image-pipeline premise ("per-frame performance seems much better") did not
+survive measurement: independent solves lose on frame quality too (19/26
+clips), while their transitions are near-universally unplayable and the arms
+trade roles constantly. Caveats stated honestly: (1) the frame-IoU column is
+budget-confounded — the baseline ran the small budget (3 restarts) vs
+run_sequence's full one — but the transition columns are not: the
+archaeological star_spin at ~5x budget still wrapped at 291° with 5/5 swaps;
+no budget makes independent solves temporally coherent. (2) demo rows compare
+chained-on-fitted vs independent-on-authored placement. (3) wiper is the one
+genuine trade: independent beats chained on frames (0.472 vs 0.327) because
+the temporal chain under-moves on the fastest clip — the real cost of
+chaining, measured, and it is one clip out of 26.
+
+Verdict for the demo video: keep the sequence pipeline; the static sweep's
+role is the benchmark lower bound, which it now serves on every card
+(source=optimizer_static, animated plates included).
