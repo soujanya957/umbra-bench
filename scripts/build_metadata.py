@@ -54,16 +54,28 @@ def _teleop_index() -> dict[str, tuple[str, str]]:
     records the real subset and class per capture, so use it and fall back only
     when a mask is not in it.
     """
-    man = ROOT / "Teleops" / "masks" / "manifest.json"
-    if not man.exists():
-        return {}
-    recs = json.loads(man.read_text(encoding="utf-8")).get("records", [])
+    manifests = [ROOT / "Teleops" / "masks" / "manifest.json"]
+    manifests += sorted((ROOT / "Teleops" / "source").glob("*/masks/manifest.json"))
     out = {}
-    for r in recs:
-        mask = r.get("mask") or ""
-        stem = Path(mask).stem
-        if stem and r.get("class"):
-            out[stem] = (r.get("subset") or "", r["class"])
+    for man in manifests:
+        if not man.exists():
+            continue
+        recs = json.loads(man.read_text(encoding="utf-8")).get("records", [])
+        for r in recs:
+            mask = r.get("mask") or ""
+            stem = Path(mask).stem
+            if not stem or not r.get("class"):
+                continue
+            entry = (r.get("subset") or "", r["class"])
+            # First manifest wins per stem: the v1 manifest stays authoritative
+            # for the 29 originals; the set manifests add the free captures.
+            out.setdefault(stem, entry)
+            # A set2 mask is named teleop_<class>_<take>_mask; the copy into
+            # targets/teleop/ drops the redundant teleop_ prefix (the subset
+            # directory and the id prefix both already say it), so index the
+            # stripped stem too.
+            if stem.startswith("teleop_"):
+                out.setdefault(stem[len("teleop_"):], entry)
     return out
 
 
