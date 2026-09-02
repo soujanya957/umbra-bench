@@ -257,7 +257,19 @@ them and nothing from them touched either repo.
 ## User decision (morning): star_spin ships at scale 0.85
 
 The bigger star is the quoted solve (source=optimizer, fit floor 0.85 —
-at_bound deliberate). Frame IoU 0.724 vs the free fit's 0.646; the wrap
-(151.7°, correctly-refused closure) is accepted because the demo video plays
-the clip once through — the wrap transition is never performed. The 0.638
-version is retired to git history (commit d9d90fd carries its numbers).
+at_bound deliberate). Frame IoU 0.724 vs the free fit's 0.646. The track's
+declaration stays loop=true (the sequence IS a loop; single-pass is a usage
+note about this cut, not a scoring override), so the board correctly counts
+five transitions and reads **1/5 infeasible (20%)** — the wrap at 151.7°,
+closure correctly refused. "Ships single-pass" means the declared wrap is
+not performed in the video, stated beside the number, never instead of it.
+
+The actual trade, in one sentence (9f's phrasing, adopted): the scale change
+bought 0.078 IoU and spent most of the feasibility margin — worst forward
+step 60.3° → 68.6° against the 68.75° bound, a 0.15° margin, the tightest of
+the night and inside the planner model's error; fine for a rendered video,
+worth physical testing before a filmed rig trusts it. Calibration fixture
+for score_placement: its free optimum (0.638) LOST on frame IoU to a scale
+it would never choose (0.6458 vs 0.7235) — the proxy picked the worse of
+the two on the metric that matters, on the one clip measured both ways.
+The 0.638 version is retired to git history (d9d90fd carries its numbers).
