@@ -39,3 +39,24 @@ The tight-pass A/B (queued) answers the score half either way.
 - `| tail -1` masks exit codes; use pipefail in verification chains.
 - run_sequence.py summaries: iou_original is declared but never populated —
   sequence_metrics.py's ref=original replay is the only vs-authored source.
+
+## Wide pass complete (13/13, fit-max-shift 0.45, --prior, temporal chain)
+
+| clip | vs fitted | vs authored | dq max | infeas | legib. ratio |
+|---|---|---|---|---|---|
+| scene_01_I | 0.667 | 0.260 | 36° | 0% | -- |
+| scene_02_F | 0.580 | 0.023 | 34° | 0% | -- |
+| scene_03_F | 0.669 | 0.341 | 57° | 0% | -- |
+| scene_03_I | 0.608 | 0.243 | 33° | 0% | -- |
+| scene_04_M | 0.719 | 0.091 | 32° | 0% | 0.21 |
+| scene_05_I | 0.745 | 0.385 | 0° | 0% | -- |
+| scene_05_M | 0.679 | 0.085 | 22° | 0% | 0.00 |
+| scene_06_A | 0.825 | 0.187 | 36° | 0% | 1.00 |
+| scene_06_F | 0.761 | 0.316 | 17° | 0% | 0.80 |
+| scene_06_I | 0.428 | 0.000 | 68° | 0% | -- |
+| scene_06_L | 0.544 | 0.000 | 65° | 0% | 0.00 |
+| scene_06_M | 0.787 | 0.116 | 12° | 0% | 0.20 |
+| scene_06_Y | 0.748 | 0.290 | 40° | 0% | 1.50 |
+
+All 13 clips: every transition feasible, zero arm swaps. Legibility CSV predates
+the last few solves, so some clips lack a row until stage 09 re-runs.
