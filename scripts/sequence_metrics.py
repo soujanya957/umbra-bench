@@ -282,6 +282,11 @@ def score_sequence(seq_id: str, source: str, shadow_paths: list, q_frames: list,
     frame_rows, per_metric = [], {}
     for i in range(n):
         row = dict(stub, row="frame", frame_idx=i)
+        # The shadow's path rides along so downstream consumers (the atlas
+        # sequences payload) can find the frames without re-deriving run-dir
+        # layout knowledge the CSV already had at scoring time.
+        if shadow_paths[i]:
+            row["shadow"] = str(shadow_paths[i]).replace("\\", "/")
         if iou_reported and i < len(iou_reported):
             row["iou_reported"] = iou_reported[i]
         if targets and shadows[i] is not None:

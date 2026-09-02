@@ -405,11 +405,17 @@ button.act:hover{border-color:var(--accent); color:var(--accent-ink)}
 .seqgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px}
 .seqcard{border:1px solid var(--line); border-radius:9px; background:var(--panel);
   box-shadow:var(--shadow); overflow:hidden; display:flex; flex-direction:column}
-.seqcard .anim{position:relative; background:var(--screen)}
-.seqcard .anim img{width:100%; aspect-ratio:1/1; display:block; image-rendering:pixelated}
+.seqcard .anim{position:relative; background:var(--screen); display:grid;
+  grid-template-columns:1fr; gap:1px}
+.seqcard .anim.trip{grid-template-columns:repeat(3,1fr)}
+.seqcard .anim canvas{width:100%; aspect-ratio:1/1; display:block;
+  image-rendering:pixelated; background:var(--screen)}
 .seqcard .anim .fidx{position:absolute; bottom:5px; right:7px; font-family:"IBM Plex Mono",monospace;
   font-size:9.5px; color:var(--muted); background:var(--panel); padding:1px 5px; border-radius:4px;
   border:1px solid var(--line-2); opacity:.9}
+.seqcard .seq-lbl{padding:0 1px}
+.seqctl{display:flex; gap:14px; align-items:center; flex-wrap:wrap}
+.seqctl .hint{font-size:11px; color:var(--muted)}
 .seqmeta{padding:10px 12px 11px; display:flex; flex-direction:column; gap:7px}
 .seqmeta .idline{display:flex; align-items:baseline; gap:8px; flex-wrap:wrap}
 .seqmeta .sid{font-family:"IBM Plex Mono",monospace; font-size:11.5px; font-weight:600}
@@ -2022,20 +2028,103 @@ function renderTeleop(){
    frame IoU is never printed without dq_infeasible_frac beside it. */
 const seqAnims = [];
 let seqTicker = null;
+let seqPlate = "target";                 // target | shadow | overlay | trip
+const seqFams = new Set(["generated", "demo"]);
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* The three plates are the atlas card's, animated in lockstep: every pane of a
+   card draws the SAME frame index, so target, shadow and overlay stay aligned
+   through the clip. Overlay classification matches paintOverlay exactly, but
+   composites at SEQ.px on its own scratch canvas rather than borrowing the
+   grid's (whose size is DATA.px -- equal today, not guaranteed). */
+let seqScratch = null;
+function seqScratchCtx(px){
+  if(!seqScratch){
+    seqScratch = document.createElement("canvas");
+    seqScratch.width = seqScratch.height = px;
+  }
+  return seqScratch.getContext("2d", { willReadFrequently: true });
+}
+const seqOvCache = new Map();            // (tb64|sb64) -> Promise<ImageData>
+function seqOverlay(tb, sb, px){
+  const key = tb + "|" + sb;
+  if(!seqOvCache.has(key)){
+    seqOvCache.set(key, Promise.all([loadMask(tb), loadMask(sb)]).then(([ti, si]) => {
+      const sc = seqScratchCtx(px);
+      sc.clearRect(0, 0, px, px); sc.drawImage(ti, 0, 0, px, px);
+      const T = sc.getImageData(0, 0, px, px).data;
+      sc.clearRect(0, 0, px, px); sc.drawImage(si, 0, 0, px, px);
+      const Sd = sc.getImageData(0, 0, px, px).data;
+      const out = new ImageData(px, px), d = out.data;
+      for(let i = 0, n = px * px; i < n; i++){
+        const j = i << 2, t = T[j] < 128, s = Sd[j] < 128;
+        let r = 255, g = 255, b = 255;
+        if(t && s){ r = 0;   g = 0;   b = 255; }      // agreement
+        else if(t){ r = 0;   g = 255; b = 255; }      // target the shadow missed
+        else if(s){ r = 255; g = 0;   b = 255; }      // shadow that spilled
+        d[j] = r; d[j+1] = g; d[j+2] = b; d[j+3] = 255;
+      }
+      return out;
+    }));
+  }
+  return seqOvCache.get(key);
+}
+
+function seqWhite(cv){
+  const c = cv.getContext("2d");
+  c.fillStyle = "#fff"; c.fillRect(0, 0, cv.width, cv.height);
+}
+async function seqDrawMask(cv, b64, tick){
+  if(b64 == null){ seqWhite(cv); return; }
+  const im = await loadMask(b64);
+  if(cv._tick !== tick) return;          // a newer frame superseded this paint
+  const c = cv.getContext("2d");
+  c.imageSmoothingEnabled = false;
+  c.drawImage(im, 0, 0, cv.width, cv.height);
+}
+async function seqDrawOverlay(cv, tb, sb, tick){
+  if(sb == null){ seqWhite(cv); return; }
+  const data = await seqOverlay(tb, sb, cv.width);
+  if(cv._tick !== tick) return;
+  cv.getContext("2d").putImageData(data, 0, 0);
+}
+
+function seqDrawFrame(a, show){
+  const tick = ++a.tick;
+  const tb = a.f[show], sb = a.sf ? a.sf[show] : null;
+  for(const cv of [a.cvT, a.cvS, a.cvO]) cv._tick = tick;
+  if(!a.cvT.hidden) seqDrawMask(a.cvT, tb, tick);
+  if(!a.cvS.hidden) seqDrawMask(a.cvS, sb, tick);
+  if(!a.cvO.hidden) seqDrawOverlay(a.cvO, tb, sb, tick);
+}
+
+// Which panes a card shows under the current plate. A clip with no solved
+// shadow has nothing to put on the other plates, so it stays on target rather
+// than going blank.
+function seqApplyPlate(){
+  for(const a of seqAnims){
+    const mode = a.sf ? seqPlate : "target";
+    a.cvT.hidden = !(mode === "target" || mode === "trip");
+    a.cvS.hidden = !(mode === "shadow" || mode === "trip");
+    a.cvO.hidden = !(mode === "overlay" || mode === "trip");
+    a.anim.classList.toggle("trip", mode === "trip");
+    a.triplbl.hidden = mode !== "trip";
+    seqDrawFrame(a, Math.min(a.i, a.n - 1));
+  }
+}
 
 function seqTick(){
   if(document.hidden || $("#seqView").hidden) return;
   const now = performance.now();
   for(const a of seqAnims){
-    if(now < a.next) continue;
+    if(a.el.hidden || now < a.next) continue;
     a.i += 1;
     // A non-loop clip runs once and holds: the film it came from has no
     // last-to-first transition, so the preview must not invent one. It restarts
     // after a visible rest instead of wrapping.
     if(a.i >= (a.loop ? a.n : a.n + 4)) a.i = 0;
     const show = Math.min(a.i, a.n - 1);
-    a.img.src = "data:image/png;base64," + a.f[show];
+    seqDrawFrame(a, show);
     a.lbl.textContent = "f" + String(show).padStart(2, "0")
                       + (!a.loop && a.i >= a.n ? " · end" : "");
     a.next = now + a.period;
@@ -2064,8 +2153,12 @@ function seqCard(q){
         : "wrap step " + q.motion.wrap_iou + " fails 0.9 × mean step " + q.motion.mean_step_iou}">runs once · ${q.loop_source}</span>`;
   const fpsChip = q.fps ? `${q.fps} fps` : "~6 fps";
   card.innerHTML = `
-    <div class="anim"><img alt="${q.id} frame 0" src="data:image/png;base64,${q.f[0]}">
+    <div class="anim">
+      <canvas class="cv-t" width="${SEQ.px}" height="${SEQ.px}" aria-label="${q.id} target"></canvas>
+      <canvas class="cv-s" width="${SEQ.px}" height="${SEQ.px}" hidden aria-label="${q.id} shadow"></canvas>
+      <canvas class="cv-o" width="${SEQ.px}" height="${SEQ.px}" hidden aria-label="${q.id} overlay"></canvas>
       <span class="fidx">f00</span></div>
+    <div class="trip-lbl seq-lbl" hidden><span>target</span><span>shadow</span><span>overlay</span></div>
     <div class="seqmeta">
       <div class="idline"><span class="sid">${q.id}</span>
         <span class="sbadge">${q.family}</span>${loopBadge}</div>
@@ -2112,15 +2205,27 @@ function seqCard(q){
       <code>python scripts/sequence_metrics.py --run &lt;run_dir&gt; --sequence ${q.id}</code>`;
     card.appendChild(u);
   }
-  const img = card.querySelector(".anim img"), lbl = card.querySelector(".fidx");
-  if(!REDUCED && q.f.length > 1)
-    seqAnims.push({ img, lbl, f: q.f, n: q.f.length, loop: q.loop, period,
-                    i: 0, next: performance.now() + period });
+  // Shadow frames come from the first solved source that recorded them; today
+  // that is at most one, and a per-source switch can wait for a second capture.
+  const withSf = q.solved.map(s => q.solves[s]).find(so => so.sf);
+  const a = {
+    el: card, anim: card.querySelector(".anim"),
+    cvT: card.querySelector(".cv-t"), cvS: card.querySelector(".cv-s"),
+    cvO: card.querySelector(".cv-o"), lbl: card.querySelector(".fidx"),
+    triplbl: card.querySelector(".seq-lbl"),
+    f: q.f, sf: withSf ? withSf.sf : null, family: q.family,
+    n: q.f.length, loop: q.loop, period, i: 0, tick: 0,
+    next: performance.now() + period,
+  };
+  if(REDUCED || q.f.length < 2) a.next = Infinity;   // static first frame
+  seqAnims.push(a);
+  seqDrawFrame(a, 0);
   return card;
 }
 
 function renderSequences(){
   const v = $("#seqView");
+  seqAnims.length = 0;
   const wrap = document.createElement("div"); wrap.className = "seqwrap";
   const head = document.createElement("div");
   head.innerHTML = `<h2>The sequences track</h2>
@@ -2130,10 +2235,39 @@ function renderSequences(){
     and cannot be performed</b> — one transition needs a 291° single-joint swing. So every solve here shows its
     mean frame IoU only next to <span class="mono">dq_infeasible_frac</span>, and previews only wrap around when
     the sequence actually loops. The guide view explains each number.</p>`;
+  // The same plate control as the atlas grid, animated: every pane of a card
+  // draws the same frame index, so the three modes stay aligned through the
+  // clip. Clips without a solved shadow stay on target rather than going blank.
+  const ctl = document.createElement("div"); ctl.className = "seqctl";
+  ctl.innerHTML = `
+    <div class="seg" id="seqPlateSeg">
+      <button data-v="target" aria-pressed="true">target</button>
+      <button data-v="shadow" aria-pressed="false">shadow</button>
+      <button data-v="overlay" aria-pressed="false">overlay</button>
+      <button data-v="trip" aria-pressed="false">all 3</button>
+    </div>
+    <div class="chips" id="seqFamChips">
+      <button class="chip" data-f="generated" aria-pressed="true">generated</button>
+      <button class="chip" data-f="demo" aria-pressed="true">demo</button>
+    </div>
+    <span class="hint">shadow &amp; overlay need a solved clip — ${SEQ.n_solved} of ${SEQ.n} so far</span>`;
   const grid = document.createElement("div"); grid.className = "seqgrid";
   for(const q of SEQ.sequences) grid.appendChild(seqCard(q));
-  wrap.append(head, grid);
+  wrap.append(head, ctl, grid);
   v.replaceChildren(wrap);
+  ctl.querySelectorAll("#seqPlateSeg button").forEach(b => b.addEventListener("click", () => {
+    seqPlate = b.dataset.v;
+    ctl.querySelectorAll("#seqPlateSeg button").forEach(x =>
+      x.setAttribute("aria-pressed", String(x === b)));
+    seqApplyPlate();
+  }));
+  ctl.querySelectorAll("#seqFamChips .chip").forEach(c => c.addEventListener("click", () => {
+    const f = c.dataset.f;
+    if(seqFams.has(f) && seqFams.size > 1) seqFams.delete(f); else seqFams.add(f);
+    ctl.querySelectorAll("#seqFamChips .chip").forEach(x =>
+      x.setAttribute("aria-pressed", String(seqFams.has(x.dataset.f))));
+    for(const a of seqAnims) a.el.hidden = !seqFams.has(a.family);
+  }));
   if(!seqTicker && seqAnims.length) seqTicker = setInterval(seqTick, 50);
 }
 

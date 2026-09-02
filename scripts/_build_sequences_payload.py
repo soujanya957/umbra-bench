@@ -54,8 +54,22 @@ def _enc(im: Image.Image) -> str:
 
 
 def thumb(path: str, px: int) -> str:
+    """Dark-ink-on-white thumbnail, whichever way the file stores it.
+
+    Targets follow the benchmark convention already; a clip run's
+    best_shadow.png is white-shadow-on-black, and the overlay compositor in the
+    template classifies pixels by darkness, so polarity is normalised here with
+    the corner heuristic sequence_metrics.load_mask uses.
+    """
     im = Image.open(path).convert("L").resize((px, px), Image.LANCZOS)
-    return _enc(im.point(lambda v: 255 if v > 127 else 0))
+    bw = im.point(lambda v: 255 if v > 127 else 0)
+    px_ = bw.load()
+    w, h = bw.size
+    corners = sum(px_[x, y] < 128 for x, y in
+                  ((0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)))
+    if corners >= 3:
+        bw = bw.point(lambda v: 255 - v)
+    return _enc(bw)
 
 
 def _f(v):
@@ -89,7 +103,7 @@ def read_solves(bench: str):
     return agg, frames
 
 
-def solve_block(row: dict, frame_rows: list) -> dict:
+def solve_block(row: dict, frame_rows: list, bench: str, px: int) -> dict:
     by_tr = None
     if row.get("dq_max_deg_by_transition"):
         try:
@@ -121,6 +135,7 @@ def solve_block(row: dict, frame_rows: list) -> dict:
         "s3": s3,
     }
     if frame_rows:
+        ordered = sorted(frame_rows, key=lambda r: int(r["frame_idx"]))
         out["frames"] = [{
             "i": int(r["frame_idx"]),
             "iou": _f(r.get("iou")) if r.get("iou") not in (None, "")
@@ -129,7 +144,26 @@ def solve_block(row: dict, frame_rows: list) -> dict:
             "dq_infeasible": _f(r.get("dq_infeasible")),
             "shadow_step_iou": _f(r.get("shadow_step_iou")),
             "step_to": r.get("step_to") or None,
-        } for r in sorted(frame_rows, key=lambda r: int(r["frame_idx"]))]
+        } for r in ordered]
+        # The cast shadow per frame, for the shadow and overlay plates. The CSV
+        # records the path the scorer read; resolve relative paths against the
+        # benchmark root (a run dir usually sits in the sibling checkout).
+        sf, found = [], 0
+        for r in ordered:
+            p = r.get("shadow") or ""
+            if p and not os.path.isabs(p):
+                cand = os.path.normpath(os.path.join(bench, p))
+                p = cand if os.path.exists(cand) else p
+            if p and os.path.exists(p):
+                sf.append(thumb(p, px))
+                found += 1
+            else:
+                sf.append(None)
+        if found:
+            out["sf"] = sf
+        if found < len(ordered):
+            print(f"[!] {row.get('sequence_id', '?')}/{row.get('source', '?')}: "
+                  f"{len(ordered) - found} shadow frames missing on disk")
     return out
 
 
@@ -158,7 +192,7 @@ def main():
             with open(sj, encoding="utf-8") as fh:
                 src = json.load(fh)
 
-        solves = {s: solve_block(agg[(i, s)], frames.get((i, s), []))
+        solves = {s: solve_block(agg[(i, s)], frames.get((i, s), []), a.bench, a.px)
                   for (i, s) in agg if i == sid}
         rec = {
             "id": sid,
