@@ -99,3 +99,30 @@ infeasible" is true and is the thinnest version of true — the card now shows
 the worst step beside the count, flagged when within 2° of the bound. What the
 flag cannot do: make a clip comfortable. That would need a margin-seeking
 penalty rather than a hinge that fires past the bound — open solver item.
+
+## Generated pass complete — full coverage (26/26), and what it found
+
+- loop-close tally over 11 looping clips: 7 not-needed, 4 fired — 1 accepted
+  (flower, 79.0→68.2°, free), 1 correctly refused (wiper: closing the wrap to
+  68.7° would blow the previous step to 131.7° — the guard's design working),
+  2 defeated (windmills: closure returned identical wrap distances).
+- Root cause of the 2 defeats (9f, from the logs): **optimize_staged accepts
+  each phase on raw IoU, not the penalised loss** — windmill_n3's log shows a
+  feasible pose at IoU 0.384 discarded for an infeasible one at 0.411. The
+  reachability penalty steers the search and the acceptance rule throws away
+  what it bought. This seam affects every chained frame, not just loop-close;
+  fix in flight (lexicographic (feasible, iou) acceptance, matching the rule
+  run_sequence already uses across restarts). --loop-close is NOT weak; two of
+  its failures are downstream of this seam.
+- planner_forecast in the summaries covers only forward steps (no wrap) — a
+  summary-side gap; the atlas scorer computes dq from the joint columns and
+  has counted the wrap from day one (star_spin validation: 5/5 with wrap).
+- The wrap problem in the current config is confined to the rotor family
+  (windmills 141.6°/76.4°) and wiper (144.6°); all nine other loops land the
+  wrap inside the bound with no anchor needed — though often thinly (their
+  wrap is usually the largest step: 63.8, 62.4, 65.0, 59.2...).
+- wiper (fastest target, 0.21 step IoU) is the hardest clip: vs fitted 0.327,
+  motion_excess −0.20 — the chain under-moves on fast content; frame IoU
+  cannot see this, S2 can. One interior step infeasible by 0.03°.
+- n_arms datapoint: reeds_n3 0.413 vs reeds_n5 0.412 — two extra arms bought
+  nothing on the thin-stalk target.
