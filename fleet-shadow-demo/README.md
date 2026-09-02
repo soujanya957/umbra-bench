@@ -395,6 +395,22 @@ fit floor 0.85 and must NOT get a loop bake.
 
 ### C. Deploying a sequence to the robots
 
+> **GATE — verify the physical base layout before executing anything.**
+> Every solve in this repo assumes the renderer's default rig: three arms in
+> a single line along the light→screen depth axis at x=0 —
+> `SR-A (0.0, 0.0) · SR-B (0.0, −0.2) · SR-C (0.0, −0.4)`, light_y +1.0,
+> wall −2.4 (verified against `renderer._default_base_positions`). The
+> per-arm magnification spread of that line is what makes the shadows work.
+> **No committed config describes this layout** — `lab_default` spreads the
+> arms 0.6 m laterally, `test_stage` differs again, `old_man` rotates two
+> bases. A pose executed on any of those casts a different shape. Before
+> deploying: either arrange the rig as above and write that config, or
+> re-solve against the real base positions (`--base-positions`).
+>
+> **TODO (user, lab facts no session can supply):** which config matches the
+> current physical stage; how Play/render_server is started; which SR10x
+> units map to the three solved arms.
+
 The solved clips are already in the robot pipeline's native currency: every
 `optimized/<clip>/frame_NN_<ts>/shadow_result.json` is a SCHEMA.md
 "Solution" (per-robot `q_rad` keyframe). Two ways to run one on hardware,
