@@ -214,3 +214,22 @@ it. We are not speculating about its origin beyond these observables — that
 determination is yours. Cross-checking habit now formalised bilaterally:
 any number in a cross-session message must be re-derived from the file it
 claims to come from before use.
+
+## loop-close, the final honest tally (after the n5 verification)
+
+flower: confirmed (79.0→68.2°, free). windmill_n3: confirmed-as-correctly-
+refused (global winding, one frame cannot absorb it). wiper: refused, same
+conflict. windmill_n5: **inconclusive** — the whole solve diverged at frame
+03 (daa5ad8 legitimately flipped an un-logged acceptance site there; f2fe9af
+now instruments both silent sites), so its pre/post numbers are not an A/B,
+and its closure no-op (incumbent returned, 3.7° over) is the n3 mechanism at
+smaller scale, not new evidence. Its card shows a valid current-config solve
+(iou_rep 0.4596) and nothing more.
+
+Protocol upgrades from this exchange, both directions: byte-checks scan ALL
+frames and report the FIRST differing index (a 3-frame sample proves a fork
+exists but not where, and where is the only part that attributes it);
+signature-matching alone is unsound once a fix can legitimately break
+upstream determinism. Prediction scorecard kept honestly: 3 right, 5 wrong
+(9f's own tally), registered before outcomes precisely so wanted results
+could not pass unexamined — which they twice did not.
