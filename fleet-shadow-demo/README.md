@@ -391,3 +391,44 @@ Decisions already taken (see results/OVERNIGHT_NOTES.md): the demo is a
 rendered composite (size/position adjustable in post — which is exactly what
 stage 8 does), the wide-fit solves are the ship set, `star_spin` ships at
 fit floor 0.85 and must NOT get a loop bake.
+
+
+### C. Deploying a sequence to the robots
+
+The solved clips are already in the robot pipeline's native currency: every
+`optimized/<clip>/frame_NN_<ts>/shadow_result.json` is a SCHEMA.md
+"Solution" (per-robot `q_rad` keyframe). Two ways to run one on hardware,
+both in `fleet-shadow-art/motion-aware-shadow/deploy/`:
+
+**Bake a unified clip, then play it** (recommended — Play does zero conversion):
+
+```bash
+python deploy/export_clip.py --urdf urdf/SO101/so101_new_calib.urdf     --ts <TIMESTAMP> --out ../leRobot-control/recordings/<name>.json
+```
+
+`--ts` is the timestamp shared by the frame dirs (e.g. `20260902_030833`
+for star_spin). This runs `motion_planner.plan_all_transitions` — the same
+collision-safe staggered/quintic machinery the dq metrics validate against —
+and bakes hold → morph → hold into the clip envelope (hz, per-robot frames,
+stage config embedded). The clip then loads in Play / Shadow_robot_ui like
+any recording; the physical stage config (ports, base placement — see
+`leRobot-control/configs/`) rides inside it.
+
+**Or drive the keyframes live**:
+
+```bash
+python deploy/deploy_animation.py --urdf urdf/SO101/so101_new_calib.urdf     --ts <TIMESTAMP> --hold 1.0 --morph 1.5 --dry-run   # plan + print first
+```
+
+Drop `--dry-run` to execute. Hardware notes, all from tonight's measurements:
+
+- **star_spin: never `--loop`.** Its wrap is 151.7° — accepted for the video
+  precisely because it is not performed; a looped export would ask the arms
+  to perform it.
+- **Two transitions sit inside the planner model's error margin** (star_spin
+  68.6°, flower 68.4°, against the 68.75° direct-connect bound). First
+  hardware pass: lengthen `--morph`, watch those steps.
+- The planner can return a path level marked unsafe rather than refusing;
+  `--dry-run` shows the plan — read it before the arms do.
+- On hardware the rig casts at the FITTED position — the fit inverse is a
+  video-compositing step and does not exist physically.
