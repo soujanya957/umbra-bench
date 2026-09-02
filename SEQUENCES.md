@@ -146,21 +146,51 @@ frames are solved independently, which is how `spinning_star` reached 4/4.
 Arm swaps deserve their own line: the Hungarian assignment is per-solve, so
 nothing currently stops two arms trading regions between frames. On screen that
 reads as the arms crossing, and per-frame IoU is completely blind to it.
+`sequence_metrics.py` measures it in joint space: a transition where relabelling
+the arms (Hungarian on the per-arm joint vectors) beats the identity assignment
+is a swap. On `spinning_star` that is every transition — `assignment_stability`
+0.0 on a clip whose mean frame IoU says nothing is wrong.
+
+### Running it
+
+All three groups are `scripts/sequence_metrics.py`. Two input shapes:
+
+```bash
+# a fleet-shadow-art clip run (summary_*.csv + frame_*/best_shadow.png beside it);
+# --sequence links it to this index for the target frames and the loop flag
+python scripts/sequence_metrics.py \
+    --run ../fleet-shadow-art/motion-aware-shadow/results/3-robot-runs/spinning_star \
+    --sequence star_spin
+
+# every shadows.<source>.frames slot filled in sequences.jsonl
+python scripts/sequence_metrics.py
+```
+
+Output is `results/sequence_metrics_<tag>.csv`, one wide CSV in the
+compute_metrics.py mould: one `row=frame` line per frame (its S1 metrics plus
+the transition leaving it) and one `row=aggregate` line per (sequence, source).
+The joint columns need the run's `q_r*_j*_deg` columns (or `shadows.*.joints`)
+and degrade to null without them; `LARGE_Q_JUMP` is read from the
+fleet-shadow-art checkout (`--repo`, auto-found beside this repo), never copied.
+
+New sequences — the demo letter clips included — join the track the same way
+the first thirteen did: frames into `sequences/<id>/f00.png …`, then
+`build_sequence_metadata.py` in the eval env (so `frame_attributes` fill and
+`loop` is detected), and the id is scoreable. Verified against the recorded
+`spinning_star` numbers: mean frame IoU 0.6679, per-transition dq_max
+[160.9, 291.0, 116.6, 157.6]°, infeasible 5/5 with the wrap.
 
 ## 4. Not done yet
 
-1. **`scripts/sequence_metrics.py`** — S1/S2/S3 above. S2's joint terms are
-   computable today: the `summary_*.csv` next to any sequence run already carries
-   `q_r{0..n}_j{0..5}_deg` per frame.
-2. **Regenerate at 512 with controlled frame counts.** These 13 are hand-authored
+1. **Regenerate at 512 with controlled frame counts.** These 13 are hand-authored
    phases of parametric generators. `make_star(n_points, outer_frac, inner_frac,
    rotation_deg)` alone spans limb count, thinness and phase — the same
    parametric-and-controlled construction the `digits` and `letters` subsets use.
    13 motions is a pilot, not a benchmark; a generated family is how it becomes one.
-3. **The `hand` source is partly undefined here.** A person can hand-cast a static
+2. **The `hand` source is partly undefined here.** A person can hand-cast a static
    silhouette; whether they can hand-cast a 12-frame loop is a different question
    per sequence. Expect the slot to stay sparse and say so rather than reporting a
    mean over whatever happens to be filled.
-4. **Recognizability of *motion*.** A spinning star should read as spinning. The
+3. **Recognizability of *motion*.** A spinning star should read as spinning. The
    Part C ladder in [METRICS.md](METRICS.md) scores stills; the temporal analogue
    is open.
