@@ -101,8 +101,10 @@ def write_mp4(frames, path: Path, fps: float):
 def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--reassembled", default=str(ROOT / "results" / "demo_reassembled"))
-    ap.add_argument("--out", default=str(ROOT / "results" / "demo_video"))
+    ap.add_argument("--reassembled",
+                    default=str(Path(__file__).resolve().parent / "out" / "reassembled"))
+    ap.add_argument("--out",
+                    default=str(Path(__file__).resolve().parent / "out" / "video"))
     ap.add_argument("--scene", action="append", default=[])
     ap.add_argument("--fps", type=float, default=None,
                     help="override; the default is the sequences' own rate")

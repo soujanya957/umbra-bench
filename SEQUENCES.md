@@ -2,7 +2,7 @@
 
 26 animated targets, 276 frames, in two families: 13 generated motions
 (128×128, from the parametric generators) and 13 film-cut letters
-(512×512, extracted from the demo ad by `fleet-shadow-demo/07_make_sequences.py`
+(512×512, extracted from the demo ad by `demo/07_make_sequences.py`
 — one letter in one scene is one sequence). A separate track, not a tenth
 subset, and the reason is a measurement rather than a preference.
 

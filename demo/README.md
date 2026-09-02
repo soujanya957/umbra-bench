@@ -1,4 +1,24 @@
-# fleet-shadow-demo — a film clip becomes a sequences-track dataset
+# demo — the production line, from footage (or the library) to a cast-shadow show
+
+Everything for a demo lives in this folder: the stages that turn video into
+elements, the routing that decides how each element is solved, the reassembly
+that puts solved shadows back on the source canvas, and `out/` with what they
+produce. Two kinds of element feed it:
+
+* **Static elements come from the library.** The benchmark itself — 602 targets
+  in `metadata.jsonl`, every one already solved in two sweeps — IS the static
+  library. A pose that exists there (`optimized/<sweep>/<subset>/<stem>/`,
+  joints in `best_q.npy`, silhouette in `<stem>_best.png`) is pulled, not
+  re-solved. New shapes join the library the way the teleop captures did:
+  mask → `targets/<subset>/` → normalize → ground → `build_metadata` → sweep.
+* **Moving elements come from footage** through the stages below, and are
+  routed (static / translation / dynamic) before any solving, so nothing pays
+  the per-frame price without per-frame content.
+
+Assembly is deliberately manual: the pipeline hands you per-element frames
+placed on the source canvas, and how they are combined is an authoring
+decision. `10_compose_video.py` is the automatic union-composite when that is
+all you want.
 
 Video in, animated shadow targets out, with exactly one human step in the middle.
 
@@ -18,7 +38,8 @@ re-running after fixing a few labels costs only the stages downstream of them.
 | 4 | clean the masks | `06_clean_masks.py` | auto |
 | 5 | group into sequences, crop per clip | `07_make_sequences.py` | auto |
 | 6 | index the track | `../scripts/build_sequence_metadata.py` | auto |
-| 7 | *(after solving)* put the shadows back on the source canvas | `08_reassemble.py` | auto |
+| 6b | **route each element**: static / translation / dynamic | `route_motion.py` | auto |
+| 7 | *(after solving)* shadows back on the source canvas — fit inverted, trajectory replayed, holds replicated | `08_reassemble.py` | auto |
 | 8 | score whether the shadow reads as the letter | `09_clip_score.py` | auto |
 | 9 | composite the scenes back into video | `10_compose_video.py` | auto |
 
@@ -34,8 +55,9 @@ temporal information silently.
 sequences/demo_01_scene_04_M/f00.png …    1-bit, dark = shape
 sequences/demo_01_scene_04_M/source.json  crop box, source frame ids, fps, loop
 sequences.jsonl                           the index, built by stage 6
-results/demo_review/_all.png              every sequence, one glance
-results/demo_reassembled/<seq>/f00.png …  stage 7, on the 1920x1080 canvas
+demo/out/motion_routing.json              the lane per element, with next commands
+demo/out/reassembled/<seq>/f00.png …      stage 7, on the 1920x1080 canvas
+demo/out/video/*.mp4                      stage 9, one per scene + the whole cut
 ```
 
 ---
@@ -133,7 +155,44 @@ footage where the drop shadow really is inside the mask.
 
 ---
 
-## Solving
+## Routing, then solving
+
+`route_motion.py` sorts the elements first, and the lane decides the work:
+
+```bash
+python demo/route_motion.py          # writes demo/out/motion_routing.json
+```
+
+* **static** (target step IoU ≥ 0.93 — four of the thirteen ad clips): the
+  element does not move. If the shape already exists in the library, use that
+  solve. Otherwise solve `f00.png` alone and hold it:
+
+  ```bash
+  # from fleet-shadow-art/motion-aware-shadow — one frame, same config as below
+  python scripts/run_sequence.py --urdf urdf/SO101/so101_new_calib.urdf     --targets ../../umbra-bench/sequences/<id>/f00.png --n-robots 3     --alpha 1.0 --beta 0.3 --gamma 0.0 --final-gamma 0.0 --delta 0.0     --popsize 192 --sigma0 0.4 --phase1-iters 128 --phase2-iters 128     --final-iters 256 --fit-target --reach-samples 300     --outdir ../../umbra-bench/optimized/<id>
+  python demo/08_reassemble.py --sequence <id> --hold   # replicate across ids
+  ```
+
+  On the current ad this replaces 46 per-frame solves with 4 holds, and a held
+  clip's transitions are perfect by construction.
+
+* **translation** (stabilising shrinks the union ≥ 1.1×): the motion is travel,
+  and travel is what made scene_06_L's letter tiny (one fit must cover the
+  whole path). Split shape from trajectory, solve the shape, replay the travel
+  at composite time:
+
+  ```bash
+  python scripts/stabilize_sequence.py --ids <id>       # writes <id>_stab/
+  # solve sequences/<id>_stab/ with the full-clip command below
+  python demo/08_reassemble.py --sequence <id>_stab     # trajectory replayed
+  ```
+
+  Measured: L 0.433 → 0.719 avg IoU (fit scale 0.831-at-bound → 1.312 free),
+  Y 0.712 → 0.812, triangle 0.649 → 0.825. `10_compose_video.py` lets a
+  `_stab` reassembly supersede its parent automatically.
+
+* **dynamic**: real articulation. Full-clip solve, no discount — the command is
+  the one above with every frame listed in `--targets`.
 
 The targets are a sequence, so solve them as one. `run_sequence.py` keeps the
 renderer, the shadow forward model and the previous frame's pose across frames;
@@ -230,6 +289,21 @@ can reach, and the letter still lands where the ad put it.
 inverse instead of trusting the derivation -- 0.988 on `scene_06_A`, 0.951 on
 the thinner `scene_06_L`, the difference being resampling.
 
+### Assembling by hand
+
+What each element hands you, wherever you compose it:
+
+* a **moving element**: `demo/out/reassembled/<seq>/f00.png…` — 1-bit frames on
+  the full 1920×1080 canvas, dark = shadow, already at authored position and
+  scale; `reassembly.json` beside them carries fps and `source_frame_ids`, the
+  key for aligning elements that share a shot.
+* a **library element** (static): `optimized/<sweep>/<subset>/<stem>/<stem>_best.png`
+  is the silhouette (place it yourself — it is in the solver's 128 px frame),
+  `best_q.npy` the joint pose if the rig itself is the display.
+* combining: shadows union — where two overlap there is simply more shadow
+  (`np.minimum` on the greyscale frames). Align by source frame id, never by
+  frame index; clips have different lengths because letters enter mid-shot.
+
 ### Is it legible?
 
 ```bash
@@ -283,8 +357,8 @@ so that is real time, and playing it faster would show motion nothing was
 solved for.
 
 ```
-results/demo_video/scene_01.mp4 … scene_06.mp4
-results/demo_video/demo_01.mp4
+demo/out/video/scene_01.mp4 … scene_06.mp4
+demo/out/video/demo_01.mp4
 ```
 
 ### Scoring
@@ -323,9 +397,16 @@ run_demo.py               the driver — start here
 05_split_objects.py       FALLBACK for keypoints that lumped several glyphs into one
 06_clean_masks.py         specks, bridges, holes, smoothing — one connected shadow
 07_make_sequences.py      per-sequence crop → the sequences track
-08_reassemble.py          solved shadows → the 1920x1080 canvas, fit inverted
+08_reassemble.py          solved shadows → the 1920x1080 canvas: fit inverted,
+                          trajectory_px replayed for _stab clips, --hold for
+                          static ones
 09_clip_score.py          retrieval rank: does the shadow read as the letter
-10_compose_video.py       scenes recomposited from the per-letter clips -> mp4
+10_compose_video.py       the AUTOMATIC union composite (manual assembly is the
+                          expected path; this is the one-command version)
+route_motion.py           the static/translation/dynamic router
+out/                      reassembled frames, routing, scores, video (the
+                          reassembled/ and solve_logs/ trees are regenerable
+                          and gitignored; video and clip_legibility.csv ship)
 scenes/                   extracted frames
 letters_sam2_small/       SAM output
 letters_clean/            final masks, flat, one directory
@@ -373,8 +454,8 @@ gitignored, line 7; the CSVs under it are committed anyway because a tracked
 file overrides the rule.)
 
 ```bash
-python fleet-shadow-demo/08_reassemble.py --all     # fit-inverse, back onto the 1920x1080 canvas
-python fleet-shadow-demo/10_compose_video.py        # -> results/demo_video/*.mp4, one per scene + full cut
+python demo/08_reassemble.py --all     # fit-inverse, back onto the 1920x1080 canvas
+python demo/10_compose_video.py        # -> demo/out/video/*.mp4, one per scene + full cut
 ```
 
 Stage 7 (`08_reassemble.py` — the file numbers and the stage numbers differ,

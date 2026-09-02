@@ -13,7 +13,7 @@ applied unchanged to all of them. Relative position and relative size survive;
 what the robot casts moves the way the source moves.
 
     python scripts/make_demo_targets.py \\
-        --masks fleet-shadow-demo/letters_sam/by_frame \\
+        --masks demo/letters_sam/by_frame \\
         --out targets_demo/demo
 
 Output is a flat subset directory named `<scene>_<frame>.png`, which sorts into
@@ -59,9 +59,9 @@ def scene_of(frame_id: str, keypoints: dict) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--masks", default="fleet-shadow-demo/letters_sam/by_frame",
+    ap.add_argument("--masks", default="demo/letters_sam/by_frame",
                     help="directory of <frame>/<frame>_<obj>_mask.png")
-    ap.add_argument("--keypoints", default="fleet-shadow-demo/keypoints.json",
+    ap.add_argument("--keypoints", default="demo/keypoints.json",
                     help="used only for the frame -> scene mapping")
     ap.add_argument("--out", default="targets_demo/demo")
     ap.add_argument("--size", type=int, default=512)

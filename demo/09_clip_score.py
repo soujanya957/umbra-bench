@@ -72,12 +72,14 @@ def masks(d: Path):
 def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--reassembled", default=str(ROOT / "results" / "demo_reassembled"))
+    ap.add_argument("--reassembled",
+                    default=str(Path(__file__).resolve().parent / "out" / "reassembled"))
     ap.add_argument("--sequence", action="append", default=[])
     ap.add_argument("--source", default="optimizer",
                     help="which solve pass these shadows came from; carried "
                          "into the CSV so two passes can sit side by side")
-    ap.add_argument("--out", default=str(ROOT / "results" / "demo_clip_legibility.csv"))
+    ap.add_argument("--out",
+                    default=str(Path(__file__).resolve().parent / "out" / "clip_legibility.csv"))
     ap.add_argument("--model-name", default="ViT-B-32")
     ap.add_argument("--pretrained", default="laion2b_s34b_b79k")
     ap.add_argument("--batch-size", type=int, default=32)

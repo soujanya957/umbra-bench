@@ -108,7 +108,7 @@ def _stats(row: dict, metric: str):
 
 
 def read_legibility(bench: str):
-    """results/demo_clip_legibility.csv (umbra-bench-9f's stage 09) -> joins.
+    """demo/out/clip_legibility.csv (stage 09) -> joins.
 
     Aggregate rows have frame_idx empty; input=authored rows (source empty) are
     the per-clip CLIP ceiling, input=reassembled rows the cast score per solve
@@ -116,7 +116,7 @@ def read_legibility(bench: str):
     are unread as the folded class (I/l/1 -> "digit 1" prompts miss a serif
     capital I), so the ratio is None and the card must say so, not show 0.
     """
-    path = os.path.join(bench, "results", "demo_clip_legibility.csv")
+    path = os.path.join(bench, "demo", "out", "clip_legibility.csv")
     if not os.path.exists(path):
         return {}
     ceil, cast, frames = {}, {}, {}

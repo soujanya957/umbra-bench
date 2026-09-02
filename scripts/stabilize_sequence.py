@@ -26,7 +26,7 @@ before writing anything).
 
 The variant is a solving condition, not a new benchmark row: it is NOT added
 to sequences.jsonl here. Solve it with run_sequence.py pointed at the _stab
-directory; at composite time (fleet-shadow-demo 08/10) shift each rendered
+directory; at composite time (demo/08 + demo/10) shift each rendered
 frame by trajectory_px scaled by the render's px-per-canvas-px ratio. For a
 filmed rig the same numbers become a per-frame camera reframe.
 

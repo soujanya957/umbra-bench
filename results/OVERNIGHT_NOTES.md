@@ -481,3 +481,21 @@ Caveat stated on the card: two transitions run 68.5/67.6 deg against the
 (26 + 3 _stab, loop declarations inherited from parents); payload joins
 all three solves via --sequence-pinned ids; atlas rebuilt and the L_stab
 card browser-verified (declared-loop provenance, full solve block).
+
+## The demo folder consolidation + motion routing + the library framing
+
+fleet-shadow-demo/ -> demo/, with outputs inside it (demo/out/{video,
+reassembled, solve_logs, clip_legibility.csv, motion_routing.json});
+08/09/10 defaults now anchor to the script's own directory, the payload
+builder reads clip legibility from demo/out/, reassembled+solve_logs are
+gitignored, video and the CSV ship. Full-chain smoke passed from the new
+paths (08 -> 10 6/6 scenes -> payload with legibility joined -> atlas).
+
+route_motion.py sorts elements static/translation/dynamic from measured
+step IoU + an actual stabilisation derivation (edge-hugging clips fall
+through to dynamic): the ad routes 4/2/7, the static lane alone replaces
+46 per-frame solves with 4 holds; 08 gained --hold. Per the user, the
+benchmark IS the static library (pull existing solves, add new shapes
+via the set2 route) and assembly stays manual -- the README's assembly
+spec documents exactly what each element hands you; 10 remains the
+one-command automatic composite.

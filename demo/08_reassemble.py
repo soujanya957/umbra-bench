@@ -83,7 +83,8 @@ def shadow_frames(run_dir: Path, ts: str | None):
                                else "frame_*/best_shadow.png"))
 
 
-def reassemble(name: str, out_root: Path, fps: float | None, check: bool):
+def reassemble(name: str, out_root: Path, fps: float | None, check: bool,
+               hold: bool = False):
     seq = BENCH / "sequences" / name
     run = BENCH / "optimized" / name
     src = json.loads((seq / "source.json").read_text(encoding="utf-8"))
@@ -95,6 +96,13 @@ def reassemble(name: str, out_root: Path, fps: float | None, check: bool):
     if not shots:
         print(f"  {name}: no best_shadow.png, skipped")
         return None
+    # The static lane (route_motion.py): a clip whose element does not move
+    # is solved ONCE and held -- one best_shadow replicated across the clip's
+    # frame ids, so the composite still gets a frame per source frame.
+    held = False
+    if hold and len(shots) == 1 and len(src.get("frame_ids") or []) > 1:
+        shots = shots * len(src["frame_ids"])
+        held = True
 
     fit = summ.get("target_fit")
     inv = invert(fit) if fit else None
@@ -115,7 +123,7 @@ def reassemble(name: str, out_root: Path, fps: float | None, check: bool):
 
     out = out_root / name
     out.mkdir(parents=True, exist_ok=True)
-    if summ.get("n_frames") and len(shots) != summ["n_frames"]:
+    if (not held) and summ.get("n_frames") and len(shots) != summ["n_frames"]:
         print(f"  {name}: {len(shots)} frames on disk but the summary says "
               f"{summ['n_frames']} — solve still in flight, skipped")
         return None
@@ -162,6 +170,7 @@ def reassemble(name: str, out_root: Path, fps: float | None, check: bool):
         "fit_applied_by_solver": fit,
         "inverse_applied_here": inv,
         "trajectory_applied": bool(traj),
+        "held_static": held,
         "stabilized_from": src.get("stabilized_from"),
         "source_frame_ids": src.get("frame_ids"),
     }, indent=1), encoding="utf-8")
@@ -268,7 +277,7 @@ def main():
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--sequence", action="append", default=[])
     ap.add_argument("--all", action="store_true", help="every solved demo_* clip")
-    ap.add_argument("--out", default=str(BENCH / "results" / "demo_reassembled"))
+    ap.add_argument("--out", default=str(Path(__file__).resolve().parent / "out" / "reassembled"))
     ap.add_argument("--fps", type=float, default=None)
     ap.add_argument("--no-sheet", action="store_true",
                     help="skip the review sheet")
@@ -276,6 +285,9 @@ def main():
                     help="review sheet on the whole 1920x1080 frame")
     ap.add_argument("--no-check", action="store_true",
                     help="skip the fit/inverse round-trip check")
+    ap.add_argument("--hold", action="store_true",
+                    help="static lane: replicate a single solved frame across "
+                         "the clip's frame ids (see route_motion.py)")
     a = ap.parse_args()
 
     names = list(a.sequence)
@@ -290,7 +302,7 @@ def main():
     print(f"{len(names)} sequence(s) -> {out_root}\n")
     done = 0
     for n in names:
-        if reassemble(n, out_root, a.fps, not a.no_check):
+        if reassemble(n, out_root, a.fps, not a.no_check, hold=a.hold):
             done += 1
     print(f"\n{done}/{len(names)} reassembled")
     if done and not a.no_sheet:
