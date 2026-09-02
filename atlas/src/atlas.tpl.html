@@ -2236,13 +2236,17 @@ function seqCard(q){
   }
   // Shadow frames come from the first solved source that recorded them; today
   // that is at most one, and a per-source switch can wait for a second capture.
+  // When the run solved a fitted target, every plate draws the SHOWN frames
+  // (wf) — the static atlas's rule: against the authored frames the card reads
+  // as mis-registered, and none of that is solver error.
   const withSf = q.solved.map(s => q.solves[s]).find(so => so.sf);
   const a = {
     el: card, anim: card.querySelector(".anim"),
     cvT: card.querySelector(".cv-t"), cvS: card.querySelector(".cv-s"),
     cvO: card.querySelector(".cv-o"), lbl: card.querySelector(".fidx"),
     triplbl: card.querySelector(".seq-lbl"),
-    f: q.f, sf: withSf ? withSf.sf : null, family: q.family,
+    f: (withSf && withSf.wf) ? withSf.wf : q.f,
+    sf: withSf ? withSf.sf : null, family: q.family,
     n: q.f.length, loop: q.loop, period, i: 0, tick: 0,
     next: performance.now() + period,
   };

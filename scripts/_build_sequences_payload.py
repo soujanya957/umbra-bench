@@ -31,8 +31,13 @@ import glob
 import io
 import json
 import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from PIL import Image
+
+from sequence_metrics import _apply_fit  # noqa: E402  (shown-frame replay)
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _BENCH = os.path.dirname(_HERE)
@@ -70,6 +75,21 @@ def thumb(path: str, px: int) -> str:
     if corners >= 3:
         bw = bw.point(lambda v: 255 - v)
     return _enc(bw)
+
+
+def thumb_fitted(path: str, px: int, fit: dict) -> str:
+    """The shown frame: the authored frame with the run's clip fit re-applied.
+
+    The static atlas draws every plate against the target the optimizer was
+    actually given (README, "Plates"): against the authored one, every card
+    reads as mis-registered and none of it is solver error. Same rule here.
+    Fit units are the run's render-size pixels; px matches for these runs.
+    """
+    import numpy as np
+    im = Image.open(path).convert("L").resize((px, px), Image.LANCZOS)
+    mask = (np.array(im) < 128).astype(np.uint8)
+    shown = _apply_fit(mask, fit)
+    return _enc(Image.fromarray((1 - shown) * 255))
 
 
 def _f(v):
@@ -122,7 +142,8 @@ def read_solves(bench: str):
     return agg, frames
 
 
-def solve_block(by_ref: dict, frames_by_ref: dict, bench: str, px: int) -> dict:
+def solve_block(by_ref: dict, frames_by_ref: dict, bench: str, px: int,
+                authored_paths: list | None = None) -> dict:
     """One source's solve, from its ref=original rows plus, when the run solved
     a fitted target, the ref=shown reconstruction (see sequence_metrics.py)."""
     row = by_ref["original"]
@@ -210,6 +231,9 @@ def solve_block(by_ref: dict, frames_by_ref: dict, bench: str, px: int) -> dict:
                 found += 1
         if found:
             out["sf"] = sf
+            if out.get("fit") and authored_paths:
+                out["wf"] = [thumb_fitted(p, px, out["fit"])
+                             for p in authored_paths]
         if found < n_f:
             print(f"[!] {row.get('sequence_id', '?')}/{row.get('source', '?')}: "
                   f"{n_f - found} shadow frames missing on disk")
@@ -247,8 +271,9 @@ def main():
             except (json.JSONDecodeError, OSError) as e:
                 raise SystemExit(f"[!] {sj} exists but is unreadable: {e}")
 
+        authored = [os.path.join(a.bench, fp) for fp in r["frames"]]
         solves = {s: solve_block(agg[(i, s)], frames.get((i, s), {}),
-                                 a.bench, a.px)
+                                 a.bench, a.px, authored)
                   for (i, s) in agg if i == sid and "original" in agg[(i, s)]}
         rec = {
             "id": sid,
