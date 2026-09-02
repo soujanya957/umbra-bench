@@ -334,3 +334,53 @@ review/                   per-scene contact sheets from stage 1
 
 `keypoints.json` is the only file worth backing up by hand — everything else is
 regenerable from it and the video.
+
+
+---
+
+## Deploying the demo
+
+Two deliverables, two paths. "Build the atlas" covers the first one only.
+
+### A. The dashboard (atlas) — yes, one build and it's there
+
+Every solve's metrics CSV is committed, so on this machine the board rebuilds
+from two commands (eval env, see SETUP.md):
+
+```bash
+python scripts/_build_sequences_payload.py
+python atlas/build_atlas.py            # -> atlas/atlas.html, open it
+```
+
+That page IS the deployed dashboard: all 26 sequences with animated
+target/shadow/overlay plates, both IoU references, legibility, and the
+guide. To put it at the shared URL, publish `atlas/src/atlas.fragment.html`
+(built by `python atlas/build_atlas.py --bare`) to the existing artifact —
+from Claude Code, `/artifacts` lists it; republishing the fragment to the
+same URL updates it in place.
+
+Fresh-checkout caveat: `results/` is gitignored and the atlas also needs
+`browser_payload.json` and `teleop_payload.json`, which are NOT committed —
+a new machine runs the five-command chain in atlas/README.md once first.
+
+### B. The demo video — the atlas does not produce this
+
+The video is its own two commands, downstream of the solves in `optimized/`
+(present here; gitignored, so a fresh checkout re-solves via ## Solving):
+
+```bash
+python fleet-shadow-demo/08_reassemble.py --all     # fit-inverse, back onto the 1920x1080 canvas
+python fleet-shadow-demo/10_compose_video.py        # -> results/demo_video/*.mp4, one per scene + full cut
+```
+
+Stage 8 applies each clip's recorded fit inverse so the letters land where
+the ad drew them (recovery measured to within resampling; `--check`
+round-trips it). Stage 10 composites letters that shared a shot back into
+one frame, aligned by source frame id — scene_06 is F A M I L Y assembling,
+not six separate clips. Output is real-time 5 fps by construction; it looks
+slow because it is.
+
+Decisions already taken (see results/OVERNIGHT_NOTES.md): the demo is a
+rendered composite (size/position adjustable in post — which is exactly what
+stage 8 does), the wide-fit solves are the ship set, `star_spin` ships at
+fit floor 0.85 and must NOT get a loop bake.
