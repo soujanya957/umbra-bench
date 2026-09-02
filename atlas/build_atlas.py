@@ -67,6 +67,7 @@ SKELETON = ("""<!doctype html>
 SLOTS = {
     "__PAYLOAD__": os.path.join(BENCH, "results", "browser_payload.json"),
     "__TELEOP__": os.path.join(BENCH, "results", "teleop_payload.json"),
+    "__SEQUENCES__": os.path.join(BENCH, "results", "sequences_payload.json"),
 }
 
 
@@ -122,7 +123,8 @@ def main() -> int:
         html = html.replace(slot, blob, 1)
         print(f"  {slot:12} <- {os.path.relpath(path, BENCH):38} {len(blob)/1e6:6.2f} MB")
 
-    left = [s for s in ("__PAYLOAD__", "__TELEOP__", "__RESCUE__") if s in html]
+    left = [s for s in ("__PAYLOAD__", "__TELEOP__", "__SEQUENCES__",
+                        "__RESCUE__") if s in html]
     if left:
         print(f"unfilled slots remain: {left}", file=sys.stderr)
         return 1

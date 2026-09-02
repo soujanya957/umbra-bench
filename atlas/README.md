@@ -46,6 +46,7 @@ directory layout is what stops you needing it.
 | --- | --- | --- |
 | `__PAYLOAD__` | `results/browser_payload.json` | `scripts/_build_browser_payload.py` |
 | `__TELEOP__` | `results/teleop_payload.json` | `scripts/_build_teleop_payload.py` |
+| `__SEQUENCES__` | `results/sequences_payload.json` | `scripts/_build_sequences_payload.py` |
 
 Both are parsed before splicing. A truncated payload is otherwise a syntax error
 in someone's browser hours later, with no line number worth having. A missing one
@@ -53,12 +54,13 @@ is a hard failure rather than a placeholder: the build refuses instead of shippi
 a page whose teleop tab is quietly empty.
 
 `results/` is gitignored, so a fresh checkout has neither. The chain from solved
-sweeps to an openable page is four commands:
+sweeps to an openable page is five commands:
 
 ```bash
 python scripts/compute_metrics.py --results optimized/big-budget-grounded --targets-dir targets_grounded
 python scripts/make_master_table.py        # metrics_*.csv -> master_table.csv
 python scripts/_build_browser_payload.py   # + metadata.jsonl, + the target tree
+python scripts/_build_sequences_payload.py # sequences.jsonl + sequence_metrics_*.csv
 python atlas/build_atlas.py
 ```
 
@@ -111,6 +113,16 @@ is in the sort menu as **shape IoU**, with **aspect error** beside it.
 - **teleop** — the *pipeline*, not a second copy of the dataset: six steps from
   rig to rebuild, each with the command to run. The interactive segmenter lives
   inside step 4, for redoing a mask that came out wrong.
+- **sequences** — the animated track. Previews play at the source fps and wrap
+  around only when the sequence actually loops; the loop badge carries its
+  provenance (`declared` is a fact from source.json, `wrap-test` a heuristic
+  with its evidence beside it). A solve's mean frame IoU is only ever shown
+  next to `dq_infeasible_frac`, per SEQUENCES.md; unsolved clips say so and
+  print the command that changes it.
+- **guide** — how to use the dashboard, plus the metric reference: range,
+  direction, what each number answers, and the ways it lies when quoted alone.
+  Content is checked against the metric code; when they disagree, the code is
+  right.
 
 ### The `hand-cast` badge
 

@@ -397,6 +397,62 @@ button.act:hover{border-color:var(--accent); color:var(--accent-ink)}
 }
 .empty{color:var(--muted); font-size:12px; padding:18px 0; font-style:italic}
 .hint{font-size:11px; color:var(--muted)}
+
+/* ── sequences track ─────────────────────────────────────────────────────── */
+.seqwrap{padding:22px 26px 60px; display:flex; flex-direction:column; gap:18px}
+.seqwrap h2{margin:0 0 4px; font-size:17px; font-weight:600; letter-spacing:-.01em}
+.seqwrap>.intro{margin:0; font-size:13px; line-height:1.6; color:var(--ink-2); max-width:78ch}
+.seqgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px}
+.seqcard{border:1px solid var(--line); border-radius:9px; background:var(--panel);
+  box-shadow:var(--shadow); overflow:hidden; display:flex; flex-direction:column}
+.seqcard .anim{position:relative; background:var(--screen)}
+.seqcard .anim img{width:100%; aspect-ratio:1/1; display:block; image-rendering:pixelated}
+.seqcard .anim .fidx{position:absolute; bottom:5px; right:7px; font-family:"IBM Plex Mono",monospace;
+  font-size:9.5px; color:var(--muted); background:var(--panel); padding:1px 5px; border-radius:4px;
+  border:1px solid var(--line-2); opacity:.9}
+.seqmeta{padding:10px 12px 11px; display:flex; flex-direction:column; gap:7px}
+.seqmeta .idline{display:flex; align-items:baseline; gap:8px; flex-wrap:wrap}
+.seqmeta .sid{font-family:"IBM Plex Mono",monospace; font-size:11.5px; font-weight:600}
+.seqmeta .prompt{font-size:11.5px; color:var(--muted); line-height:1.45}
+.seqbadges{display:flex; gap:5px; flex-wrap:wrap}
+.sbadge{font-family:"IBM Plex Mono",monospace; font-size:9px; letter-spacing:.05em;
+  text-transform:uppercase; padding:2px 7px; border-radius:999px; background:var(--panel-2);
+  border:1px solid var(--line-2); color:var(--ink-2)}
+.sbadge.loop{background:var(--accent-soft); color:var(--accent-ink); border-color:transparent}
+.seqnums{display:flex; gap:12px; flex-wrap:wrap}
+.seqnums div{display:flex; flex-direction:column}
+.seqnums span{font-family:"IBM Plex Mono",monospace; font-size:8.5px; color:var(--muted);
+  letter-spacing:.04em; text-transform:uppercase}
+.seqnums b{font-family:"IBM Plex Mono",monospace; font-size:12.5px; font-weight:600;
+  font-variant-numeric:tabular-nums}
+.seqspark{display:block; width:100%; height:26px}
+.solvebox{border-top:1px solid var(--line-2); background:var(--panel-2); padding:9px 12px 10px;
+  display:flex; flex-direction:column; gap:7px}
+.solvebox .src{font-family:"IBM Plex Mono",monospace; font-size:9px; letter-spacing:.05em;
+  text-transform:uppercase; color:var(--muted)}
+.solvebox .warnline{font-size:11px; line-height:1.5; color:var(--ink-2)}
+.seqnums b.bad{color:#c2410c}
+:root[data-theme="dark"] .seqnums b.bad{color:#fb923c}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .seqnums b.bad{color:#fb923c}}
+.unsolved{border-top:1px solid var(--line-2); padding:9px 12px 10px; font-size:11px;
+  line-height:1.6; color:var(--muted)}
+.unsolved code{font-family:"IBM Plex Mono",monospace; font-size:10px; background:var(--panel-2);
+  padding:1px 5px; border-radius:4px; word-break:break-all}
+
+/* ── guide view ──────────────────────────────────────────────────────────── */
+table.gref{border-collapse:collapse; font-size:11.5px; width:100%; line-height:1.5}
+table.gref th, table.gref td{padding:6px 9px; text-align:left; border-bottom:1px solid var(--line-2);
+  vertical-align:top}
+table.gref thead th{color:var(--muted); font-weight:500; font-size:10px; letter-spacing:.05em;
+  text-transform:uppercase}
+table.gref td.mn{font-family:"IBM Plex Mono",monospace; font-size:11px; white-space:nowrap; font-weight:600}
+table.gref td.rg{font-family:"IBM Plex Mono",monospace; font-size:10.5px; white-space:nowrap;
+  color:var(--ink-2)}
+table.gref td.dir{font-family:"IBM Plex Mono",monospace; font-size:10.5px; white-space:nowrap}
+table.gref td.note{color:var(--muted); font-size:11px}
+.guide-rules{margin:0; padding-left:18px; display:flex; flex-direction:column; gap:7px;
+  font-size:12.5px; line-height:1.55; color:var(--ink-2)}
+.guide-rules b{color:var(--ink)}
 @media (prefers-reduced-motion:reduce){ *{transition:none!important} }
 </style>
 
@@ -412,7 +468,9 @@ button.act:hover{border-color:var(--accent); color:var(--accent-ink)}
       <div class="seg" id="segPage">
         <button data-v="atlas" aria-pressed="true">atlas</button>
         <button data-v="bench" aria-pressed="false">benchmark</button>
+        <button data-v="sequences" aria-pressed="false">sequences</button>
         <button data-v="teleop" aria-pressed="false">teleop</button>
+        <button data-v="guide" aria-pressed="false">guide</button>
       </div>
     </div>
 
@@ -499,6 +557,8 @@ button.act:hover{border-color:var(--accent); color:var(--accent-ink)}
 
   <section class="bench" id="benchView" hidden></section>
   <section class="rescue" id="teleopView" hidden></section>
+  <section class="rescue" id="seqView" hidden></section>
+  <section class="bench" id="guideView" hidden></section>
 
   <main class="main" id="atlasView">
     <header class="top">
@@ -535,6 +595,7 @@ button.act:hover{border-color:var(--accent); color:var(--accent-ink)}
 
 <script id="data" type="application/json">__PAYLOAD__</script>
 <script id="teleop" type="application/json">__TELEOP__</script>
+<script id="sequences" type="application/json">__SEQUENCES__</script>
 <script>
 (() => {
 "use strict";
@@ -573,11 +634,12 @@ const store = {
    page:"rescue" from before that view was removed would have every view hidden
    and no button pressed -- a blank page with no way back except clearing storage.
    Anything not on this list falls back to the atlas. */
-const PAGES = ["atlas", "bench", "teleop"];
+const PAGES = ["atlas", "bench", "sequences", "teleop", "guide"];
 /* The teleop set is read here, ahead of the atlas, because the atlas uses it:
    a target somebody has actually cast by hand is a different kind of row, and
    the grid says so rather than making you switch views to find out. */
 const TELEOP = payload("teleop");
+const SEQ = payload("sequences");
 const TELBY = new Map();
 for(const it of (TELEOP.items || [])) if(it.sample_id && !TELBY.has(it.sample_id)) TELBY.set(it.sample_id, it);
 
@@ -1951,17 +2013,340 @@ function renderTeleop(){
   });
 }
 
+/* ── sequences track ─────────────────────────────────────────────────────────
+   The track's whole argument is that per-frame numbers are not enough, so the
+   card is built to make the temporal facts unavoidable: the preview plays at
+   the source fps and only wraps when the sequence actually loops, the loop
+   badge carries its provenance (a declared label is a fact from source.json, a
+   wrap-test label is a heuristic and shows its evidence), and a solve's mean
+   frame IoU is never printed without dq_infeasible_frac beside it. */
+const seqAnims = [];
+let seqTicker = null;
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function seqTick(){
+  if(document.hidden || $("#seqView").hidden) return;
+  const now = performance.now();
+  for(const a of seqAnims){
+    if(now < a.next) continue;
+    a.i += 1;
+    // A non-loop clip runs once and holds: the film it came from has no
+    // last-to-first transition, so the preview must not invent one. It restarts
+    // after a visible rest instead of wrapping.
+    if(a.i >= (a.loop ? a.n : a.n + 4)) a.i = 0;
+    const show = Math.min(a.i, a.n - 1);
+    a.img.src = "data:image/png;base64," + a.f[show];
+    a.lbl.textContent = "f" + String(show).padStart(2, "0")
+                      + (!a.loop && a.i >= a.n ? " · end" : "");
+    a.next = now + a.period;
+  }
+}
+
+function seqSpark(mo, loop){
+  const v = mo.step_iou || [];
+  if(v.length < 2) return "";
+  const pts = v.map((s, i) => `${(2 + 96 * i / (v.length - 1)).toFixed(1)},${(24 - 20 * s).toFixed(1)}`);
+  const wrap = loop
+    ? `<circle cx="98" cy="${(24 - 20 * mo.wrap_iou).toFixed(1)}" r="2" fill="var(--s2)">
+         <title>wrap step IoU ${mo.wrap_iou}</title></circle>` : "";
+  return `<svg class="seqspark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img"
+     aria-label="target step IoU per transition">
+     <polyline points="${pts.join(" ")}" fill="none" stroke="var(--s1)" stroke-width="1.5"/>${wrap}</svg>`;
+}
+
+function seqCard(q){
+  const card = document.createElement("div"); card.className = "seqcard";
+  const period = Math.max(1000 / (q.fps || 6), 200);
+  const loopBadge = q.loop
+    ? `<span class="sbadge loop" title="wrap step ${q.motion.wrap_iou} vs 0.9 × mean step ${q.motion.mean_step_iou} — the wrap is a real transition and is scored">loop · ${q.loop_source}</span>`
+    : `<span class="sbadge" title="${q.loop_source === "declared"
+        ? "declared in source.json — the film runs once; a wrap is never performed, so none is scored (the wrap test alone would misread slow clips)"
+        : "wrap step " + q.motion.wrap_iou + " fails 0.9 × mean step " + q.motion.mean_step_iou}">runs once · ${q.loop_source}</span>`;
+  const fpsChip = q.fps ? `${q.fps} fps` : "~6 fps";
+  card.innerHTML = `
+    <div class="anim"><img alt="${q.id} frame 0" src="data:image/png;base64,${q.f[0]}">
+      <span class="fidx">f00</span></div>
+    <div class="seqmeta">
+      <div class="idline"><span class="sid">${q.id}</span>
+        <span class="sbadge">${q.family}</span>${loopBadge}</div>
+      <div class="prompt">${q.prompt}</div>
+      <div class="seqbadges"><span class="sbadge">${q.n_frames} frames</span>
+        <span class="sbadge">${fpsChip}</span>
+        <span class="sbadge">${q.frame_size[0]}px native</span>
+        ${q.cls && q.cls.length === 1 ? `<span class="sbadge">glyph ${q.cls}</span>` : ""}</div>
+      <div class="seqnums">
+        <div><span>mean step IoU</span><b>${num(q.motion.mean_step_iou)}</b></div>
+        <div><span>min step</span><b>${num(q.motion.min_step_iou)}</b></div>
+        <div><span>wrap</span><b>${num(q.motion.wrap_iou)}</b></div>
+      </div>
+      ${seqSpark(q.motion, q.loop)}
+    </div>`;
+  for(const src of q.solved){
+    const so = q.solves[src], h = so.headline;
+    const box = document.createElement("div"); box.className = "solvebox";
+    const infeas = h.dq_infeasible_frac;
+    const mism = so.loop_scored !== q.loop
+      ? `<div class="warnline">⚠ scored with loop=${so.loop_scored} but the track says loop=${q.loop} — re-run sequence_metrics.py</div>` : "";
+    const sizeNote = so.solve_size && so.solve_size !== q.frame_size[0]
+      ? ` · solved at ${so.solve_size}px` : "";
+    box.innerHTML = `<div class="src">${src} · ${so.n_transitions} transitions${sizeNote}</div>
+      <div class="seqnums">
+        <div><span>mean frame IoU</span><b>${num(h.iou_mean)}</b></div>
+        <div><span>worst frame</span><b>${num(h.iou_min)}</b></div>
+        <div><span>infeasible</span><b class="${infeas > 0 ? "bad" : ""}">${
+          infeas == null ? "no joint data" : (100 * infeas).toFixed(0) + "%"}</b></div>
+        <div><span>arm swaps</span><b class="${so.s3.n_arm_swaps > 0 ? "bad" : ""}">${
+          so.s3.assignment_stability == null ? "—" : so.s3.n_arm_swaps + "/" + so.n_transitions}</b></div>
+      </div>
+      ${so.s3.dq_max_deg_by_transition ? `<div class="warnline">dq_max per step:
+        <span class="mono">[${so.s3.dq_max_deg_by_transition.map(d => d.toFixed(0)).join(", ")}]°</span>${
+        so.s3.loop_closure && so.s3.loop_closure.dq_max_deg != null
+          ? ` · wrap ${so.s3.loop_closure.dq_max_deg.toFixed(0)}°` : ""} vs the ${
+        num(h.dq_infeasible_thr_deg, 2)}° bound</div>` : ""}
+      ${mism}`;
+    card.appendChild(box);
+  }
+  if(!q.solved.length){
+    const u = document.createElement("div"); u.className = "unsolved";
+    u.innerHTML = `not yet solved — after a clip run:<br>
+      <code>python scripts/sequence_metrics.py --run &lt;run_dir&gt; --sequence ${q.id}</code>`;
+    card.appendChild(u);
+  }
+  const img = card.querySelector(".anim img"), lbl = card.querySelector(".fidx");
+  if(!REDUCED && q.f.length > 1)
+    seqAnims.push({ img, lbl, f: q.f, n: q.f.length, loop: q.loop, period,
+                    i: 0, next: performance.now() + period });
+  return card;
+}
+
+function renderSequences(){
+  const v = $("#seqView");
+  const wrap = document.createElement("div"); wrap.className = "seqwrap";
+  const head = document.createElement("div");
+  head.innerHTML = `<h2>The sequences track</h2>
+    <p class="intro">${SEQ.n} animated targets (${SEQ.sequences.filter(s => s.family === "generated").length}
+    generated motions, ${SEQ.sequences.filter(s => s.family === "demo").length} film-cut letters from the demo ad),
+    ${SEQ.n_solved} solved so far. A clip is not a bag of frames: <b>spinning_star averages 0.6679 per-frame IoU
+    and cannot be performed</b> — one transition needs a 291° single-joint swing. So every solve here shows its
+    mean frame IoU only next to <span class="mono">dq_infeasible_frac</span>, and previews only wrap around when
+    the sequence actually loops. The guide view explains each number.</p>`;
+  const grid = document.createElement("div"); grid.className = "seqgrid";
+  for(const q of SEQ.sequences) grid.appendChild(seqCard(q));
+  wrap.append(head, grid);
+  v.replaceChildren(wrap);
+  if(!seqTicker && seqAnims.length) seqTicker = setInterval(seqTick, 50);
+}
+
+/* ── guide view ──────────────────────────────────────────────────────────────
+   The metric reference. Ranges and directions here are checked against
+   scripts/metrics.py, scripts/sequence_metrics.py, semantic_metrics.py and
+   fleet-shadow-art's target_fit.py / motion_planner.py — if this table and the
+   code ever disagree, the code is right and this table has rotted. */
+function gtable(rows){
+  return `<div class="tblwrap"><table class="gref">
+    <thead><tr><th>metric</th><th>range</th><th>better</th><th>what it answers</th><th>notes</th></tr></thead>
+    <tbody>${rows.map(r => `<tr><td class="mn">${r[0]}</td><td class="rg">${r[1]}</td>
+      <td class="dir">${r[2]}</td><td>${r[3]}</td><td class="note">${r[4]}</td></tr>`).join("")}</tbody>
+  </table></div>`;
+}
+
+function renderGuide(){
+  const v = $("#guideView");
+  const UP = "↑ higher", DOWN = "↓ lower", DIAG = "◦ diagnostic";
+
+  const shape = [
+    ["iou", "[0,1]", UP, "how much area agrees: |T∩S| / |T∪S|",
+     "the headline, but it correlates ρ=+0.64 with stroke width — it mostly measures how fat the target is; never rank by it alone"],
+    ["dice", "[0,1]", UP, "pixel F1; monotone in IoU",
+     "adds no ranking information — here because segmentation readers look for it"],
+    ["boundary_iou", "[0,1]", UP, "is the outline in the right place, with the interior's vote removed",
+     "IoU inside a band 2% of the diagonal along each outline; undoes the stroke-width bias (truck: 0.633 IoU, 0.198 here)"],
+    ["nsd", "[0,1]", UP, "share of outline within a set tolerance (1% of the diagonal) of the other's",
+     "the tolerance is physical: on a 1 m screen it reads 'outline within ~1 cm'"],
+    ["chamfer", "[0,1] of diag", DOWN, "mean outline-to-outline distance",
+     "keeps grading after the shapes stop overlapping, where IoU flatlines at 0"],
+    ["hd95", "[0,1] of diag", DOWN, "how far off the worst part of the outline is",
+     "95th-percentile Hausdorff — what a viewer notices first, minus stray pixels"],
+    ["cldice", "[0,1]", UP, "did the thin parts survive — a limb counts as much as a torso",
+     "skeleton-vs-mask harmonic mean; cannot be gamed by thickening"],
+    ["betti_error", "int ≥ 0", DOWN, "is an 8 still an 8 — same number of parts and holes",
+     "|Δβ0|+|Δβ1|, significance-thresholded; a step function — pw_h0/h1 are its graded versions"],
+    ["pw_h0 / pw_h1", "[0,∞)", DOWN, "graded topology error: parts (h0) and holes (h1)",
+     "Wasserstein distance between persistence diagrams — a 99%-closed hole is cheap, a missing one expensive"],
+    ["limb_offset_rel", "[0,~1] of diag", DOWN, "did the protrusions land in the right places",
+     "Hungarian-matched skeleton endpoints; None (not 0) when a side has no endpoints — count metrics can't see limbs pointing the wrong way"],
+    ["hu_distance", "[0,∞)", DOWN, "same shape? — ignoring position, scale, rotation",
+     "log-scaled L1 over the first 4 Hu invariants (higher orders are numerical noise)"],
+    ["fourier_distance", "[0,∞)", DOWN, "contour-descriptor distance",
+     "normalised Fourier magnitudes of the main outline — comparable to the MPEG-7 retrieval literature"],
+    ["tc_iou", "[0,1]", UP, "is it the right shape, ignoring where it sat and how big it was drawn",
+     "trim to ink, match height, centre; on a fitted sweep this is the only pairwise number about the shape rather than the fit — read with tc_aspect_error (↓): high tc_iou + big aspect error = stretched, not wrong"],
+  ];
+
+  const fit = [
+    ["fit_scale / dx / dy", "grid-bounded", DIAG, "the similarity transform --fit-target applied before solving",
+     "mean scale 0.832, ~14 px shift on the grounded sweep — the whole reason ref=shown and ref=original disagree"],
+    ["at_bound", "bool", "⚠ true", "did the fit stop exactly on a search bound",
+     "censored, not measured — widen the range before trusting the fit numbers (centred sweeps: ~66%; grounded: 14%)"],
+    ["clip_frac", "[0, 0.02]", DOWN, "fraction of the placed target pushed off-canvas",
+     "anything > 0 means the solve scored against a truncated shape; capped at 2% by --fit-min-retained"],
+    ["touches_edge", "bool", DIAG, "does the placed target reach a frame border",
+     "read per tree: grounded targets rest on the bottom edge by design (~75%), so there it means nothing"],
+    ["uncastable_before/after", "[0,1]", DOWN + " (after)", "target area outside the rig's reachable support",
+     "high after-value = a reach problem, not an algorithm problem — check before blaming the optimizer"],
+  ];
+
+  const clip = [
+    ["clip_rank / clip_rr", "1..n / (0,1]", "↓ / ↑", "where the true class ranks when CLIP scores the image against the subset's prompts",
+     "rr = 1/rank; the mean of rr over any filter IS that filter's MRR, so card and table cannot disagree"],
+    ["top1 (+ chance)", "[0,1]", UP, "the true class wins outright",
+     "chance runs 0.038–0.500 across subsets — never compare raw top1 down a column; use top1_over_chance"],
+    ["mrr", "[1/n, 1]", UP, "how much of the rank position survives",
+     "keeps signal top-1 discards: hand_shadow shadows rank ~4th of 9 (top1 0.000, mrr ratio 0.407)"],
+    ["ratio_vs_target / mrr_ratio", "[0,∞)", UP, "the number to quote: shadow recognizability over the target's own",
+     "CLIP is weak on 1-bit silhouettes, so the target scored through the identical path is the ceiling; null where the ceiling is at chance (abstract, teleop — the null controls)"],
+    ["clip_top1_similarity", "[-1,1]", DIAG, "the raw cosine of the top guess — what it failed AS",
+     "no softmax, no logit scale: not a confidence, does not sum to 1 — which is exactly why the metric is a rank"],
+  ];
+
+  const seq = [
+    ["&lt;m&gt;_mean/min/max/std", "as base", "as base", "S1 — per-frame quality over the clip, every pairwise metric aggregated",
+     "min is what a viewer sees (the worst frame); for lower-better metrics the worst frame is the max column"],
+    ["dq_max_deg", "deg ≥ 0", DOWN, "S2 — largest single-joint step per transition",
+     "the number frame IoU cannot see: spinning_star needs 291° between two individually-good frames"],
+    ["dq_infeasible_frac", "[0,1]", DOWN + " · headline", "S2 — share of transitions where any joint exceeds the planner's bound",
+     "LARGE_Q_JUMP = 1.2 rad = 68.75°, read live from motion_planner.py, never copied; the wrap counts whenever loop=true; null means no joint data, not zero"],
+    ["shadow/target_step_iou", "[0,1]", DIAG, "S2 — how much the shadow / the animation moved per step",
+     "shadow movement is uninterpretable without the target's own: wiper changes 0.21 per step, plant 0.91"],
+    ["motion_excess", "[-1,1]", DIAG, "S2 — thrashing, normalised: target_step_iou − shadow_step_iou",
+     "positive = the rig moved more than the animation asked; negative = under-moved (the clip looks frozen); both are failures"],
+    ["assignment_stability", "[0,1]", UP, "S3 — do the arms keep their roles, or trade regions mid-clip",
+     "Hungarian on per-arm joint vectors per transition; arms crossing on screen — spinning_star scores 0.0 with healthy frame IoU"],
+    ["loop_closure_*", "as base", "as base", "S3 — the wrap transition broken out",
+     "only for loops; already counted inside the aggregates — skip it and a solver can unwind a full rotation between last and first frame for free"],
+    ["total_path_length_deg", "deg ≥ 0", DOWN, "S3 — what performing the whole clip costs in joint motion",
+     "scales with frame count — compare dq_l2_deg mean across clips of different length"],
+  ];
+
+  const views = document.createElement("div"); views.className = "fig";
+  views.innerHTML = `<h3>The views</h3>
+    <ul class="guide-rules">
+      <li><b>atlas</b> — every target beside its best solved shadow. Sort by any panel metric, drag the
+        histogram to brush a range, filter by subset chips or search, star cards into the filmstrip, click a
+        card for its full report. Plates draw the target <em>the optimizer was actually given</em> (the fitted
+        one) so pictures and numbers are always the same comparison. The hand-cast badge marks a human
+        reference capture — a marker, not a score.</li>
+      <li><b>benchmark</b> — the stratification (stroke-width quartiles × topology), per-subset tables, CLIP
+        recognizability, and the metric-vs-metric figures.</li>
+      <li><b>sequences</b> — the animated track: previews play at source fps and wrap only when the sequence
+        loops; each loop badge names its provenance (<span class="mono">declared</span> = fact from
+        source.json, <span class="mono">wrap-test</span> = heuristic with its evidence); solves show mean
+        frame IoU only beside infeasibility.</li>
+      <li><b>teleop</b> — the capture pipeline, six steps from rig to rebuild, with the interactive segmenter
+        in step 4.</li>
+      <li>Sidebar state persists per browser (<span class="mono">localStorage</span>, keys
+        <span class="mono">uba:*</span>); after a re-run, rebuild payloads then the atlas —
+        <span class="mono">build_atlas.py --check</span> says whether the committed page is current.</li>
+    </ul>`;
+
+  const rules = document.createElement("div"); rules.className = "fig";
+  rules.innerHTML = `<h3>Reading rules — the ways these numbers lie if quoted alone</h3>
+    <ul class="guide-rules">
+      <li><b>Mean frame IoU never travels without dq_infeasible_frac.</b> spinning_star averages 0.6679 and
+        cannot be performed — averaging per-frame quality is precisely the statistic that cannot see a 291°
+        joint swing.</li>
+      <li><b>ref=shown vs ref=original.</b> On a fitted sweep the solver was asked to cast the <em>placed</em>
+        target. shown = did it solve the problem it was given; original = how much of the authored shape
+        survived, fit included. The gap is enormous (0.75 vs 0.35 on the grounded small budget) and quoting a
+        mean IoU without its ref is meaningless.</li>
+      <li><b>On fitted sweeps, plain IoU mostly reports the fit.</b> Use tc_iou for the shape-only question.
+        Do not reach for aligned_iou — its search (scale 0.85–1.15, shift ≤ 12%) cannot reach the fits it
+        would need to undo (scale down to 0.35).</li>
+      <li><b>IoU needs company, not replacement.</b> Boundary, thin-structure, topology and placement answer
+        different questions; a featureless disc outscores a recognisable car on IoU alone.</li>
+      <li><b>CLIP scores are ratios, not absolutes.</b> The judge is half-blind on silhouettes, so shadow
+        recognizability is quoted over the target's own ceiling; abstract and teleop are null controls and
+        carry no signal. Quote the top-1 ratio and the MRR ratio together — they disagree in ways that change
+        conclusions (hand_shadow: 0.000 vs 0.407).</li>
+      <li><b>The wrap is a real transition.</b> Whenever a sequence loops, the last→first step is scored like
+        any other — otherwise a solver can unwind a whole rotation in the gap for free. Loop labels are
+        declared by the importer where the source knows (a film cut runs once) and wrap-tested only where it
+        doesn't; the badge tells you which.</li>
+      <li><b>Nulls are meaningful, not zero.</b> dq columns without joint data, limb offsets without
+        endpoints, CLIP ratios without a ceiling — everything degrades to null rather than raising, and
+        averaging over nulls silently misreports.</li>
+      <li><b>Fit diagnostics gate everything downstream.</b> at_bound means the fit is censored; clip_frac
+        &gt; 0 means the solve scored a truncated shape; check uncastable_after before blaming the optimizer.
+        And metrics must use the same --targets-dir the sweep solved against.</li>
+    </ul>`;
+
+  const solver = document.createElement("div"); solver.className = "fig";
+  solver.innerHTML = `<h3>How sequences are solved — and why the transition metrics exist</h3>
+    <p style="max-width:78ch">Animated clips are never solved jointly. The CPU path
+    (<span class="mono">run_sequence.py</span>) solves each frame with the same CMA-ES optimizer used for a
+    static target, in order, chaining state forward: the previous frame's pose warm-starts the next solve, a
+    temporal penalty (weight 0.3 by default) pulls the new pose toward it, and a reachability barrier
+    (weight 100) fires when any joint would move more than <span class="mono">LARGE_Q_JUMP</span> = 1.2 rad —
+    the same threshold below which <span class="mono">motion_planner.py</span> can connect two keyframes with
+    a direct quintic. All of that coupling is soft, one-directional, and active only when a previous pose is
+    supplied, so frames solved independently never see the barrier at all — which is how spinning_star ended
+    with every transition infeasible. Between keyframes, smoothness is manufactured after the fact:
+    the planner builds collision-checked paths and retimes them, but it cannot repair keyframes the solver
+    placed too far apart.</p>
+    <p style="max-width:78ch; margin-top:8px">A separate GPU path exists
+    (<span class="mono">run_sequence_jax.py</span> — this is where JAX comes in: a differentiable MJX renderer
+    with batched Adam restarts), and it currently solves every frame independently with no warm start and no
+    temporal term. Nothing yet optimizes a whole clip at once, and nothing prevents arms trading roles
+    between frames — <span class="mono">dq_infeasible_frac</span> and
+    <span class="mono">assignment_stability</span> are the metrics that keep both facts visible.</p>`;
+
+  const mkfig = (title, cap, rows) => {
+    const d = document.createElement("div"); d.className = "fig";
+    d.innerHTML = `<h3>${title}</h3>${gtable(rows)}<div class="cap">${cap}</div>`;
+    return d;
+  };
+
+  const intro = document.createElement("div");
+  intro.innerHTML = `<h2>Guide — how to use this dashboard, and what the numbers mean</h2>
+    <p>Every metric below answers one question, has a known range and a direction, and lies in a specific way
+    when quoted alone. Ranges and directions are checked against the code
+    (<span class="mono">scripts/metrics.py</span>, <span class="mono">sequence_metrics.py</span>,
+    <span class="mono">semantic_metrics.py</span>, <span class="mono">target_fit.py</span>); if this page and
+    the code disagree, the code is right.</p>`;
+
+  v.replaceChildren(intro, views, rules,
+    mkfig("Pairwise shape metrics — target vs shadow, one number each",
+      "All distances are normalised by the image diagonal, so they are resolution-independent. " +
+      "Everything degrades to null rather than raising when an optional dependency or a degenerate mask " +
+      "makes it uncomputable.", shape),
+    mkfig("Fit diagnostics — properties of the placement, not the solve",
+      "Recorded per target in results.json under <b>fit</b> by --fit-target sweeps; they gate every " +
+      "downstream comparison.", fit),
+    mkfig("CLIP recognizability — can a frozen judge name the shape",
+      "One prompt per class per subset, cosine ranks, no softmax. Chance level rides along because class " +
+      "lists run from 2 to 26 entries.", clip),
+    solver,
+    mkfig("Sequence metrics — S1 frames, S2 transitions, S3 the clip",
+      "From scripts/sequence_metrics.py: one row per frame plus one aggregate row per (sequence, source), " +
+      "in results/sequence_metrics_&lt;tag&gt;.csv. S2's threshold is imported from fleet-shadow-art at " +
+      "run time so it can never drift from what the planner enforces.", seq));
+}
+
 function applyPage(){
   if(!PAGES.includes(st.page)) st.page = "atlas";
   store.set("page", st.page);
   const p = st.page;
   $("#benchView").hidden  = p !== "bench";
   $("#teleopView").hidden = p !== "teleop";
+  $("#seqView").hidden    = p !== "sequences";
+  $("#guideView").hidden  = p !== "guide";
   $("#atlasView").hidden  = p !== "atlas";
   document.querySelectorAll('[data-only="atlas"]').forEach(e => e.hidden = p !== "atlas");
   document.querySelector(".strip").hidden = p !== "atlas";
   if(p === "bench"  && !$("#benchView").childElementCount)  renderBench();
   if(p === "teleop" && !$("#teleopView").childElementCount) renderTeleop();
+  if(p === "sequences" && !$("#seqView").childElementCount) renderSequences();
+  if(p === "guide"  && !$("#guideView").childElementCount)  renderGuide();
 }
 seg("#segPage", "page", applyPage);
 
