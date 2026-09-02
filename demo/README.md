@@ -304,6 +304,23 @@ What each element hands you, wherever you compose it:
   (`np.minimum` on the greyscale frames). Align by source frame id, never by
   frame index; clips have different lengths because letters enter mid-shot.
 
+### Packing a show
+
+```bash
+python demo/pack.py --name family_scene06   --clip demo_01_scene_06_A --clip demo_01_scene_06_L_stab   --library teleop_candle_01_mask
+```
+
+One folder under `demo/packages/<name>/` with everything a show is made of:
+per element `frames/` (canvas PNGs or the library silhouette), `joints.csv`
+(radians, arm0_q0..arm2_q5), `meta.json` (fps, config, fit, provenance), the
+composited `video/`, and `choreo/<element>.json` — the unified clip envelope
+`Shadow_robot_ui` consumes natively. Deploying is: copy `choreo/*.json` into
+`fleet-shadow-art/choreographies/`, open Play. Nothing on the fleet-shadow
+side needs changing; the format was read out of its own loader
+(`render_server/clipfmt.py`) rather than guessed. `--library` pulls any
+already-solved benchmark target by its `metadata.jsonl` id — the library is
+the benchmark.
+
 ### Is it legible?
 
 ```bash
@@ -478,24 +495,24 @@ fit floor 0.85 and must NOT get a loop bake.
 
 > **GATE — verify the physical base layout before executing anything.**
 > Every solve in this repo assumes the renderer's default rig: three arms in
-> a single line along the light→screen depth axis at x=0 —
-> `SR-A (0.0, 0.0) · SR-B (0.0, −0.2) · SR-C (0.0, −0.4)`, light_y +1.0,
-> wall −2.4 (verified against `renderer._default_base_positions`). The
-> per-arm magnification spread of that line is what makes the shadows work.
-> **No committed config describes this layout** — `lab_default` spreads the
-> arms 0.6 m laterally, `test_stage` differs again, `old_man` rotates two
-> bases. A pose executed on any of those casts a different shape. Before
-> deploying: either arrange the rig as above and write that config, or
-> re-solve against the real base positions with `run_sequence.py --stage-json
-> <rig.json>` — its help says "Stage rig JSON (solver frame; written by
-> render_server", so the file render_server emits is the one to pass, and
-> `--arm-gap` alone cannot express a layout that is not a single line.
-> (There is no `--base-positions` flag; `--stage-json` and `--arm-gap` are the
-> only two placement entry points run_sequence exposes.)
+> a single depth line — arm 0 nearest the light at depth 0, then −0.2 and
+> −0.4; light 1.0 m in front, wall 2.4 m behind (verified in the run logs:
+> `light_y=1.00 wall_y=-2.40`). The per-arm magnification spread of that
+> line is what makes the shadows work; a pose executed on a different layout
+> casts a different shape. To solve against the REAL rig instead, pass
+> `run_sequence.py --stage-json <rig.json>` with a stage the UI's Setup tab
+> emits (`POST /optimize/scene` writes `motion-aware-shadow/targets/
+> stage_*.json`).
 >
-> **TODO (user, lab facts no session can supply):** which config matches the
-> current physical stage; how Play/render_server is started; which SR10x
-> units map to the three solved arms.
+> Facts settled by reading the other repo (previously TODO-user): the
+> physical stage lives in `leRobot-control/configs/<name>.json` and the UI's
+> Stage tab edits it; `render_server/lab_setup.json` (arm_gap 0.35) is dead
+> code — its only reader has no callers, so tuning it does nothing; the
+> SR10x mapping is positional (solver arm 0 = SR101 = nearest the light) and
+> per-arm calibration is applied inside the driver at send time, so packaged
+> joints stay uncalibrated solver radians. Ports are an operator setting in
+> the Robot console. Still the user's call: WHICH configs/ stage matches the
+> rig on the day.
 
 The solved clips are already in the robot pipeline's native currency: every
 `optimized/<clip>/frame_NN_<ts>/shadow_result.json` is a SCHEMA.md

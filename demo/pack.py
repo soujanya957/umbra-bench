@@ -41,6 +41,17 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent
 BENCH = ROOT.parent
 
+# The solver rig behind every solve in this repo (run logs: light_y=1.00
+# wall_y=-2.40, three arms 0.2 apart, light 0.30 high, arm 0 nearest the
+# light), mapped into the UI frame per Shadow_robot_ui/render_server/
+# optimize.py's documented transform: base.x = -depth, lightH = h + tableY
+# (0.55). This is what makes the Play preview's shadow geometry match the
+# solve instead of whatever stage the UI happens to have open.
+CHOREO_SCENE = {"lightX": -1.0, "lightY": 0, "lightH": 0.85, "screenX": 2.4}
+CHOREO_BASES = [{"x": 0.0, "y": 0, "z": 0, "yaw": 0},
+                {"x": 0.2, "y": 0, "z": 0, "yaw": 0},
+                {"x": 0.4, "y": 0, "z": 0, "yaw": 0}]
+
 
 def latest_ts(run: Path) -> str | None:
     js = sorted(run.glob("summary_*.json"))
@@ -79,6 +90,7 @@ def pack_clip(sid: str, dest: Path):
     if len(qs) != r["n_frames"]:
         sys.exit(f"[!] {sid}: {len(qs)} poses for {r['n_frames']} frames")
     write_joints(dest / "joints.csv", qs)
+    pack_clip.last_qs, pack_clip.last_fps = qs, None
     summ = json.loads(sorted(run.glob("summary_*.json"))[-1]
                       .read_text(encoding="utf-8"))
     (dest / "meta.json").write_text(json.dumps({
@@ -89,8 +101,10 @@ def pack_clip(sid: str, dest: Path):
         "trajectory_applied": r.get("trajectory_applied", False),
         "fit_applied_by_solver": r.get("fit_applied_by_solver"),
         "avg_iou": summ.get("avg_iou"), "scene": summ.get("scene"),
+        "config": summ.get("config"),
         "urdf": summ.get("urdf"), "n_arms": summ.get("n_robots"),
     }, indent=1), encoding="utf-8")
+    pack_clip.last_fps = r["fps"]
     return r["n_frames"]
 
 
@@ -113,13 +127,46 @@ def pack_library(stem: str, sweep: str, dest: Path):
     shutil.copyfile(tdir / f"{tstem}_best.png", dest / "frames" / "silhouette.png")
     shutil.copyfile(BENCH / rec["target"], dest / "frames" / "target.png")
     write_joints(dest / "joints.csv", [np.asarray(best["q_rad"])])
+    pack_library.last_qs = [np.asarray(best["q_rad"], dtype=float).ravel()]
     (dest / "meta.json").write_text(json.dumps({
         "kind": "library_static", "id": stem, "class": rec.get("class"),
         "subset": subset, "sweep": sweep,
         "best_iou": res.get("best_iou"), "rig": res.get("rig"),
+        "optimizer": res.get("optimizer"),
         "fit": res.get("fit"), "prompt": rec.get("prompt"),
     }, indent=1), encoding="utf-8")
     return 1
+
+
+def write_choreo(dest: Path, name: str, hz: float, qs: list[np.ndarray]):
+    """The unified clip envelope Shadow_robot_ui consumes, one file per element.
+
+    Dropping this into fleet-shadow-art/choreographies/ is the whole deploy
+    hand-off: Play lists it by filename stem, previews it against the scene
+    block, and streams robots[].frames to the arms as-is -- solver radians,
+    uncalibrated (the driver applies per-arm visual offsets at send time).
+    Name and filename stem must match and may only use [A-Za-z0-9_-].
+    """
+    n_arms = qs[0].size // 6
+    robots = []
+    for i in range(n_arms):
+        robots.append({
+            "id": f"SR{101 + i}", "model": "so-101",
+            "base": CHOREO_BASES[i] if i < len(CHOREO_BASES) else
+                    {"x": 0.2 * i, "y": 0, "z": 0, "yaw": 0},
+            # cutout must stay null: with one set, the UI reinterprets q5 as a
+            # rod-servo spin and drives only five joints
+            "cutout": None, "cutout_id": None, "cutout_rot": 0, "mount": None,
+            "start_frame": 0,
+            "frames": [[round(float(v), 6) for v in
+                        np.asarray(q).ravel()[i * 6:(i + 1) * 6]] for q in qs],
+        })
+    clip = {"name": name, "stage": None,
+            "source": {"method": "umbra-bench demo/pack.py"},
+            "hz": int(round(hz)), "n_frames": len(qs), "kind": "clip",
+            "scene": CHOREO_SCENE, "robots": robots}
+    dest.mkdir(parents=True, exist_ok=True)
+    (dest / f"{name}.json").write_text(json.dumps(clip), encoding="utf-8")
 
 
 PKG_README = """# demo package: {name}
@@ -137,6 +184,24 @@ Self-contained material for one show. Per element:
 * `meta.json` -- fps, provenance, fit, IoU.
 
 `video/` holds the already-composited scene mp4s if they were built.
+
+## Robot deploy: `choreo/`
+
+One `choreo/<element>.json` per element, in the exact "unified clip envelope"
+Shadow_robot_ui consumes. To deploy:
+
+1. copy `choreo/*.json` into `fleet-shadow-art/choreographies/`
+2. start the UI (`Shadow_robot_ui/start.sh`) and open **Play** -- each element
+   lists by filename; preview, arrange on the timeline, deploy.
+
+The scene block carries the solve's own rig (light 1.0 m in front of arm 0,
+arms 0.2 m apart in depth, screen 2.4 m behind, mapped into the UI frame), so
+the preview's shadow geometry matches the solve. Joints are UNCALIBRATED
+solver radians -- the arm driver applies each robot's visual offsets at send
+time; do not pre-apply them. Serial ports are an operator setting in the
+Robot console, never part of a clip. Robot ids are SR101 (nearest the light),
+SR102, SR103; if your stage config names differ, Play remaps positionally and
+says so in the status bar.
 
 **Deploy caveat (unchanged from demo/README.md section C):** solver joints are
 model-space. Physical playback still needs the lab's base placement, the
@@ -175,12 +240,15 @@ def main():
     elements = {}
     for sid in a.clip:
         n = pack_clip(sid, pkg / "elements" / sid)
+        write_choreo(pkg / "choreo", sid, pack_clip.last_fps or 5.0,
+                     pack_clip.last_qs)
         elements[sid] = {"kind": "clip", "n_frames": n}
-        print(f"  clip     {sid:<28} {n} frames")
+        print(f"  clip     {sid:<28} {n} frames + choreo")
     for lid in a.library:
         n = pack_library(lid, a.sweep, pkg / "elements" / lid)
+        write_choreo(pkg / "choreo", lid, 5.0, pack_library.last_qs)
         elements[lid] = {"kind": "library_static", "sweep": a.sweep}
-        print(f"  library  {lid:<28} 1 pose ({a.sweep})")
+        print(f"  library  {lid:<28} 1 pose ({a.sweep}) + choreo")
 
     vids = [] if a.no_video else sorted((ROOT / "out" / "video").glob("*.mp4"))
     if vids:

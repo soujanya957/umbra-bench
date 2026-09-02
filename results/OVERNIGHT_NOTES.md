@@ -499,3 +499,18 @@ benchmark IS the static library (pull existing solves, add new shapes
 via the set2 route) and assembly stays manual -- the README's assembly
 spec documents exactly what each element hands you; 10 remains the
 one-command automatic composite.
+
+## Packaging + the zero-change deploy hand-off
+
+demo/pack.py: one command -> demo/packages/<name>/ with frames, joints.csv,
+meta.json (incl. solver config), video/, and choreo/<element>.json in
+Shadow_robot_ui's unified clip envelope -- format read out of the UI's own
+normalize_clip/list_choreographies (Explore recon), not guessed. Deploy =
+copy choreo/*.json into fleet-shadow-art/choreographies/; NO code change
+on that side needed, so no second session was spawned (user allowed it;
+the cheaper path won and the skeleton stays untouched). Recon also
+settled two long-standing wrong beliefs: lab_setup.json (0.35) is dead
+code, and the solves' true default rig is gap 0.2 / light 1.0 / wall 2.4
+(README gate rewritten; SR10x mapping is positional, calibration lives in
+the driver, ports are operator settings). Scene block mapped into the UI
+frame via optimize.py's documented transform so Play previews match.
