@@ -108,8 +108,15 @@ def stabilize(rec, seq_dir, write):
             with open(pj, encoding="utf-8") as f:
                 src = json.load(f)
         src.update({
+            # The parent's EFFECTIVE loop becomes a declaration: stabilising
+            # nearly freezes the frames, so the wrap test on the _stab clip
+            # would call any travelling shape a loop -- the exact mislabel
+            # declarations exist to prevent.
+            "loop": bool(rec["target_motion"]["loop"]),
             "stabilized_from": rec["id"],
-            # dy, dx removed per frame; re-APPLY these to restore the motion
+            # per frame: the (dy, dx) ADDED to the original to centre it.
+            # Restoring the motion means SUBTRACTING these from the
+            # stabilised placement (see 08_reassemble.py).
             "trajectory_px": [[dy, dx] for dy, dx in shifts],
             "stabilize_scale_gain": round(gain, 3),
         })

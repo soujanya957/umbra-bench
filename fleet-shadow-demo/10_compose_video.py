@@ -50,6 +50,12 @@ def load_scene(re_root: Path):
         sj = ROOT / "sequences" / d.name / "source.json"
         if not rj.exists() or not sj.exists():
             continue
+        # A stabilised re-solve supersedes its parent in the shot: both carry
+        # the same scene/letter/frame ids, and composing both would cast the
+        # letter twice.
+        if (re_root / (d.name + "_stab") / "reassembly.json").exists():
+            print(f"  {d.name}: superseded by {d.name}_stab")
+            continue
         r = json.loads(rj.read_text(encoding="utf-8"))
         s = json.loads(sj.read_text(encoding="utf-8"))
         ids = r.get("source_frame_ids") or s["frame_ids"]

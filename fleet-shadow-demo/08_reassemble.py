@@ -119,6 +119,18 @@ def reassemble(name: str, out_root: Path, fps: float | None, check: bool):
         print(f"  {name}: {len(shots)} frames on disk but the summary says "
               f"{summ['n_frames']} — solve still in flight, skipped")
         return None
+    # A stabilised clip was solved with its travel removed; the removed
+    # per-frame shifts ride in source.json as trajectory_px (authored-canvas
+    # pixels), and re-applying them here is what puts the motion back into
+    # the composite. Scaled by side/size because the tile lives in the
+    # crop's pad frame, not the authored square.
+    traj = src.get("trajectory_px")
+    if traj and len(traj) != len(shots):
+        print(f"  {name}: {len(traj)} trajectory entries for {len(shots)} "
+              f"frames — refusing to guess, skipped")
+        return None
+    k = side / float(src.get("size") or 512)
+
     written = []
     for i, p in enumerate(shots):
         m = np.asarray(Image.open(p).convert("L")) > 128     # white = shadow
@@ -126,6 +138,16 @@ def reassemble(name: str, out_root: Path, fps: float | None, check: bool):
             m = warp(m.astype(np.float32), **inv) > 0.5
         tile = Image.fromarray(np.where(m, 0, 255).astype(np.uint8), "L")
         tile = tile.resize((side, side), Image.NEAREST)
+        if traj:
+            # trajectory_px is the shift APPLIED to each original frame to
+            # centre it (original -> stabilised); undoing it means
+            # subtracting, and getting this sign wrong doubles the travel
+            # instead of restoring it -- caught by measuring, frame IoU vs
+            # the moving authored letter fell to 0.
+            dy, dx = traj[i]
+            moved = Image.new("L", (side, side), 255)
+            moved.paste(tile, (round(-dx * k), round(-dy * k)))
+            tile = moved
         region = tile.crop((ox, oy, ox + crop["w"], oy + crop["h"]))
         page = Image.new("L", (canvas["w"], canvas["h"]), 255)
         page.paste(region, (crop["x"], crop["y"]))
@@ -139,6 +161,8 @@ def reassemble(name: str, out_root: Path, fps: float | None, check: bool):
         "canvas": canvas, "crop": crop,
         "fit_applied_by_solver": fit,
         "inverse_applied_here": inv,
+        "trajectory_applied": bool(traj),
+        "stabilized_from": src.get("stabilized_from"),
         "source_frame_ids": src.get("frame_ids"),
     }, indent=1), encoding="utf-8")
     print(f"  {name:<26}{len(written):>3} frames -> {out}"
@@ -180,12 +204,15 @@ def sheet(names, out_root: Path, cols: int = 10, tile_w: int = 240,
         if not fs:
             continue
         src = json.loads((seq / "source.json").read_text(encoding="utf-8"))
+        # A stabilised reassembly re-applies the travel, so the honest grey
+        # reference is the PARENT's authored (moving) frames.
+        aseq = BENCH / "sequences" / src.get("stabilized_from", n)
         idx = (list(range(len(fs))) if len(fs) <= cols
                else [round(i * (len(fs) - 1) / (cols - 1)) for i in range(cols)])
         pairs = []
         for i in idx:
             sh = np.asarray(Image.open(fs[i]).convert("L")) < 128
-            pairs.append((sh, authored_on_canvas(seq, i, src["crop"], src["canvas"])))
+            pairs.append((sh, authored_on_canvas(aseq, i, src["crop"], src["canvas"])))
 
         box = None
         if not full_canvas:

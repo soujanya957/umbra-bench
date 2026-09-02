@@ -459,3 +459,15 @@ complete and stand. Full 10-frame triangle_stab re-launched; the ledger
 keeps this entry so the wrong number cannot be quoted from the earlier
 one. Lesson filed next to the 3-frame byte-sampling one: a listing
 piped through head is a sample, not an inventory.
+
+## Trajectory playback wired; demo video overwritten (user approved)
+
+08_reassemble re-applies trajectory_px after the fit inverse (scaled
+side/size into the pad frame); 10_compose lets a _stab reassembly
+supersede its parent so the letter is not cast twice. The first wiring
+had the SIGN inverted (trajectory_px is original->stabilised; restoring
+means subtracting) -- caught by measuring canvas IoU vs the moving
+authored letter BEFORE composing: 0.0/0.15/0.01/0.01 instead of a gain.
+Fixed and re-measured: L mean 0.560 -> 0.729 on canvas (entering frame
+0.291 -> 0.686), Y 0.741 -> 0.797. scene_06 and the whole cut
+re-composed; FAMILY reads with L and Y at authored size and position.
