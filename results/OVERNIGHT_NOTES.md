@@ -304,3 +304,18 @@ and it needs the reach map, so it is future work, stated as such.
 Also on record: lab_setup.json carries arm_gap 0.35 vs the 0.20 every solve
 assumes — the section-C gate now has direct evidence of a geometry conflict,
 with the user.
+
+## Teleop v2 pipeline (user request, delivered while away) — c237e16
+
+RealSense photo -> binary shadow in one command: scripts/teleop_pipeline.py.
+AprilTag (36h11, ids 0-3) OUTER-frame rectification at pinned 560x468 — the
+tags are IN the frame (nothing at the boundary lost) and excluded at
+segmentation (statistics, background force, SAM2 negative prompts).
+Hand seeds from points.json carried across frames via raw space, so v2
+inherits every capture's human markup; SAM2-auto and Otsu as fallbacks.
+Validated: 29/29 processed, 28/29 consistent with the shipped v1 masks, and
+the single divergence is the redesign's purpose demonstrated —
+letters_upperH's left stroke, amputated by v1's inner crop at the frame
+edge, restored in v2 (+7%). Review sheet: Teleops/rectified2/_contact_sheet.png.
+v1 outputs untouched; switching the atlas teleop payload to v2 frames is a
+follow-up decision, not made unilaterally.
