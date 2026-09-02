@@ -359,3 +359,45 @@ regardless of --images), stray dir removed, reran into the set tree.
 No metrics rerun needed: set2 is still unlinked (31/31 unmatched), set1
 untouched. fh_l1 is the CUDA env per user -- future SAM2 runs need not
 crawl on CPU (saved to memory).
+
+## Evening streams (user at dinner): studio, set1 reproduction, set2 import, stabilizer
+
+Studio (committed 6fc3a1f): teleop view gains per-set chips synced to
+Teleops/source/<set>/ (points namespaced per set -- set1 and v1 share stems
+across DIFFERENT frames, so a shared namespace would have been a coordinate
+bug); scripts/teleop_studio.py serves the dashboard plus /api/points (merge,
+never delete, notes preserved -- verified byte-idempotent) and /api/rerun
+(SAM2 -> merge -> payload -> atlas in one call; path traversal rejected;
+verified live on candle_01). Tag footprints baked per item; browser
+segmenter seeds them background, matching the pipeline's exclusion.
+
+set1 "重新跑重新produce metric": full pipeline rerun -> 29/29 sam2-points,
+ZERO frac drift vs committed masks (deterministic reproduction), then
+compute_metrics --shadows --sources teleop --tag teleop-v2 -> 28 pairs,
+iou 0.2995 / tc_iou 0.3315 / cldice 0.5142, byte-identical to the
+committed CSV. Nothing changed and that is the finding: chain reproduces.
+
+set2 import (v1 route, per Explore-agent archaeology): metadata backed up
+(build_metadata writes none itself -- hazard H1), _teleop_index() now reads
+all set manifests (was hardcoded to the retired v1 path -- would have
+minted 31 rows with class "teleop"), masks copied prefix-stripped, padded
+654x548 -> 512x429@(0,41), grounded (+50px mean shift). build_metadata
+running. BUDGET.md snapshots taken before the sweeps (H4: the launcher
+overwrites them). Big-budget sweep for the 31 launched pid 17880 with the
+FULL explicit flag set from the snapshot; watcher pid 31140 chains the
+small sweep on exit. ~4 solves/min observed.
+
+Stabilizer (committed 5ca3c8c): scene_06_L's "bad" solve was geometry, not
+solving -- 307px translation drift made the union fit 2.31x too small.
+stabilize_sequence.py splits shape from trajectory exactly (verified
+reconstruction), records trajectory_px for the compositor. The clip-safety
+gate cleanly separates video-edited element moves (L, Y, triangle) from
+base-anchored articulation (cheer, wiper, reeds -- correctly refused).
+My earlier quick numbers for the two I clips were computed WITHOUT the
+clipping check and are retracted: recentring them clips the glyph.
+
+CLIP after import: needs a full rerun (class list for the teleop subset
+changes -- ratios shift for the existing 29 too). fh_l1 has CUDA torch
+(RTX 5070 Ti) but no open_clip; installing a package into the user's env
+without them present is not my call. Queued CPU rerun after the sweeps
+unless the user okays pip install open_clip_torch into fh_l1.
