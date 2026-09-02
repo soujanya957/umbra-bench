@@ -253,3 +253,11 @@ clip, is what daa5ad8 gets credited with.
 Both repos: everything committed locally, nothing pushed. The anomalous
 message(s) are documented above and with the user; neither session acted on
 them and nothing from them touched either repo.
+
+## User decision (morning): star_spin ships at scale 0.85
+
+The bigger star is the quoted solve (source=optimizer, fit floor 0.85 —
+at_bound deliberate). Frame IoU 0.724 vs the free fit's 0.646; the wrap
+(151.7°, correctly-refused closure) is accepted because the demo video plays
+the clip once through — the wrap transition is never performed. The 0.638
+version is retired to git history (commit d9d90fd carries its numbers).
