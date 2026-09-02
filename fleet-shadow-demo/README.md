@@ -405,7 +405,12 @@ fit floor 0.85 and must NOT get a loop bake.
 > arms 0.6 m laterally, `test_stage` differs again, `old_man` rotates two
 > bases. A pose executed on any of those casts a different shape. Before
 > deploying: either arrange the rig as above and write that config, or
-> re-solve against the real base positions (`--base-positions`).
+> re-solve against the real base positions with `run_sequence.py --stage-json
+> <rig.json>` — its help says "Stage rig JSON (solver frame; written by
+> render_server", so the file render_server emits is the one to pass, and
+> `--arm-gap` alone cannot express a layout that is not a single line.
+> (There is no `--base-positions` flag; `--stage-json` and `--arm-gap` are the
+> only two placement entry points run_sequence exposes.)
 >
 > **TODO (user, lab facts no session can supply):** which config matches the
 > current physical stage; how Play/render_server is started; which SR10x
