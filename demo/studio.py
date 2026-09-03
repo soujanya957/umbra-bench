@@ -231,8 +231,8 @@ def solve_jobs(sid: str) -> list:
 
 def mount_jobs(P):
     """Reassemble everything solved + cast the library assignments."""
-    jobs = [[PY_EVAL, "08_reassemble.py", "--all"],
-            [PY_EVAL, "08_reassemble.py"] + sum(
+    jobs = [[PY_EVAL, str(ROOT / "08_reassemble.py"), "--all"],
+            [PY_EVAL, str(ROOT / "08_reassemble.py")] + sum(
                 [["--sequence", d.name] for d in
                  sorted((BENCH / "sequences").glob("*_stab"))
                  if (BENCH / "optimized" / d.name).is_dir()], [])]
@@ -353,7 +353,8 @@ def build_job(step: str, arg: str | None):
                 continue
             use = sid + "_stab" if (BENCH / "optimized" / (sid + "_stab")
                                     ).is_dir() else sid
-            if not list((BENCH / "optimized" / use).glob("summary_*.json")):
+            run = BENCH / "optimized" / use
+            if not list(run.glob("summary_*.json")) or rides_ceiling(run):
                 pending.append(sid)
         if not pending:
             return "nothing marked 'to solve' is still unsolved"
@@ -374,7 +375,8 @@ def build_job(step: str, arg: str | None):
                 continue
             use = sid + "_stab" if (BENCH / "optimized" / (sid + "_stab")
                                     ).is_dir() else sid
-            if not list((BENCH / "optimized" / use).glob("summary_*.json")):
+            run = BENCH / "optimized" / use
+            if not list(run.glob("summary_*.json")) or rides_ceiling(run):
                 pending.append(sid)
         if not pending:
             return f"nothing in {scene} is marked 'to solve' and unsolved"
@@ -419,10 +421,53 @@ def build_job(step: str, arg: str | None):
 
 
 MAX_FIT_SCALE = 6.4
+LADDER_BOUNDS = (1.6, 3.2)      # bounds an interrupted ladder can sit on
 
 
-def escalate_fit(argv):
-    """(next_cmd | None, log_note | None) after a run_sequence solve.
+def newest_summary(outdir: Path):
+    js = sorted(outdir.glob("summary_*.json"))
+    if not js:
+        return None, None
+    try:
+        return js[-1], json.loads(js[-1].read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return js[-1], None
+
+
+def rides_ceiling(outdir: Path) -> bool:
+    """True when a solve's newest summary sits ON a ladder bound and no
+    fit_ladder.json marker says the ladder concluded — an interrupted
+    escalation. The solve_all/solve_scene pending filters use this so a
+    crash mid-ladder does not read as 'solved' forever (the queue state
+    is in-memory only). Audited before landing: no current canonical run
+    matches, so this re-queues nothing retroactively."""
+    if (outdir / "fit_ladder.json").exists():
+        return False
+    _, d = newest_summary(outdir)
+    tf = (d or {}).get("target_fit") or {}
+    if not isinstance(tf, dict) or not tf.get("at_bound"):
+        return False
+    s = tf.get("scale")
+    return isinstance(s, (int, float)) and any(
+        abs(s - b) < 0.005 * b for b in LADDER_BOUNDS)
+
+
+def conclude_ladder(outdir: Path, info):
+    """Durable end-of-ladder marker; settled == the kept scale is free."""
+    scale, bound = info.get("scale"), info.get("bound")
+    try:
+        (outdir / "fit_ladder.json").write_text(json.dumps({
+            "bound": bound, "scale": scale, "avg_iou": info.get("avg_iou"),
+            "settled": bool(isinstance(scale, (int, float)) and bound
+                            and scale < 0.995 * bound),
+            "kept": info["summary"].name if info.get("summary") else None,
+        }, indent=1), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def escalate_fit(argv, before):
+    """(next_cmd | None, log_note | None, run_info | None) after a solve.
 
     The lamp lesson, automated: bounds 1.6/2.4/3.4 all had the fit settle ON
     the scale ceiling (tc_iou 0.29); free at 4.8 it chose 4.115 and the shape
@@ -430,66 +475,137 @@ def escalate_fit(argv):
     double the bound and re-solve, up to MAX_FIT_SCALE. Only the max
     escalates: riding the MIN means an undrawably small target (the
     arm-thickness floor), and the dx/dy clamps are placement semantics, not
-    search budget -- those just get a log note."""
-    argv = [str(x) for x in argv]
-    if not any("run_sequence.py" in a for a in argv):
-        return None, None
+    search budget — those just get log notes.
+
+    `before` is the set of summary filenames that existed before this solve
+    ran: the newest summary is only judged if it is NEW — an adopted or stale
+    summary must never be compared against this command's bounds. run_info
+    carries (summary path, avg_iou, scale, bound) for the acceptance check.
+    Never raises: an unexpected summary shape yields a note, not a dead
+    runner thread."""
     try:
+        argv = [str(x) for x in argv]
+        if not any("run_sequence.py" in a for a in argv):
+            return None, None, None
         bound = float(argv[argv.index("--fit-scale-max") + 1])
+        smin = float(argv[argv.index("--fit-scale-min") + 1])
         outdir = Path(argv[argv.index("--outdir") + 1])
-    except (ValueError, IndexError):
-        return None, None
-    js = sorted(outdir.glob("summary_*.json"))
-    if not js:
-        return None, None
-    try:
-        tf = (json.loads(js[-1].read_text(encoding="utf-8"))
-              .get("target_fit")) or {}
-    except (OSError, json.JSONDecodeError):
-        return None, None
-    scale = tf.get("scale")
-    if scale is None:
-        return None, None
-    if scale >= 0.995 * bound:
-        if bound >= MAX_FIT_SCALE:
-            return None, (f"[fit] {outdir.name}: scale still on the ceiling "
-                          f"at the {MAX_FIT_SCALE:g} cap -- left as is")
-        new = min(bound * 2, MAX_FIT_SCALE)
-        cmd = list(argv)
-        cmd[cmd.index("--fit-scale-max") + 1] = f"{new:g}"
-        return cmd, (f"[fit] {outdir.name}: scale settled ON the {bound:g} "
-                     f"ceiling -> re-solving with --fit-scale-max {new:g}")
-    if tf.get("at_bound"):
-        return None, (f"[fit] {outdir.name}: fit rode a SHIFT clamp "
-                      f"(scale {scale:g} is free) -- not auto-escalated")
-    return None, None
+        if not outdir.is_absolute():
+            return None, f"[fit] {outdir}: relative --outdir, check skipped", None
+        sp, d = newest_summary(outdir)
+        if sp is None or d is None or sp.name in before:
+            return None, None, None         # no NEW summary to judge
+        tf = d.get("target_fit") or {}
+        if not isinstance(tf, dict):
+            tf = {}
+        scale = tf.get("scale")
+        info = {"summary": sp, "avg_iou": d.get("avg_iou"),
+                "scale": scale, "bound": bound, "outdir": outdir}
+        if not isinstance(scale, (int, float)):
+            return None, None, info
+        if scale >= 0.995 * bound:
+            if bound >= MAX_FIT_SCALE:
+                return None, (f"[fit] {outdir.name}: scale still on the "
+                              f"ceiling at the {MAX_FIT_SCALE:g} cap -- "
+                              "left as is"), info
+            new = min(bound * 2, MAX_FIT_SCALE)
+            cmd = list(argv)
+            cmd[cmd.index("--fit-scale-max") + 1] = f"{new:g}"
+            return cmd, (f"[fit] {outdir.name}: scale settled ON the "
+                         f"{bound:g} ceiling -> re-solving with "
+                         f"--fit-scale-max {new:g}"), info
+        if tf.get("at_bound"):
+            if scale <= 1.005 * smin:
+                return None, (f"[fit] {outdir.name}: scale rode the {smin:g} "
+                              "FLOOR -- not escalated (a smaller target is "
+                              "undrawable: the arm-thickness limit)"), info
+            return None, (f"[fit] {outdir.name}: fit rode a dx/dy SHIFT "
+                          f"clamp (scale {scale:g} is free) -- "
+                          "not escalated"), info
+        return None, None, info
+    except Exception as e:                  # never kill the runner thread
+        return None, (f"[fit] escalation check skipped "
+                      f"({type(e).__name__}: {e})"), None
 
 
 def run_jobs(step: str, jobs, cwd, log_path: Path):
     rc = 0
-    queue = list(jobs)
-    with open(log_path, "a", encoding="utf-8") as log:
-        while queue:
-            j = queue.pop(0)
-            if isinstance(j, tuple) and j[0] == "SOLVE_LATER":
-                j = night_solve_cmd(seq_frames(j[1]), j[1])
-            log.write(f"\n$ {' '.join(map(str, j))}\n")
-            log.flush()
-            r = subprocess.run(j, cwd=cwd, env=env_for(str(j[0])),
-                               stdout=log, stderr=subprocess.STDOUT,
-                               text=True, encoding="utf-8", errors="replace")
-            rc = r.returncode
-            if rc:
-                log.write(f"\n[exit {rc}] chain stopped\n")
-                break
-            nxt, note = escalate_fit(j)
-            if note:
-                log.write("\n" + note + "\n")
+    nl = chr(10)
+    queue = [(j, None) for j in jobs]       # (job, esc_prev): esc_prev is the
+                                            # pre-escalation run_info, set only
+                                            # on auto-queued ladder retries
+    try:
+        with open(log_path, "a", encoding="utf-8") as log:
+            while queue:
+                j, esc_prev = queue.pop(0)
+                if isinstance(j, tuple) and j[0] == "SOLVE_LATER":
+                    j = night_solve_cmd(seq_frames(j[1]), j[1])
+                is_solve = any("run_sequence.py" in str(x) for x in j)
+                before = set()
+                if is_solve:
+                    try:
+                        od = Path(str(j[list(map(str, j)).index("--outdir") + 1]))
+                        before = {p.name for p in od.glob("summary_*.json")}
+                    except (ValueError, IndexError, OSError):
+                        pass
+                log.write(nl + "$ " + " ".join(map(str, j)) + nl)
                 log.flush()
-            if nxt:
-                queue.insert(0, nxt)
-        else:
-            log.write("\n[done]\n")
+                r = subprocess.run(j, cwd=cwd, env=env_for(str(j[0])),
+                                   stdout=log, stderr=subprocess.STDOUT,
+                                   text=True, encoding="utf-8",
+                                   errors="replace")
+                rc = r.returncode
+                if rc:
+                    if esc_prev is not None:
+                        # a job the user never queued must not kill the batch:
+                        # the pre-escalation result is still on disk and valid
+                        log.write(nl + f"[fit] escalated re-solve failed "
+                                  f"(exit {rc}) -- keeping the previous "
+                                  f"result, chain continues" + nl)
+                        log.flush()
+                        rc = 0
+                        continue
+                    log.write(nl + f"[exit {rc}] chain stopped" + nl)
+                    break
+                if not is_solve:
+                    continue
+                nxt, note, info = escalate_fit(j, before)
+                # acceptance: an escalated run must BEAT the run it replaces
+                # (newest-summary-wins everywhere downstream, so a worse
+                # re-solve would silently become the shipping result)
+                if (esc_prev is not None and info
+                        and isinstance(info.get("avg_iou"), (int, float))
+                        and isinstance(esc_prev.get("avg_iou"), (int, float))):
+                    if info["avg_iou"] < esc_prev["avg_iou"]:
+                        sp = info["summary"]
+                        sp.rename(sp.parent / (sp.name + ".rejected"))
+                        log.write(nl + f"[fit] escalated run avg_iou "
+                                  f"{info['avg_iou']:.3f} < previous "
+                                  f"{esc_prev['avg_iou']:.3f} -- rejected, "
+                                  f"previous result stands" + nl)
+                        log.flush()
+                        conclude_ladder(od, esc_prev)
+                        continue            # ladder over
+                    log.write(nl + f"[fit] escalated run kept: avg_iou "
+                              f"{esc_prev['avg_iou']:.3f} -> "
+                              f"{info['avg_iou']:.3f}" + nl)
+                if note:
+                    log.write(nl + note + nl)
+                    log.flush()
+                if nxt:
+                    queue.insert(0, (nxt, info))
+                elif esc_prev is not None and info:
+                    conclude_ladder(od, info)
+            else:
+                log.write(nl + "[done]" + nl)
+    except Exception:
+        rc = rc or -1
+        import traceback
+        try:
+            with open(log_path, "a", encoding="utf-8") as log:
+                log.write(nl + "[runner crashed]" + nl + traceback.format_exc())
+        except OSError:
+            pass
     if rc == 0:
         pa = JOB.pop("pending_active", None)
         if pa:
@@ -969,6 +1085,10 @@ class Handler(SimpleHTTPRequestHandler):
         except (ValueError, json.JSONDecodeError):
             return self._json(400, {"error": "bad body"})
         step, arg = body.get("step", ""), body.get("arg")
+        if JOB["running"] and step != "label":
+            # checked BEFORE build_job: building "scenes" deletes scene dirs
+            # and plants pending_* state -- side effects a 409 must not have
+            return self._json(409, {"error": f"busy: {JOB['step']}"})
         built = build_job(step, arg)
         if isinstance(built, str):
             return self._json(400, {"error": built})
