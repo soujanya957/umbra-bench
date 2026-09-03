@@ -115,7 +115,7 @@
     </div>
   </section>
   <section>
-    <h2>masks — everything step 3 produced
+    <h2>masks — contact sheet, one tile per frame
       <button style="float:right" onclick="grefresh()">refresh</button></h2>
     <div id="gal" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;max-height:300px;overflow-y:auto"></div>
     <div class="st" style="color:var(--ink2);margin-top:4px">
@@ -337,9 +337,9 @@ function renderLib(){
 async function grefresh(){
   const items = await fetch("/api/gallery").then(r => r.json());
   $("#gal").innerHTML = items.map(m => `
-    <div class="cell" data-fid="${m.fid}" title="${m.fid} ${m.label} (${m.scene})">
-      <img loading="lazy" src="/${m.file}?t=${Date.now()}">
-      <div class="nm">${m.fid} · ${m.label}${m.clean ? "" : " (raw)"}</div>
+    <div class="cell" data-fid="${m.fid}" title="${m.fid} (${m.scene}): ${m.labels.join(", ")}">
+      <img loading="lazy" src="/maskthumb/${m.fid}?t=${Date.now()}">
+      <div class="nm">${m.fid} · ${m.labels.length} obj</div>
     </div>`).join("") || '<span style="color:var(--ink2)">no masks yet</span>';
   $("#gal").querySelectorAll(".cell").forEach(c =>
     c.addEventListener("click", () => {

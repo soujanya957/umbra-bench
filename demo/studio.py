@@ -443,6 +443,46 @@ def kp_save(d: dict) -> None:
     os.replace(tmp, kp)
 
 
+MASKTHUMB: dict[str, tuple[float, bytes]] = {}
+
+
+def label_rgb(label: str) -> tuple[int, int, int]:
+    """The same hue hash the page uses, so gallery and canvas agree."""
+    import colorsys
+    h = (sum(ord(c) for c in label) * 47 % 360) / 360.0
+    r, g, b = colorsys.hls_to_rgb(h, 0.55, 0.9)
+    return int(r * 255), int(g * 255), int(b * 255)
+
+
+def mask_thumb(project: str, fid: str) -> bytes | None:
+    """One tile per frame: every label's mask tinted onto white, 170px."""
+    import io
+    import numpy as np
+    from PIL import Image
+    d = pdir(project) / "letters_sam2_small" / "by_frame" / fid
+    files = sorted(d.glob(f"{fid}_*_mask.png"))
+    if not files:
+        return None
+    key = f"{project}/{fid}"
+    mt = sum(f.stat().st_mtime for f in files)
+    hit = MASKTHUMB.get(key)
+    if hit and hit[0] == mt:
+        return hit[1]
+    base = None
+    for f in files:
+        m = np.array(Image.open(f).convert("L")) < 128
+        if base is None:
+            base = np.full(m.shape + (3,), 255, np.uint8)
+        lab = f.stem[len(fid) + 1:-5] if f.stem.endswith("_mask")             else f.stem[len(fid) + 1:]
+        base[m] = label_rgb(lab)
+    im = Image.fromarray(base)
+    im.thumbnail((170, 170), Image.NEAREST)
+    b = io.BytesIO()
+    im.save(b, "PNG", optimize=True)
+    MASKTHUMB[key] = (mt, b.getvalue())
+    return MASKTHUMB[key][1]
+
+
 LIB_CACHE: list | None = None
 THUMBS: dict[str, bytes] = {}
 
@@ -547,24 +587,32 @@ class Handler(SimpleHTTPRequestHandler):
             P = active_project()
             if not P:
                 return self._json(200, [])
-            wd, pbase = pdir(P), f"projects/{P}"
+            wd = pdir(P)
             kp = kp_load()
             scene_of = {fid: r.get("scene", "")
                         for fid, r in kp.get("frames", {}).items()}
             items = []
-            clean = {q.name for q in (wd / "letters_clean").glob("*_mask.png")}
             for d in sorted((wd / "letters_sam2_small" / "by_frame").glob("f*")):
                 fid = d.name
-                for q in sorted(d.glob(f"{fid}_*_mask.png")):
-                    lab = q.stem[len(fid) + 1:-5]
-                    use_clean = q.name in clean
-                    items.append({
-                        "fid": fid, "label": lab, "clean": use_clean,
-                        "scene": scene_of.get(fid, ""),
-                        "file": (f"{pbase}/letters_clean/{q.name}" if use_clean
-                                 else f"{pbase}/letters_sam2_small/by_frame/{fid}/{q.name}"),
-                    })
+                labs = sorted(q.stem[len(fid) + 1:-5]
+                              for q in d.glob(f"{fid}_*_mask.png"))
+                if labs:
+                    items.append({"fid": fid, "labels": labs,
+                                  "scene": scene_of.get(fid, "")})
             return self._json(200, items)
+        if self.path.startswith("/maskthumb/"):
+            fid = self.path.rsplit("/", 1)[1].split("?")[0]
+            P = active_project()
+            data = mask_thumb(P, fid) if P and NAME_RE.match(fid) else None
+            if data is None:
+                self.send_response(404); self.end_headers(); return
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if self.path == "/api/output":
             P = active_project() or ""
             vids = [{"name": v.name, "mb": round(v.stat().st_size / 1e6, 1)}
