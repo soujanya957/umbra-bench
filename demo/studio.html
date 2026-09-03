@@ -12,7 +12,9 @@
          border-bottom:1px solid var(--line)}
   header h1{font-size:15px;margin:0}
   header .proj{color:var(--acc);font-weight:600}
-  main{display:grid;grid-template-columns:1fr 380px;gap:14px;padding:14px 18px}
+  main{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+       gap:14px;padding:14px 18px;align-items:start}
+  #bottom{padding:0 18px}
   section{background:var(--panel);border:1px solid var(--line);border-radius:8px;
           padding:12px 14px;margin-bottom:14px}
   h2{font-size:12px;margin:0 0 10px;color:var(--ink2);text-transform:uppercase;
@@ -29,18 +31,22 @@
   .step .st{font-size:11px;color:var(--ink2)}
   .step .st.ok{color:var(--ok)}
   table{width:100%;border-collapse:collapse;font-size:12.5px}
-  td,th{padding:4px 8px;text-align:left;border-bottom:1px solid var(--line)}
+  td,th{padding:3px 6px;text-align:left;border-bottom:1px solid var(--line);
+        font-size:12px;white-space:nowrap}
+  #seqs button{padding:2px 7px;font-size:11.5px}
+  #seqs td .mono{font-size:11.5px}
   th{color:var(--ink2);font-weight:500}
   .lane-static{color:var(--ok)} .lane-translation{color:var(--warn)}
   .lane-dynamic{color:var(--acc)}
   .dot{display:inline-block;width:8px;height:8px;border-radius:4px;background:#3a4150}
   .dot.on{background:var(--ok)}
   #lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));
-       gap:8px;max-height:calc(100vh - 220px);overflow-y:auto;margin-top:8px}
+       gap:8px;max-height:calc(100vh - 260px);overflow-y:auto;margin-top:8px}
   .cell{cursor:pointer;text-align:center}
   .cell img{width:100%;image-rendering:pixelated;background:#fff;border-radius:4px;
             border:1px solid var(--line)}
   .cell:hover img{border-color:var(--acc)}
+  .cell.sel img{border-color:var(--warn);border-width:2px}
   .cell .nm{font-size:10px;color:var(--ink2);overflow:hidden;white-space:nowrap;
             text-overflow:ellipsis}
   .cell.unsolved img{opacity:.45}
@@ -122,10 +128,16 @@
       click a mask to jump the labeller to that frame and fix it
       (add points there, re-run segment).</div>
   </section>
+
+
+</div>
+<div>
   <section>
     <h2>sequences — solve per element
       <label style="float:right;font-weight:400;text-transform:none">
         <input type="checkbox" id="seqall" onchange="refresh()"> all projects</label></h2>
+    <div id="seldisp" class="mono" style="color:var(--warn);margin-bottom:6px">
+      no library shape selected — click one below, then hit a row's <b>lib</b></div>
     <table id="seqs"><tr><th>sequence</th><th>project</th><th>lane</th>
       <th>assignment</th><th>reassembled</th><th></th></tr></table>
     <div id="seqhint" class="st" style="color:var(--ink2);margin-top:6px"></div>
@@ -139,6 +151,24 @@
     </div>
     <div id="outs" class="mono" style="margin-top:8px;color:var(--ink2)"></div>
   </section>
+  <section style="position:sticky;top:10px">
+    <h2>library — click to select</h2>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input type="text" id="q" placeholder="class: K, candle, crab… (exact class first)">
+      <label style="white-space:nowrap;color:var(--ink2);font-size:11px">
+        <input type="checkbox" id="qunsolved"> unsolved too</label>
+    </div>
+    <div id="lib"></div>
+    <div class="st" style="margin-top:6px;color:var(--ink2)">
+      SOLVED SHADOWS only (tick "unsolved too" to widen). search matches the
+      class exactly first — "K" is the letter K, not everything containing k.
+      click = select (highlighted); the sequence rows' <b>lib</b> buttons
+      assign the selection. nothing to paste anywhere.
+    </div>
+  </section>
+</div>
+</main>
+<div id="bottom">
   <section>
     <h2>output — the show so far</h2>
     <div id="ovids" class="mono" style="color:var(--ink2);margin-bottom:8px"></div>
@@ -156,24 +186,6 @@
     <div id="log" class="mono"></div>
   </section>
 </div>
-<div>
-  <section>
-    <h2>library — click a shape to copy its id</h2>
-    <div style="display:flex;gap:8px;align-items:center">
-      <input type="text" id="q" placeholder="class: K, candle, crab… (exact class first)">
-      <label style="white-space:nowrap;color:var(--ink2);font-size:11px">
-        <input type="checkbox" id="qunsolved"> unsolved too</label>
-    </div>
-    <div id="lib"></div>
-    <div class="st" style="margin-top:6px;color:var(--ink2)">
-      SOLVED SHADOWS only (tick "unsolved too" to widen). search matches the
-      class exactly first — "K" is the letter K, not everything containing k.
-      clicking sets the current label to the class AND copies the full id for
-      the <b>reuse…</b> prompt or <span class="mono">pack.py --library</span>.
-    </div>
-  </section>
-</div>
-</main>
 <div class="toast" id="toast"></div>
 <script>
 const $ = s => document.querySelector(s);
@@ -185,11 +197,8 @@ let LASTLIB = null;
 async function assign(seq, mode){
   let body = {seq, mode};
   if(mode === "library"){
-    const id = prompt("library id for " + seq +
-                      (LASTLIB ? " (empty = " + LASTLIB + ")" : ""), LASTLIB || "");
-    if(id === null) return;
-    body.library_id = id || LASTLIB;
-    if(!body.library_id){ toast("click a library shape first"); return; }
+    if(!LASTLIB){ toast("click a library shape first (right panel)"); return; }
+    body.library_id = LASTLIB;
   }
   if(mode === "solve"){
     const r = await fetch("/api/assign", {method: "POST",
@@ -325,11 +334,12 @@ function renderLib(){
     </div>`).join("");
   document.querySelectorAll(".cell").forEach(c =>
     c.addEventListener("click", () => {
-      navigator.clipboard.writeText(c.dataset.id);
       LASTLIB = c.dataset.id;
-      const cls = c.querySelector(".nm").textContent;
-      if($("#llabel")) $("#llabel").value = cls;
-      toast("copied id: " + c.dataset.id + "   label set: " + cls);
+      document.querySelectorAll(".cell.sel").forEach(x => x.classList.remove("sel"));
+      c.classList.add("sel");
+      $("#seldisp").textContent = "selected: " + LASTLIB +
+        "   (each lib button assigns this)";
+      navigator.clipboard.writeText(c.dataset.id);
     }));
 }
 
