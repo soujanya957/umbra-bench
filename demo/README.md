@@ -26,6 +26,10 @@ The whole line, footage to physical robots -- each step is one command and is
 detailed in its own section below:
 
 ```bash
+python demo/00_trim.py edited.mp4                         # 0  (optional) white
+                                                          #    frames you inserted
+                                                          #    become cut points;
+                                                          #    one mp4 per segment
 python demo/run_demo.py --video <clip.mp4> --demo-id 03   # 1  scenes + frames
 python demo/03_label_keypoints.py                         # 2  label: / = full name
                                                           #    from the library,
@@ -444,6 +448,9 @@ the clip was unplayable.
 
 ```
 run_demo.py               the driver — start here
+00_trim.py                the quick trimmer: pure-white frames you inserted
+                          become cut points, one clean mp4 per segment (cv2,
+                          no ffmpeg needed; same detector as 01's white mode)
 01_split_scenes.py        video → scenes/<scene>/f####.png + frames_manifest.csv
 01_extract_frames.sh      the un-split variant, every frame at source fps
 02_segment_letters.py     HSV + hue/area segmentation. Superseded by SAM2 but kept:
