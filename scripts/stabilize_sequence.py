@@ -3,7 +3,7 @@
 
 The one-fit-per-clip rule in run_sequence.py fits the UNION footprint of all
 frames into the rig's reachable support. For a clip whose element translates a
-long way (demo_01_scene_06_L drifts 307 px), the union is the trajectory, not
+long way (family_ad_scene_06_L drifts 307 px), the union is the trajectory, not
 the shape: the fit shrinks the letter by the whole sweep of its path and the
 shadow comes out tiny. Measured on the current track, stabilising L recovers
 2.3x scale and lifts its target step IoU from 0.39 to 0.84 -- the "motion" was
@@ -30,7 +30,7 @@ directory; at composite time (demo/08 + demo/10) shift each rendered
 frame by trajectory_px scaled by the render's px-per-canvas-px ratio. For a
 filmed rig the same numbers become a per-frame camera reframe.
 
-    python scripts/stabilize_sequence.py --ids demo_01_scene_06_L
+    python scripts/stabilize_sequence.py --ids family_ad_scene_06_L
     python scripts/stabilize_sequence.py --min-gain 1.1      # scan the track
 """
 

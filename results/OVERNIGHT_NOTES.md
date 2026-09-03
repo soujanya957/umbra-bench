@@ -530,3 +530,18 @@ demo-to-real runbook. Heredoc escape lesson: \n through JSON->bash->
 python triple-quote loses a backslash layer -- three broken string
 literals repaired; single-line anchors + per-tag FAIL prints are now
 the house style for scripted patches.
+
+## demo_01 -> family_ad, the project rename
+
+Mechanical key rename, no value touched: 15 sequence dirs (+ source.json
+id/project/stabilized_from), 30 top-level run dirs across four families
+(plain/s085/s100/tight), the static-sweep's per-sequence SUBdirs (the
+top-level glob missed them -- caught because the payload shrank 130KB and
+warned about an orphan row), 29 metrics CSVs renamed with in-file id/path
+substitution, the static-baseline CSV (filename carries no project, only
+contents -- second near-miss), reassembled dirs, video mp4s, legibility
+CSV, docstring examples. sequences.jsonl rebuilt (15/0), payload back to
+byte-parity with pre-rename size, atlas shows 15 family_ad cards and zero
+demo_01. Historical solve logs keep the old name on purpose: they are
+records of runs made under it. User directive noted: prioritize CUDA
+(fh_l1) for heavy compute.

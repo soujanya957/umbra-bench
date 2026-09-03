@@ -2,7 +2,7 @@
 """09_clip_score.py — does the cast shadow read as the letter?
 
     python 09_clip_score.py
-    python 09_clip_score.py --sequence demo_01_scene_06_A --source optimizer_fit022
+    python 09_clip_score.py --sequence family_ad_scene_06_A --source optimizer_fit022
 
 IoU is the wrong question for a demo video. It measures overlap with a
 silhouette the clip fit was free to move; whether a viewer reads the shape as an

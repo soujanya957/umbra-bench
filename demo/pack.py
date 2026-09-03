@@ -2,7 +2,7 @@
 """pack.py — one demo, one folder: images, video, and what the robots need.
 
     python demo/pack.py --name family \\
-        --clip demo_01_scene_06_A --clip demo_01_scene_06_L_stab \\
+        --clip family_ad_scene_06_A --clip family_ad_scene_06_L_stab \\
         --library teleop_candle_01_mask
 
 Assembly is manual by design; what is NOT manual is hunting through

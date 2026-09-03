@@ -16,8 +16,8 @@ subset", because dropping frames into `targets/` scores them as unrelated static
 targets and silently discards the temporal information. The layout and the frame
 naming are that track's:
 
-    sequences/demo_01_scene_04_M/f00.png …   1-bit, dark = shape
-    sequences/demo_01_scene_04_M/source.json  where the frames came from
+    sequences/family_ad_scene_04_M/f00.png …   1-bit, dark = shape
+    sequences/family_ad_scene_04_M/source.json  where the frames came from
     sequences.jsonl                           built by build_sequence_metadata.py
 
 `sequences.jsonl` is not written here. `scripts/build_sequence_metadata.py`
@@ -115,7 +115,7 @@ def main() -> None:
                          "the sequences track")
     ap.add_argument("--demo-id", default="01",
                     help="which demo this is. The names carry it -- "
-                         "demo_01_scene_04_M -- so a second shot can be added "
+                         "family_ad_scene_04_M -- so a second shot can be added "
                          "later without colliding, and a sequence name still says "
                          "on its own which source it came from.")
     ap.add_argument("--prefix", default=None,

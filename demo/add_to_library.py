@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """add_to_library.py — a static element becomes a named library shape.
 
-    python demo/add_to_library.py --sequence demo_01_scene_06_A
+    python demo/add_to_library.py --sequence family_ad_scene_06_A
     python demo/add_to_library.py --from-routing        # every static-lane clip
 
 The static lane's end state is not "a clip solved cheaply", it is "a shape the

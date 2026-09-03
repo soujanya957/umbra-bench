@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """08_reassemble.py — solved shadows back onto the source canvas.
 
-    python 08_reassemble.py --sequence demo_01_scene_06_A
+    python 08_reassemble.py --sequence family_ad_scene_06_A
     python 08_reassemble.py --all --fps 5
 
 Stage 5 recorded, per sequence, the crop that ties its 512x512 frames to a

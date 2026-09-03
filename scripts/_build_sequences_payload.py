@@ -10,7 +10,7 @@ sequence in `sequences.jsonl`, carrying three kinds of things:
     the loop label WITH its provenance. `loop_source` matters in the UI: a
     `wrap-test` label is a heuristic and shows its evidence, a `declared` label
     is a fact from source.json and suppresses the ratio as authority --
-    demo_01_scene_05_I's wrap (0.991) would pass the test with no loop present.
+    family_ad_scene_05_I's wrap (0.991) would pass the test with no loop present.
   * provenance for the demo family: fps, scene, letter, crop -- read from
     source.json, absent for the generated 13.
   * the solve side, joined from `results/sequence_metrics_*.csv` aggregate rows.
