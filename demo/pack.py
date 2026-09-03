@@ -174,6 +174,12 @@ def write_choreo(dest: Path, name: str, hz: float, qs: list[np.ndarray]):
     """
     src_hz = hz
     qs = interp_frames(qs, src_hz)
+    # a single-pose clip needs a BODY between the crossfade holds: without
+    # one, an interior element spends its whole span blending with its
+    # neighbours and is on screen alone for a single frame (measured 0.03 s
+    # by umbra-bench-16). 1.5 s of display keeps every letter readable.
+    if len(qs) == 1:
+        qs = [np.asarray(qs[0], dtype=float)] * int(1.5 * CHOREO_HZ)
     hz = CHOREO_HZ
     # 1 s of held pose at BOTH ends: the arrangement crossfades consecutive
     # elements by overlapping exactly this window, so every seam is a pure
