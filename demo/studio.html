@@ -12,9 +12,10 @@
          border-bottom:1px solid var(--line)}
   header h1{font-size:15px;margin:0}
   header .proj{color:var(--acc);font-weight:600}
-  main{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  main{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);
        gap:14px;padding:14px 18px;align-items:start}
-  #bottom{padding:0 18px}
+  #side{position:sticky;top:10px;max-height:calc(100vh - 20px);
+        overflow-y:auto}
   section{background:var(--panel);border:1px solid var(--line);border-radius:8px;
           padding:12px 14px;margin-bottom:14px}
   h2{font-size:12px;margin:0 0 10px;color:var(--ink2);text-transform:uppercase;
@@ -41,7 +42,7 @@
   .dot{display:inline-block;width:8px;height:8px;border-radius:4px;background:#3a4150}
   .dot.on{background:var(--ok)}
   #lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));
-       gap:8px;max-height:calc(100vh - 260px);overflow-y:auto;margin-top:8px}
+       gap:8px;max-height:calc(100vh - 480px);overflow-y:auto;margin-top:8px}
   .cell{cursor:pointer;text-align:center}
   .cell img{width:100%;image-rendering:pixelated;background:#fff;border-radius:4px;
             border:1px solid var(--line)}
@@ -50,7 +51,7 @@
   .cell .nm{font-size:10px;color:var(--ink2);overflow:hidden;white-space:nowrap;
             text-overflow:ellipsis}
   .cell.unsolved img{opacity:.45}
-  #log{background:#0a0c0f;border-radius:6px;padding:10px;height:230px;
+  #log{background:#0a0c0f;border-radius:6px;padding:10px;height:170px;
        overflow-y:auto;white-space:pre-wrap;font-size:11.5px;color:#b7c0cc}
   #lchips .lc{padding:2px 10px;border-radius:10px;border:1px solid var(--line);
               cursor:pointer;font-size:12px;background:#20242d}
@@ -128,10 +129,6 @@
       click a mask to jump the labeller to that frame and fix it
       (add points there, re-run segment).</div>
   </section>
-
-
-</div>
-<div>
   <section>
     <h2>sequences — solve per element
       <label style="float:right;font-weight:400;text-transform:none">
@@ -151,7 +148,27 @@
     </div>
     <div id="outs" class="mono" style="margin-top:8px;color:var(--ink2)"></div>
   </section>
-  <section style="position:sticky;top:10px">
+  <section>
+    <h2>output — the show so far</h2>
+    <div id="ovids" class="mono" style="color:var(--ink2);margin-bottom:8px"></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+      <select id="oseq" style="width:auto"></select>
+      <button onclick="oplay()">play</button>
+      <span class="st" style="color:var(--ink2)">reassembled frames, canvas
+        playback (the mp4s use a codec browsers dislike; open them in a player)</span>
+    </div>
+    <canvas id="ocanvas" style="width:100%;border:1px solid var(--line);
+            border-radius:6px;display:none"></canvas>
+  </section>
+
+
+</div>
+<div id="side">
+  <section>
+    <h2>terminal</h2>
+    <div id="log" class="mono"></div>
+  </section>
+  <section>
     <h2>library — click to select</h2>
     <div style="display:flex;gap:8px;align-items:center">
       <input type="text" id="q" placeholder="class: K, candle, crab… (exact class first)">
@@ -168,24 +185,7 @@
   </section>
 </div>
 </main>
-<div id="bottom">
-  <section>
-    <h2>output — the show so far</h2>
-    <div id="ovids" class="mono" style="color:var(--ink2);margin-bottom:8px"></div>
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-      <select id="oseq" style="width:auto"></select>
-      <button onclick="oplay()">play</button>
-      <span class="st" style="color:var(--ink2)">reassembled frames, canvas
-        playback (the mp4s use a codec browsers dislike; open them in a player)</span>
-    </div>
-    <canvas id="ocanvas" style="width:100%;border:1px solid var(--line);
-            border-radius:6px;display:none"></canvas>
-  </section>
-  <section>
-    <h2>log</h2>
-    <div id="log" class="mono"></div>
-  </section>
-</div>
+
 <div class="toast" id="toast"></div>
 <script>
 const $ = s => document.querySelector(s);
