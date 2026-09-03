@@ -287,6 +287,18 @@ def build_job(step: str, arg: str | None):
             start, fstart = r["scene_start"], r["frame_start"]
             print(f"[studio] re-split of {vname}: replacing scenes "
                   f"{r['scene_start']:02d}.. with the same numbering")
+        elif not reg and (wd / "scenes").is_dir() and                 any((wd / "scenes").glob("scene_*")) and                 project_of(Path(vname).stem) == proj:
+            # legacy project founded BEFORE the registry existed: its own
+            # video arriving with an empty registry is a RE-split of the
+            # founding footage, not new material -- continuing the numbering
+            # here is exactly the duplicated-scenes bug (pixar got scenes
+            # 05-08, byte-copies of 01-04 at offset fids). Replace instead.
+            import shutil as _sh
+            for d in (wd / "scenes").glob("scene_*"):
+                _sh.rmtree(d, ignore_errors=True)
+            start, fstart = 1, 0
+            print(f"[studio] {vname}: founding video of a pre-registry "
+                  "project -- replacing all scenes with numbering from 01")
         else:
             taken = [rr["scene_start"] + rr.get("n_scenes", 1) - 1
                      for rr in reg.values()]

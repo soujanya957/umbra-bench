@@ -6,15 +6,19 @@
 
 Reads an ensemble manifest (demo/make_ensemble.py) plus its choreography
 clips and builds ONE MuJoCo scene: per element a rigid rig of three SO-101
-arms and its OWN spot light (the owner's design — per-group light, shared
-screen), placed at the manifest's solved depth/lateral so every shadow
-lands where the footage put the element, at its footage size. Playback is
-kinematic (qpos written directly, mj_forward, no dynamics) on the film
-clock: before its entry a trio holds the default pose and blends into its
-first solved pose; travelling elements glide as a group along lat_path_m.
+arms and its OWN vertical strip light (three stacked dim spots — the
+owner's design: per-group light, shared screen), the trios standing on a
+TABLE so the wall continues below their baseline and shadow bottoms are
+not cut by the floor horizon. Each rig hangs on a lateral slide joint, so
+travelling elements glide as a group — light included — along the
+footage's trajectory. Playback is kinematic (qpos written directly,
+mj_forward, no dynamics) on the film clock: before its entry a trio holds
+the default pose and blends into its first solved pose.
 
-Frame convention follows the solver rig (renderer.py): x lateral, y depth
-with the WALL at the scene's minimum y, z up, arm bases at z=0.
+Handedness: the audience stands on the SAME side as the arms and looks at
+the wall (front projection), so canvas-right must be audience-right.
+Scene frame: x lateral (mirrored from the manifest to keep that true),
+y depth with the wall at y=0 and arms/light at +y, z up.
 """
 from __future__ import annotations
 
@@ -32,7 +36,9 @@ SO101_XML = (FSA / "Shadow_robot_ui" / "assets" / "SO101_urdf"
 JOINT_NAMES = ["shoulder_pan", "shoulder_lift", "elbow_flex",
                "wrist_flex", "wrist_roll", "gripper"]
 SCREEN_Z = 2.4          # manifest coords: light -1.0 ... arms ... wall 2.4
-WALL_H = 2.6
+WALL_H = 2.8
+TABLE_H = 0.55          # arms stand on the lab table, wall runs below it
+STRIP_DZ = (0.10, 0.30, 0.50)   # the vertical strip: three stacked spots
 
 
 def load(name: str):
@@ -51,46 +57,63 @@ def build(man):
     import mujoco
     spec = mujoco.MjSpec()
     spec.visual.quality.shadowsize = 8192
-    spec.visual.headlight.ambient = [0.25, 0.25, 0.25]
-    spec.visual.headlight.diffuse = [0.25, 0.25, 0.25]
+    # dim, even fill: the strip lights carry the picture, the headlight
+    # must not wash the wall or the shadows vanish
+    spec.visual.headlight.ambient = [0.12, 0.12, 0.12]
+    spec.visual.headlight.diffuse = [0.10, 0.10, 0.10]
     spec.visual.map.znear = 0.01
     spec.visual.global_.offwidth = 1280
     spec.visual.global_.offheight = 720
     spec.worldbody.add_geom(type=mujoco.mjtGeom.mjGEOM_PLANE,
-                            size=[12, 12, 0.1], rgba=[0.85, 0.86, 0.88, 1])
+                            size=[14, 14, 0.1], rgba=[0.55, 0.56, 0.58, 1])
     w = max(float(man.get("screen_w_m", 2.21)), 2.6) / 2 + 0.6
-    # wall at the minimum y of the scene (solver convention); manifest z ->
-    # scene y via y = SCREEN_Z - z, so the wall sits at y = 0
     spec.worldbody.add_geom(type=mujoco.mjtGeom.mjGEOM_BOX,
                             pos=[0, -0.03, WALL_H / 2],
                             size=[w, 0.03, WALL_H / 2],
                             rgba=[0.96, 0.96, 0.94, 1])
+    # one table under all trios: from a hand's width off the wall out past
+    # the deepest rig's light, so downward rays clear its far edge and the
+    # wall keeps receiving shadow below the arms' baseline
+    y_mids = [SCREEN_Z - e["depth_m"] for e in man["entries"]]
+    a_rig = max(-e.get("light", {}).get("ddepth", -1.2)
+                for e in man["entries"])
+    lats = [-x for e in man["entries"] for x in e["lat_path_m"]]
+    tbl_near, tbl_far = 0.12, max(y_mids) + a_rig + 0.4
+    spec.worldbody.add_geom(
+        type=mujoco.mjtGeom.mjGEOM_BOX,
+        pos=[float(np.mean(lats)), (tbl_near + tbl_far) / 2, TABLE_H / 2],
+        size=[(max(lats) - min(lats)) / 2 + 0.8,
+              (tbl_far - tbl_near) / 2, TABLE_H / 2],
+        rgba=[0.28, 0.28, 0.30, 1])
+
     rigs = []
     for i, e in enumerate(man["entries"]):
-        lat = e["lat_path_m"][0]
+        lat0 = -e["lat_path_m"][0]          # audience-side handedness
         y_mid = SCREEN_Z - e["depth_m"]
+        grp = spec.worldbody.add_body(name=f"grp{i}",
+                                      pos=[lat0, y_mid, TABLE_H])
+        grp.add_joint(name=f"grp{i}_slide",
+                      type=mujoco.mjtJoint.mjJNT_SLIDE, axis=[1, 0, 0])
         arms = []
         for j, dz in enumerate((0.0, 0.2, 0.4)):
-            # manifest arm depths depth_m-0.2 / depth_m / depth_m+0.2 hold
-            # SR101 nearest the light; z -> y flips the order, same rig
-            y = y_mid + 0.2 - dz
+            # SR101 (base.x 0) nearest the light in the manifest frame;
+            # z -> y flips depth order, same rig
+            frame = grp.add_frame(pos=[0, 0.2 - dz, 0])
             pfx = f"e{i}r{j}_"
-            frame = spec.worldbody.add_frame(pos=[lat, y, 0])
-            # attach prefixes the child IN PLACE, so each arm gets a fresh spec
+            # attach prefixes the child IN PLACE: fresh spec per arm
             spec.attach(mujoco.MjSpec.from_file(str(SO101_XML)),
                         prefix=pfx, frame=frame)
             arms.append(pfx)
-        ly = y_mid + (-e.get("light", {}).get("ddepth", -1.2))
-        lz = e.get("light", {}).get("h", 0.30)
-        aim = np.array([0.0, -ly, WALL_H * 0.45 - lz])
-        aim /= np.linalg.norm(aim)
-        lt = spec.worldbody.add_light(pos=[lat, ly, lz], dir=list(aim))
-        lt.castshadow = True
-        lt.cutoff = 50          # tight cone: neighbour pools barely overlap,
-                                # so each shadow keeps its contrast
-        lt.ambient = [0, 0, 0]
-        lt.diffuse = [0.9, 0.9, 0.85]
-        rigs.append((arms, lat))
+        ly = -e.get("light", {}).get("ddepth", -1.2)
+        for dz in STRIP_DZ:                 # the vertical strip
+            aim = np.array([0.0, -(y_mid + ly), WALL_H * 0.4 - (TABLE_H + dz)])
+            aim /= np.linalg.norm(aim)
+            lt = grp.add_light(pos=[0, ly, dz], dir=[float(v) for v in aim])
+            lt.castshadow = True
+            lt.cutoff = 38                  # tight cone: pools stay separate
+            lt.ambient = [0, 0, 0]
+            lt.diffuse = [0.38, 0.38, 0.36]
+        rigs.append((arms, f"grp{i}_slide", lat0))
     model = spec.compile()
     return model, rigs
 
@@ -107,6 +130,17 @@ def clip_index(t, fps, entry, n, clip_n, head, itf, blend_s):
     k = min(int(tf) - entry, n - 1)
     frac = tf - int(tf)
     return "clip", min(head + k * itf + round(frac * itf), clip_n - 1), 1.0
+
+
+def lat_at(e, t, fps):
+    """Group lateral (manifest sign) at film time t, lerped inside frames."""
+    lp = e["lat_path_m"]
+    tf = t * fps - e["entry"]
+    if tf <= 0:
+        return lp[0]
+    k = min(int(tf), len(lp) - 1)
+    k2 = min(k + 1, len(lp) - 1)
+    return lp[k] + (lp[k2] - lp[k]) * (tf - int(tf))
 
 
 def main():
@@ -140,20 +174,18 @@ def main():
     blend_s = man.get("default_blend_s", 1.0)
     total = man["n_frames"] / fps
 
-    # qpos addresses + per-arm frames, robot order by base.x (SR101 first)
     plans = []
-    for e, (arms, _) in zip(man["entries"], rigs):
+    for e, (arms, slide, lat0) in zip(man["entries"], rigs):
         clip = clips[e["clip"]]
         robots = sorted(clip["robots"], key=lambda r: r["base"]["x"])
-        adrs, frames = [], []
-        for pfx, r in zip(arms, robots):
-            adrs.append([model.joint(pfx + jn).qposadr[0]
-                         for jn in JOINT_NAMES])
-            frames.append(np.asarray(r["frames"], dtype=float))
-        plans.append((e, adrs, frames, clip["n_frames"]))
+        adrs = [[model.joint(pfx + jn).qposadr[0] for jn in JOINT_NAMES]
+                for pfx, r in zip(arms, robots)]
+        frames = [np.asarray(r["frames"], dtype=float) for r in robots]
+        slide_adr = model.joint(slide).qposadr[0]
+        plans.append((e, adrs, frames, clip["n_frames"], slide_adr, lat0))
 
     def pose_at(t):
-        for (e, adrs, frames, clip_n), (arms, _) in zip(plans, rigs):
+        for e, adrs, frames, clip_n, slide_adr, lat0 in plans:
             mode, idx, blend = clip_index(t, fps, e["entry"], e["n_frames"],
                                           clip_n, head, itf, blend_s)
             for aj, fr in zip(adrs, frames):
@@ -161,22 +193,28 @@ def main():
                                0.0 if mode == "default" else 1.0)
                 for adr, v in zip(aj, q):
                     data.qpos[adr] = v
+            # group glide, light riding along (slide axis is scene-x,
+            # manifest lateral is mirrored)
+            data.qpos[slide_adr] = -lat_at(e, t, fps) - lat0
         mujoco.mj_forward(model, data)
 
-    if a.snapshot:
-        pose_at(min(a.at, total - 1e-3))
-        ren = mujoco.Renderer(model, height=720, width=1280)
-        cam = mujoco.MjvCamera()
-        lats = [e["lat_path_m"][0] for e in man["entries"]]
-        cam.lookat = [float(np.mean(lats)), 0.6, 0.8]
+    def default_cam(cam):
+        lats = [-e["lat_path_m"][0] for e in man["entries"]]
+        cam.lookat = [float(np.mean(lats)), 0.6, 1.0]
         cam.distance = 7.0
-        cam.azimuth = 90
-        cam.elevation = -14
+        cam.azimuth = -90           # from the arms' side, facing the wall
+        cam.elevation = -12
         if a.cam:
             v = [float(x) for x in a.cam.split(",")]
             cam.azimuth, cam.elevation, cam.distance = v[0], v[1], v[2]
             if len(v) == 6:
                 cam.lookat = v[3:6]
+
+    if a.snapshot:
+        pose_at(min(a.at, total - 1e-3))
+        ren = mujoco.Renderer(model, height=720, width=1280)
+        cam = mujoco.MjvCamera()
+        default_cam(cam)
         ren.update_scene(data, camera=cam)
         from PIL import Image
         Image.fromarray(ren.render()).save(a.snapshot)
@@ -185,10 +223,7 @@ def main():
 
     import mujoco.viewer
     with mujoco.viewer.launch_passive(model, data) as v:
-        v.cam.lookat = [0, 1.0, 0.9]
-        v.cam.distance = 6.5
-        v.cam.azimuth = 90
-        v.cam.elevation = -12
+        default_cam(v.cam)
         t0 = time.time()
         while v.is_running():
             t = (time.time() - t0) * a.speed

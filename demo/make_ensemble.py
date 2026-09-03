@@ -191,7 +191,9 @@ def main():
             off_ref, w_ref, wpx, cxs = geo[sid]
             want_w = wpx / CANVAS_PX * w_v
             m_i = float(np.clip(MAGNIFICATION * want_w / max(w_ref, 1e-6),
-                                1.35, 6.0))
+                                1.7, 6.0))   # floor 1.7: closer than
+                                              # ~0.8 m to the wall reads as
+                                              # arms standing IN their shadow
             depth = SCENE["screenX"] + A_RIG - A_RIG * m_i
             entries.append({
                 "element": sid.rsplit("_", 1)[1],
