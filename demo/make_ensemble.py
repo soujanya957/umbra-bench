@@ -103,16 +103,20 @@ def canvas_centroids(sid: str) -> tuple[list[float], float]:
     crop = src["crop"]
     side = crop["pad_side"]
     ox = (side - crop["w"]) // 2
-    cxs, widths, last = [], [], CANVAS_PX / 2
+    oy = (side - crop["h"]) // 2
+    cxs, cys, widths = [], [], []
+    last, lasty = CANVAS_PX / 2, 540.0
     for fp in sorted(seq.glob("f*.png")):
         au = np.array(Image.open(fp).convert("L")) < 128
         ys, xs = np.where(au)
         if len(xs):
             k = side / au.shape[0]
             last = crop["x"] + xs.mean() * k - ox
+            lasty = crop["y"] + ys.mean() * k - oy
             widths.append((xs.max() - xs.min() + 1) * k)
         cxs.append(last)
-    return cxs, float(np.median(widths)) if widths else 100.0
+        cys.append(lasty)
+    return cxs, cys, float(np.median(widths)) if widths else 100.0
 
 
 def clip_for(sid: str, ass: dict) -> str | None:
@@ -178,17 +182,29 @@ def main():
         geo = {}
         for sid, clip, ids, step, src in id_sets:
             off_ref, w_ref = shadow_geometry(clip)
-            cxs, wpx = canvas_centroids(sid)
-            geo[sid] = (off_ref, w_ref, wpx, cxs)
+            cxs, cys, wpx = canvas_centroids(sid)
+            geo[sid] = (off_ref, w_ref, wpx, cxs, cys)
         # widen the shared screen until the MEDIAN element's film share equals
         # its shadow at the comfort magnification; relative size differences
         # between elements then live in per-group depth (their own throw)
         w_v = float(np.clip(np.median(
             [w_ref * (M_COMFORT / MAGNIFICATION) * CANVAS_PX / max(wpx, 1.0)
-             for off_ref, w_ref, wpx, cxs in geo.values()]),
+             for off_ref, w_ref, wpx, cxs, cys in geo.values()]),
             SCREEN_W_FILM, 10.0))
         for sid, clip, ids, step, src in id_sets:
-            off_ref, w_ref, wpx, cxs = geo[sid]
+            off_ref, w_ref, wpx, cxs, cys = geo[sid]
+            # airborne moments: translating the rigid rig (arms + lamp)
+            # up by h raises the shadow by exactly h, so lift is the
+            # authored centroid's rise above its own resting baseline,
+            # at the SAME metres-per-pixel as the lateral mapping
+            mpp = w_v / CANVAS_PX
+            # 90th percentile, not max: one squashed frame (the lamp
+            # flattening the I) must not hoist every other frame into
+            # the air as false "lift"
+            base_y = float(np.percentile(cys, 90))
+            lift = [max(0.0, (base_y - cy) * mpp) for cy in cys]
+            if max(lift, default=0.0) < 0.04:
+                lift = [0.0] * len(cys)     # centroid jitter, not a jump
             want_w = wpx / CANVAS_PX * w_v
             m_i = float(np.clip(MAGNIFICATION * want_w / max(w_ref, 1e-6),
                                 1.7, 6.0))   # floor 1.7: closer than
@@ -206,6 +222,7 @@ def main():
                 "lat_path_m": [round(((cx / CANVAS_PX) - 0.5) * w_v
                                      - off_ref * m_i / MAGNIFICATION, 4)
                                for cx in cxs],
+                "lift_path_m": [round(v, 4) for v in lift],
                 "light": {"ddepth": -round(A_RIG, 3), "h": 0.30},
             })
         # spot-light physics: a cone wide enough to cover an arm paints a

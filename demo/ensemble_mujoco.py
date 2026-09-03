@@ -110,6 +110,10 @@ def build(man):
                                       pos=[lat0, y_mid, TABLE_H])
         grp.add_joint(name=f"grp{i}_slide",
                       type=mujoco.mjtJoint.mjJNT_SLIDE, axis=[1, 0, 0])
+        # airborne moments: the footage says when a group leaves the
+        # ground (the lamp's jump), so the base is NOT locked to the table
+        grp.add_joint(name=f"grp{i}_lift",
+                      type=mujoco.mjtJoint.mjJNT_SLIDE, axis=[0, 0, 1])
         arms = []
         for j, dz in enumerate((0.0, 0.2, 0.4)):
             # SR101 (base.x 0) nearest the light in the manifest frame;
@@ -161,15 +165,22 @@ def clip_index(t, fps, entry, n, clip_n, head, itf, blend_s):
     return "clip", min(head + k * itf + round(frac * itf), clip_n - 1), 1.0
 
 
-def lat_at(e, t, fps):
-    """Group lateral (manifest sign) at film time t, lerped inside frames."""
-    lp = e["lat_path_m"]
+def path_at(lp, e, t, fps):
+    """A per-authored-frame path sampled at film time t, lerped."""
     tf = t * fps - e["entry"]
-    if tf <= 0:
-        return lp[0]
+    if tf <= 0 or not lp:
+        return lp[0] if lp else 0.0
     k = min(int(tf), len(lp) - 1)
     k2 = min(k + 1, len(lp) - 1)
     return lp[k] + (lp[k2] - lp[k]) * (tf - int(tf))
+
+
+def lat_at(e, t, fps):
+    return path_at(e["lat_path_m"], e, t, fps)
+
+
+def lift_at(e, t, fps):
+    return path_at(e.get("lift_path_m") or [], e, t, fps)
 
 
 def main():
@@ -216,10 +227,12 @@ def main():
                 for pfx, r in zip(arms, robots)]
         frames = [np.asarray(r["frames"], dtype=float) for r in robots]
         slide_adr = model.joint(slide).qposadr[0]
-        plans.append((e, adrs, frames, clip["n_frames"], slide_adr, lat0))
+        lift_adr = model.joint(slide.replace("_slide", "_lift")).qposadr[0]
+        plans.append((e, adrs, frames, clip["n_frames"],
+                      slide_adr, lift_adr, lat0))
 
     def pose_at(t):
-        for e, adrs, frames, clip_n, slide_adr, lat0 in plans:
+        for e, adrs, frames, clip_n, slide_adr, lift_adr, lat0 in plans:
             mode, idx, blend = clip_index(t, fps, e["entry"], e["n_frames"],
                                           clip_n, head, itf, blend_s)
             for aj, fr in zip(adrs, frames):
@@ -230,11 +243,14 @@ def main():
             # group glide, light riding along (slide axis is scene-x,
             # manifest lateral is mirrored)
             data.qpos[slide_adr] = -lat_at(e, t, fps) - lat0
+            data.qpos[lift_adr] = lift_at(e, t, fps)
         # moving things get the light: a gliding rig's lamp brightens, so
         # its shadow gains contrast and the eye follows the action
         for i2, e2 in enumerate(man["entries"]):
-            speed = abs(lat_at(e2, t + 0.06, fps)
-                        - lat_at(e2, t - 0.06, fps)) / 0.12
+            speed = (abs(lat_at(e2, t + 0.06, fps)
+                         - lat_at(e2, t - 0.06, fps))
+                     + abs(lift_at(e2, t + 0.06, fps)
+                           - lift_at(e2, t - 0.06, fps))) / 0.12
             boost = 1.0 + 1.0 * min(1.0, speed / 0.15)
             d = base_diffuse[i2] * boost
             model.light_diffuse[i2] = [d, d, d * 0.96]
