@@ -65,6 +65,13 @@ def sanitize(stem: str) -> str:
     return re.sub(r"[^A-Za-z0-9_\-]", "", stem)
 
 
+def project_of(stem: str) -> str:
+    """pixar_01, pixar_02 ... are trims of ONE project: strip the trim number
+    (the user's rule), so their sequences share the pixar_ prefix and their
+    scene numbers continue instead of colliding."""
+    return re.sub(r"_" + chr(92) + "d+$", "", sanitize(stem))
+
+
 def active_project() -> str | None:
     try:
         return json.loads(STATE_F.read_text(encoding="utf-8"))["project"]
@@ -141,8 +148,40 @@ def build_job(step: str, arg: str | None):
         v = ROOT / (arg or "")
         if not v.is_file():
             return "pick a video first"
-        set_active(sanitize(v.stem), arg)
-        return [[PY_EVAL, "01_split_scenes.py", str(v)]], ROOT, False
+        proj = project_of(v.stem)
+        # activate only when 01 SUCCEEDS -- activating first let a failed
+        # ffprobe leave the workspace holding project A while the state said
+        # B, and stage 5 then minted B-named sequences from A's masks
+        JOB["pending_active"] = (proj, arg)
+        # a numbered trim continues its project's scene numbering
+        taken = []
+        for d in (BENCH / "sequences").glob(proj + "_scene_*"):
+            m = re.search(r"_scene_(" + chr(92) + "d+)_", d.name + "_")
+            if m:
+                taken.append(int(m.group(1)))
+        start = max(taken, default=0) + 1
+        # switching footage: archive the labels (hand labour) and clear the
+        # single-project workspace so stale masks cannot leak into the next
+        # project's sequences
+        prev = None
+        try:
+            prev = json.loads(STATE_F.read_text(encoding="utf-8")).get("video")
+        except (OSError, json.JSONDecodeError):
+            pass
+        pre = []
+        if prev and prev != arg and (ROOT / "keypoints.json").exists():
+            stamp = sanitize(Path(prev).stem)
+            pre.append([PY_EVAL, "-c",
+                        "import shutil, pathlib; "
+                        "shutil.copyfile('keypoints.json', "
+                        "'out/keypoints_" + stamp + ".json'); "
+                        "[shutil.rmtree(d, ignore_errors=True) for d in "
+                        "('scenes', 'letters_sam2_small', 'letters_clean')]; "
+                        "pathlib.Path('keypoints.json').unlink(); "
+                        "print('workspace cleared; labels archived')"])
+        return (pre + [[PY_EVAL, "01_split_scenes.py", str(v),
+                        "--sample", "5", "--scene-start", str(start)]],
+                ROOT, False)
     if step == "label":
         return [[PY_EVAL, "03_label_keypoints.py"]], ROOT, True
     if step == "segment":
@@ -239,6 +278,12 @@ def run_jobs(step: str, jobs, cwd, log_path: Path):
                 break
         else:
             log.write("\n[done]\n")
+    if rc == 0:
+        pa = JOB.pop("pending_active", None)
+        if pa:
+            set_active(*pa)
+    else:
+        JOB.pop("pending_active", None)
     JOB.update(running=False, rc=rc)
 
 
@@ -289,6 +334,29 @@ def state() -> dict:
                {"elapsed": round(time.time() - JOB["t0"]) if JOB["t0"] and
                 JOB["running"] else None},
     }
+
+
+KP_LOCK = threading.Lock()
+
+
+def kp_load() -> dict:
+    try:
+        d = json.loads((ROOT / "keypoints.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        d = {}
+    d.setdefault("meta", {})
+    d.setdefault("frames", {})
+    d.setdefault("decisions", {})
+    return d
+
+
+def kp_save(d: dict) -> None:
+    """Atomic, exactly like 03's Store: a crash mid-write must not be able
+    to eat hand labour."""
+    d["meta"]["updated"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    tmp = ROOT / "keypoints.json.tmp"
+    tmp.write_text(json.dumps(d, indent=1, sort_keys=True), encoding="utf-8")
+    os.replace(tmp, ROOT / "keypoints.json")
 
 
 LIB_CACHE: list | None = None
@@ -353,6 +421,15 @@ class Handler(SimpleHTTPRequestHandler):
             return super().do_GET()
         if self.path == "/api/state":
             return self._json(200, state())
+        if self.path == "/api/frames":
+            frames = []
+            for d in sorted((ROOT / "scenes").glob("scene_*")):
+                for f in sorted(d.glob("f*.png")):
+                    frames.append({"fid": f.stem, "scene": d.name,
+                                   "file": f"scenes/{d.name}/{f.name}"})
+            return self._json(200, frames)
+        if self.path == "/api/keypoints":
+            return self._json(200, kp_load())
         if self.path == "/api/library":
             return self._json(200, library())
         if self.path.startswith("/thumb/"):
@@ -379,6 +456,35 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
+        if self.path in ("/api/keypoints", "/api/decision"):
+            try:
+                body = json.loads(self.rfile.read(
+                    int(self.headers.get("Content-Length", 0))))
+            except (ValueError, json.JSONDecodeError):
+                return self._json(400, {"error": "bad body"})
+            with KP_LOCK:
+                d = kp_load()
+                if self.path == "/api/keypoints":
+                    fid = str(body.get("fid", ""))
+                    if not fid:
+                        return self._json(400, {"error": "no fid"})
+                    d["frames"][fid] = {
+                        "file": str(body.get("file", "")),
+                        "scene": str(body.get("scene", "")),
+                        "objects": body.get("objects", {}),
+                    }
+                else:
+                    sc, lab = str(body.get("scene", "")), str(body.get("label", ""))
+                    reuse = body.get("reuse")
+                    dd = d["decisions"].setdefault(sc, {})
+                    if reuse:
+                        dd[lab] = {"reuse": str(reuse)}
+                    else:
+                        dd.pop(lab, None)
+                        if not dd:
+                            d["decisions"].pop(sc, None)
+                kp_save(d)
+            return self._json(200, {"ok": True})
         if self.path != "/api/run":
             return self._json(404, {"error": "unknown endpoint"})
         try:

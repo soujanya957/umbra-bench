@@ -74,6 +74,29 @@
     <div class="steps" id="steps"></div>
   </section>
   <section>
+    <h2>label — click on the frame (left = include, right = exclude)</h2>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <button onclick="lgo(-1)">&larr;</button>
+      <span id="lpos" class="mono">–</span>
+      <button onclick="lgo(1)">&rarr;</button>
+      <button onclick="lnextEmpty()">next unlabelled</button>
+      <input type="text" id="llabel" placeholder="label (or click a library shape)"
+             style="width:180px">
+      <button onclick="lundo()">undo</button>
+      <button onclick="lcopyPrev()">copy prev</button>
+      <button onclick="lreuse()">reuse…</button>
+      <span id="lsum" class="mono" style="color:var(--ink2)"></span>
+    </div>
+    <canvas id="lcanvas" style="width:100%;border:1px solid var(--line);
+            border-radius:6px;cursor:crosshair"></canvas>
+    <div class="st" style="color:var(--ink2);margin-top:4px">
+      saves on every click, straight into <span class="mono">keypoints.json</span> —
+      the native window (step 2's run button) reads and writes the same file.
+      <b>reuse…</b> records "this label uses an existing library element" for the
+      current scene; 04 then skips segmenting it.
+    </div>
+  </section>
+  <section>
     <h2>sequences — solve per element</h2>
     <table id="seqs"><tr><th>sequence</th><th>project</th><th>lane</th>
       <th>solved</th><th>reassembled</th><th></th></tr></table>
@@ -195,9 +218,138 @@ function renderLib(){
   document.querySelectorAll(".cell").forEach(c =>
     c.addEventListener("click", () => {
       navigator.clipboard.writeText(c.dataset.id);
-      toast("copied: " + c.dataset.id);
+      const cls = c.querySelector(".nm").textContent;
+      if($("#llabel")) $("#llabel").value = cls;
+      toast("copied id: " + c.dataset.id + "   label set: " + cls);
     }));
 }
+
+/* ---- in-browser labeller ------------------------------------------- */
+let LF = [], LI = 0, KP = {frames: {}, decisions: {}};
+const limg = new Image();
+const lcv = $("#lcanvas");
+
+async function linit(){
+  LF = await fetch("/api/frames").then(r => r.json());
+  KP = await fetch("/api/keypoints").then(r => r.json());
+  if(LF.length){ LI = 0; lshow(); }
+}
+
+function lcur(){ return LF[LI]; }
+function lobjs(){
+  const f = lcur();
+  return (KP.frames[f.fid] && KP.frames[f.fid].objects) || {};
+}
+
+function lshow(){
+  const f = lcur();
+  if(!f) return;
+  $("#lpos").textContent = `${LI + 1}/${LF.length}  ${f.fid} (${f.scene})`;
+  limg.onload = ldraw;
+  limg.src = "/" + f.file;
+}
+
+function ldraw(){
+  lcv.width = limg.naturalWidth; lcv.height = limg.naturalHeight;
+  const g = lcv.getContext("2d");
+  g.drawImage(limg, 0, 0);
+  const objs = lobjs();
+  const names = Object.keys(objs).sort();
+  const hue = n => `hsl(${[...n].reduce((a, c) => a + c.charCodeAt(0), 0) * 47 % 360},90%,60%)`;
+  for(const n of names){
+    const o = objs[n];
+    g.fillStyle = g.strokeStyle = hue(n);
+    g.lineWidth = 3; g.font = "bold 22px monospace";
+    o.points.forEach(([x, y], i) => {
+      g.beginPath();
+      if(o.labels[i]){ g.arc(x, y, 9, 0, 7); g.fill(); }
+      else { g.moveTo(x-8,y-8); g.lineTo(x+8,y+8); g.moveTo(x+8,y-8);
+             g.lineTo(x-8,y+8); g.stroke(); }
+      g.fillText(n, x + 12, y - 8);
+    });
+  }
+  $("#lsum").textContent = names.map(n => `${n}:${objs[n].points.length}`)
+                                .join("  ") || "no points";
+  const dec = (KP.decisions[lcur().scene] || {})[$("#llabel").value];
+  if(dec) $("#lsum").textContent += `   reuse:${dec.reuse}`;
+}
+
+async function lsave(){
+  const f = lcur();
+  await fetch("/api/keypoints", {method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({fid: f.fid, scene: f.scene, file: f.file,
+                          objects: lobjs()})});
+}
+
+function laddPoint(ev, positive){
+  ev.preventDefault();
+  const lab = $("#llabel").value.trim();
+  if(!lab){ toast("type a label first (or click a library shape)"); return; }
+  const r = lcv.getBoundingClientRect();
+  const x = Math.round((ev.clientX - r.left) / r.width * lcv.width * 10) / 10;
+  const y = Math.round((ev.clientY - r.top) / r.height * lcv.height * 10) / 10;
+  const f = lcur();
+  KP.frames[f.fid] = KP.frames[f.fid] ||
+    {file: f.file, scene: f.scene, objects: {}};
+  const o = KP.frames[f.fid].objects[lab] =
+    KP.frames[f.fid].objects[lab] || {points: [], labels: []};
+  o.points.push([x, y]); o.labels.push(positive ? 1 : 0);
+  ldraw(); lsave();
+}
+
+lcv.addEventListener("click", ev => laddPoint(ev, !ev.shiftKey));
+lcv.addEventListener("contextmenu", ev => laddPoint(ev, false));
+
+function lgo(d){ LI = Math.max(0, Math.min(LF.length - 1, LI + d)); lshow(); }
+function lnextEmpty(){
+  for(let j = LI + 1; j < LF.length; j++){
+    const fr = KP.frames[LF[j].fid];
+    if(!fr || !Object.keys(fr.objects || {}).length){ LI = j; lshow(); return; }
+  }
+  toast("no unlabelled frames after this one");
+}
+function lundo(){
+  const objs = lobjs();
+  let best = null;
+  for(const n in objs) if(!best || objs[n].points.length > objs[best].points.length) best = n;
+  if(!best || !objs[best].points.length) return;
+  objs[best].points.pop(); objs[best].labels.pop();
+  if(!objs[best].points.length) delete objs[best];
+  ldraw(); lsave();
+}
+function lcopyPrev(){
+  if(LI === 0) return;
+  const prev = KP.frames[LF[LI - 1].fid];
+  if(!prev){ toast("previous frame has no points"); return; }
+  const f = lcur();
+  KP.frames[f.fid] = {file: f.file, scene: f.scene,
+                      objects: JSON.parse(JSON.stringify(prev.objects))};
+  ldraw(); lsave();
+}
+async function lreuse(){
+  const lab = $("#llabel").value.trim();
+  if(!lab){ toast("set a label first"); return; }
+  const cur = (KP.decisions[lcur().scene] || {})[lab];
+  const id = prompt(`reuse element id for '${lab}' in ${lcur().scene}
+` +
+                    "(click a library shape first to copy one; empty clears)",
+                    cur ? cur.reuse : "");
+  if(id === null) return;
+  await fetch("/api/decision", {method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({scene: lcur().scene, label: lab, reuse: id || null})});
+  KP = await fetch("/api/keypoints").then(r => r.json());
+  ldraw();
+}
+document.addEventListener("keydown", ev => {
+  if(ev.target.tagName === "INPUT") return;
+  if(ev.key === "ArrowRight") lgo(1);
+  if(ev.key === "ArrowLeft") lgo(-1);
+  if(ev.key === "u") lundo();
+  if(ev.key === "c") lcopyPrev();
+});
+linit();
 
 $("#q").addEventListener("input", renderLib);
 fetch("/api/library").then(r => r.json()).then(l => { LIB = l; renderLib(); });

@@ -52,6 +52,21 @@ def run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, **kw)
 
 
+def ffmpeg_works() -> bool:
+    """A which() hit is not enough: a conda ffmpeg with mismatched DLLs dies
+    with STATUS_ENTRYPOINT_NOT_FOUND (0xC0000139), zero stderr, before main().
+    Only an actually-runnable ffprobe counts; otherwise OpenCV does the work."""
+    if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
+        return False
+    try:
+        return run(["ffprobe", "-version"]).returncode == 0
+    except OSError:
+        return False
+
+
+USE_CV2 = False
+
+
 def need(tool: str) -> None:
     if shutil.which(tool) is None:
         sys.exit(f"{tool} not found. Install it with:  brew install ffmpeg")
@@ -91,6 +106,64 @@ def luma_stats(video: str) -> list[tuple[float, float]]:
     if len(mn) != len(avg):
         mn = [0.0] * len(avg)
     return list(zip(avg, mn))
+
+
+def probe_cv(video: str):
+    import cv2
+    cap = cv2.VideoCapture(video)
+    if not cap.isOpened():
+        sys.exit(f"OpenCV could not open {video}")
+    fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    cap.release()
+    return fps, n, w, h
+
+
+def luma_stats_cv(video: str):
+    """One decode pass: per-frame (mean, min) luma at low res, plus the
+    mean-absolute-difference to the previous frame for the scene fallback."""
+    import cv2
+    cap = cv2.VideoCapture(video)
+    stats, diffs, prev = [], [], None
+    while True:
+        ok, f = cap.read()
+        if not ok:
+            break
+        g = cv2.cvtColor(cv2.resize(f, (96, 54)), cv2.COLOR_BGR2GRAY)
+        stats.append((float(g.mean()), float(g.min())))
+        diffs.append(float(abs(g.astype("f4") - prev).mean()) if prev is not None else 0.0)
+        prev = g.astype("f4")
+    cap.release()
+    return stats, diffs
+
+
+def scene_cuts_cv(diffs: list[float], fps: float, thresh: float) -> list[float]:
+    """Cut timestamps from the decode pass's frame diffs. ffmpeg's `scene`
+    score is normalised [0,1]; mean-abs-diff/255 is close enough for the
+    butt-joined cuts this mode exists for (they score near the ceiling)."""
+    return [i / fps for i, d in enumerate(diffs) if d / 255.0 > thresh]
+
+
+def extract_scene_cv(video: str, out: Path, seg, fmt: str, sample: int) -> int:
+    import cv2
+    a, b = seg
+    out.mkdir(parents=True, exist_ok=True)
+    for stale in out.glob(f"f*.{fmt}"):
+        stale.unlink()
+    keep = set(kept_frames(seg, sample))
+    cap = cv2.VideoCapture(video)
+    idx = 0
+    while idx <= b:
+        ok, f = cap.read()
+        if not ok:
+            break
+        if idx in keep:
+            cv2.imwrite(str(out / f"f{idx+1:04d}.{fmt}"), f)
+        idx += 1
+    cap.release()
+    return len(list(out.glob(f"f*.{fmt}")))
 
 
 def scene_cuts(video: str, thresh: float) -> list[float]:
@@ -255,6 +328,35 @@ def sheet_for_scene(frames: Path, seg, idx: int, review: Path,
               f"scale={tw}:-1,tile={cols}x{rows}:padding=4:margin=6:"
               f"color=0x111111")
 
+        if USE_CV2:
+            import cv2
+            import numpy as np
+            tiles = []
+            for p_, fid in zip(chunk, ids):
+                im = cv2.imread(str(p_))
+                th = max(1, round(tw * im.shape[0] / im.shape[1]))
+                im = cv2.resize(im, (tw, th))
+                cv2.rectangle(im, (4, 4), (4 + 30 + 13 * len(str(fid)), 34),
+                              (0, 0, 0), -1)
+                cv2.putText(im, f"f{fid:04d}", (8, 28),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                tiles.append(im)
+            th = max(t.shape[0] for t in tiles)
+            blank = np.full((th, tw, 3), 17, np.uint8)
+            tiles = [t if t.shape[0] == th else
+                     cv2.copyMakeBorder(t, 0, th - t.shape[0], 0, 0,
+                                        cv2.BORDER_CONSTANT, value=(17, 17, 17))
+                     for t in tiles]
+            grid_rows = []
+            for r in range(rows):
+                row = tiles[r * cols:(r + 1) * cols]
+                row += [blank] * (cols - len(row))
+                grid_rows.append(cv2.hconcat(row))
+            cv2.imwrite(str(review / name), cv2.vconcat(grid_rows),
+                        [cv2.IMWRITE_JPEG_QUALITY, 88])
+            made.append(review / name)
+            continue
+
         lst = frames / f".sheet_{ci}.txt"
         lst.write_text("".join(f"file '{p.name}'\n" for p in chunk))
         p = run(["ffmpeg", "-hide_banner", "-loglevel", "error",
@@ -299,13 +401,21 @@ def main() -> None:
                     help="split a scene's sheet past this many tiles")
     ap.add_argument("--no-extract", action="store_true",
                     help="reuse already-extracted scene folders, just resheet")
+    ap.add_argument("--scene-start", type=int, default=1,
+                    help="number the first scene this (a numbered trim of a "
+                         "project continues its predecessor's scene numbers, "
+                         "so pixar_02's scenes never collide with pixar_01's)")
     ap.add_argument("--scenes", nargs="*", type=int, default=None,
                     metavar="N",
                     help="only process these scene numbers, e.g. --scenes 1 2. "
                          "Useful to spread a big job over several runs.")
     args = ap.parse_args()
 
-    need("ffmpeg"); need("ffprobe")
+    global USE_CV2
+    USE_CV2 = not ffmpeg_works()
+    if USE_CV2:
+        print("backend: OpenCV (no runnable ffmpeg found -- a which() hit "
+              "with broken DLLs also lands here)")
     here = Path(__file__).resolve().parent
     os.chdir(here)
 
@@ -319,7 +429,12 @@ def main() -> None:
         video = str(vids[0])
     print(f"source : {video}")
 
-    fps, n_probe, w, h = probe(video)
+    if USE_CV2:
+        fps, n_probe, w, h = probe_cv(video)
+        cv_stats, cv_diffs = luma_stats_cv(video)
+    else:
+        fps, n_probe, w, h = probe(video)
+        cv_stats = cv_diffs = None
     print(f"         {w}x{h}  {fps:g} fps  {n_probe} frames")
 
     # ---- decide the boundaries -------------------------------------
@@ -333,7 +448,7 @@ def main() -> None:
     else:
         if args.mode in ("auto", "white"):
             print("scanning for white separator frames...")
-            stats = luma_stats(video)
+            stats = cv_stats if USE_CV2 else luma_stats(video)
             if stats:
                 n = len(stats)
                 runs = white_runs(stats, args.white_yavg, args.white_ymin)
@@ -351,7 +466,8 @@ def main() -> None:
                                  "or use --mode scene.")
         if segs is None:
             print(f"detecting cuts by content (score > {args.scene_thresh})...")
-            times = scene_cuts(video, args.scene_thresh)
+            times = (scene_cuts_cv(cv_diffs, fps, args.scene_thresh)
+                     if USE_CV2 else scene_cuts(video, args.scene_thresh))
             cut_frames = sorted({int(round(t * fps)) for t in times})
             cut_frames = [c for c in cut_frames if 0 < c < n]
             segs, mode_used = segments_from_cuts(n, cut_frames), "scene"
@@ -360,10 +476,13 @@ def main() -> None:
 
     if not segs:
         sys.exit("No scenes resolved.")
+    S = args.scene_start - 1
+    if S:
+        print(f"scene numbering continues at scene_{args.scene_start:02d}")
 
     print(f"\n{len(segs)} scene(s) by {mode_used}:")
     for i, (a, b) in enumerate(segs, 1):
-        print(f"  scene_{i:02d}  frames f{a+1:04d}-f{b+1:04d}  "
+        print(f"  scene_{i+S:02d}  frames f{a+1:04d}-f{b+1:04d}  "
               f"({b-a+1:>4} frames, {(b-a+1)/fps:5.2f}s)")
 
     # ---- extract + sheet, one scene at a time -----------------------
@@ -379,18 +498,19 @@ def main() -> None:
     counts = {}
     for i in todo:
         seg = segs[i - 1]
-        d = scenes_root / f"scene_{i:02d}"
+        d = scenes_root / f"scene_{i+S:02d}"
         if args.no_extract:
             counts[i] = len(list(d.glob(f"f*.{args.fmt}")))
-            print(f"\nscene_{i:02d}: reusing {counts[i]} frame(s)")
+            print(f"\nscene_{i+S:02d}: reusing {counts[i]} frame(s)")
         else:
-            print(f"\nscene_{i:02d}: extracting f{seg[0]+1:04d}-f{seg[1]+1:04d} "
+            print(f"\nscene_{i+S:02d}: extracting f{seg[0]+1:04d}-f{seg[1]+1:04d} "
                   f"-> {d}/")
-            counts[i] = extract_scene(video, d, seg, args.fmt, args.sample)
+            counts[i] = (extract_scene_cv if USE_CV2 else extract_scene)(
+                video, d, seg, args.fmt, args.sample)
             want = len(kept_frames(seg, args.sample))
             flag = "" if counts[i] == want else f"  [!] expected {want}"
             print(f"  got {counts[i]} frame(s){flag}")
-        for m in sheet_for_scene(d, seg, i, review, args.fmt,
+        for m in sheet_for_scene(d, seg, i + S, review, args.fmt,
                                  args.max_sheet_width, args.max_tiles,
                                  args.sample):
             print(f"  sheet: {m}")
@@ -409,10 +529,10 @@ def main() -> None:
             # segments. After a plain run they're identical; after a manual
             # trim of the scene folders only the disk is right.
             for i, _ in enumerate(segs, 1):
-                d = scenes_root / f"scene_{i:02d}"
+                d = scenes_root / f"scene_{i+S:02d}"
                 for p in sorted(d.glob(f"f*.{args.fmt}")):
                     k = int(re.sub(r"\D", "", p.stem) or 0) - 1
-                    wtr.writerow([p.stem, str(p), f"scene_{i:02d}",
+                    wtr.writerow([p.stem, str(p), f"scene_{i+S:02d}",
                                   f"{k/fps:.3f}", k])
         print(f"\nmanifest : frames_manifest.csv")
     else:

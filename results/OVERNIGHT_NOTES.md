@@ -578,3 +578,33 @@ changes confined to the F/M clips whose solves the scale sweep replaced
 after the original scoring; L/Y unchanged because 09 scores the
 non-stab reassembled dirs. The regenerated numbers are the current
 truth; payload and atlas rebuilt on them.
+
+## Labelling moves into the studio; the ffmpeg that never was
+
+The user's 01 run died at ffprobe with empty stderr: exit 0xC0000139,
+ENTRYPOINT_NOT_FOUND -- the lerobot conda ffmpeg has mismatched DLLs and
+dies before main(), which is why which() passing meant nothing. Rather
+than chase another install, 01_split_scenes gained a full OpenCV
+backend (probe/luma/extract/scene-diffs/contact sheets) selected by
+ffmpeg_works() -- an ffprobe that cannot RUN counts as absent. pixar.mp4
+(real footage, 2 MB, distinct hash) split cleanly: 4 scenes, 54 frames
+at sample 5, sheets included.
+
+Root-caused a data bug the failure exposed: the studio set the active
+project BEFORE 01 ran, so the failed pixar attempt left family_ad masks
+in the workspace under a pixar state, and clicking "sequences" minted 13
+pixar_scene_* rows whose frames are family_ad's to within 1-2 px of
+06's smoothing jitter (byte-diff 81/157, pixel-diff ~4e-6 -- measured
+before deleting). Removed, index rebuilt to 29. Fixes: activation now
+happens only when scenes SUCCEEDS; numbered trims (_01, _02) strip to
+one project (user's rule) and 01 gained --scene-start so a later trim
+continues its predecessor's scene numbers; switching footage archives
+keypoints.json to out/ and clears the single-project workspace.
+
+Labelling now lives in the studio page itself: frame strip, canvas
+clicks (left include / right exclude, undo, copy-prev, next-unlabelled),
+per-scene reuse decisions, saving after every click into the SAME
+keypoints.json schema 03 and 04 read -- verified by clicking through the
+API and reading the file back. Clicking a library shape copies its id
+AND sets it as the current label. Family labels archived at
+out/keypoints_family_ad.json before the workspace swap.
