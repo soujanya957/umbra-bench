@@ -454,9 +454,17 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(b)
 
     def do_GET(self):
-        if self.path == "/":
-            self.path = "/studio.html"
-            return super().do_GET()
+        if self.path in ("/", "/studio.html"):
+            # no-store: the page is the tool, and a browser serving a stale
+            # cached copy of it makes every fix look like it didn't happen
+            body = (ROOT / "studio.html").read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if self.path == "/api/state":
             return self._json(200, state())
         if self.path == "/api/frames":
