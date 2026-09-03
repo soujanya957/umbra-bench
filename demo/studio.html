@@ -62,11 +62,14 @@
     <div style="display:flex;gap:8px">
       <select id="video"></select>
       <button onclick="run('trim', vid())">trim on white frames</button>
-      <button onclick="run('scenes', vid())">start project (scenes)</button>
+      <button onclick="run('scenes', vid())"
+        title="switches the workspace to this video's project: current labels are archived, a returning project's labels are restored, trims (_01/_02) continue their project">start / switch project</button>
     </div>
     <div class="st" style="margin-top:6px;color:var(--ink2)">
-      the filename stem becomes the project name — drop new footage into
-      <span class="mono">demo/</span> and refresh
+      the filename stem names the project (trim numbers _01/_02 fold into it).
+      <b>start / switch project</b> is also how you change projects: labels are
+      archived per project and restored when you come back. drop new footage
+      into <span class="mono">demo/</span> and refresh
     </div>
   </section>
   <section>
@@ -120,13 +123,17 @@
 <div>
   <section>
     <h2>library — click a shape to copy its id</h2>
-    <input type="text" id="q" placeholder="search 600+ shapes: candle, upper K, crab…">
+    <div style="display:flex;gap:8px;align-items:center">
+      <input type="text" id="q" placeholder="class: K, candle, crab… (exact class first)">
+      <label style="white-space:nowrap;color:var(--ink2);font-size:11px">
+        <input type="checkbox" id="qunsolved"> unsolved too</label>
+    </div>
     <div id="lib"></div>
     <div class="st" style="margin-top:6px;color:var(--ink2)">
-      thumbnails are the SOLVED SHADOW (what the rig actually casts); dimmed =
-      unsolved, showing the target. clicking sets the current label to the
-      shape's class AND copies the full id for the <b>reuse…</b> prompt or
-      <span class="mono">pack.py --library</span>.
+      SOLVED SHADOWS only (tick "unsolved too" to widen). search matches the
+      class exactly first — "K" is the letter K, not everything containing k.
+      clicking sets the current label to the class AND copies the full id for
+      the <b>reuse…</b> prompt or <span class="mono">pack.py --library</span>.
     </div>
   </section>
 </div>
@@ -210,9 +217,17 @@ function poll(){
 }
 
 function renderLib(){
-  const q = $("#q").value.toLowerCase();
-  const hits = LIB.filter(e => !q || e.id.toLowerCase().includes(q)
-                               || e.cls.toLowerCase().includes(q)).slice(0, 96);
+  const q = $("#q").value.trim().toLowerCase();
+  // shadows only by default: the library is what the rig can cast
+  let pool = $("#qunsolved").checked ? LIB : LIB.filter(e => e.solved);
+  let hits;
+  if(!q) hits = pool;
+  else {
+    hits = pool.filter(e => e.cls.toLowerCase() === q);          // exact class
+    if(!hits.length) hits = pool.filter(e => e.cls.toLowerCase().startsWith(q));
+    if(!hits.length) hits = pool.filter(e => e.id.toLowerCase().includes(q));
+  }
+  hits = hits.slice(0, 96);
   $("#lib").innerHTML = hits.map(e => `
     <div class="cell ${e.solved ? "" : "unsolved"}" data-id="${e.id}"
          title="${e.id}${e.solved ? "" : " (unsolved)"}">
@@ -356,6 +371,7 @@ document.addEventListener("keydown", ev => {
 linit();
 
 $("#q").addEventListener("input", renderLib);
+$("#qunsolved").addEventListener("change", renderLib);
 fetch("/api/library").then(r => r.json()).then(l => { LIB = l; renderLib(); });
 refresh();
 setInterval(refresh, 6000);
