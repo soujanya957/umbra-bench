@@ -119,8 +119,8 @@
       <button style="float:right" onclick="grefresh()">refresh</button></h2>
     <div id="gal" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;max-height:300px;overflow-y:auto"></div>
     <div class="st" style="color:var(--ink2);margin-top:4px">
-      cleaned masks where 06 ran, raw where it hasn't. click one to jump the
-      labeller to that frame and fix it.</div>
+      click a mask to jump the labeller to that frame and fix it
+      (add points there, re-run segment).</div>
   </section>
   <section>
     <h2>sequences — solve per element
@@ -241,8 +241,8 @@ async function refresh(){
   const w = S.workspace;
   $("#steps").innerHTML =
     stepCard("label", "2 · label", `${w.labelled} frames labelled`, w.labelled > 0)
-    + stepCard("segment", "3 · segment + clean (GPU)",
-               `${w.masks} masks, ${w.clean} cleaned`, w.clean > 0)
+    + stepCard("segment", "3 · segment (video, GPU)",
+               `${w.masks} masks`, w.masks > 0)
     + stepCard("sequences", "4 · sequences", S.sequences.length + " clips", S.sequences.length > 0)
     + stepCard("index", "5 · index track", "sequences.jsonl", true)
     + `<div class="step"><b>1 · scenes</b>

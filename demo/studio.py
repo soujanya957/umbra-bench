@@ -225,15 +225,12 @@ def build_job(step: str, arg: str | None):
     if step == "segment":
         if not P:
             return "no active project"
-        # one button, two stages: propagate, then despeckle/smooth -- "clean"
-        # is not a concept the operator needs, it is what a mask should be
+        # SAM2 video propagation is clean enough on its own (the user's
+        # call); 06_clean_masks stays available from the terminal for
+        # footage that needs it
         return ([[PY_GPU, str(ROOT / "04_video_segment.py"),
                   "--workdir", str(pdir(P)), "--device", "cuda",
-                  "--out", "letters_sam2_small"],
-                 [PY_EVAL, str(ROOT / "06_clean_masks.py"),
-                  "--in", "letters_sam2_small", "--out", "letters_clean",
-                  "--keypoints", "keypoints.json", "--sigma", "3.0"]],
-                pdir(P), False)
+                  "--out", "letters_sam2_small"]], pdir(P), False)
     if step == "clean":
         if not P:
             return "no active project"
@@ -245,7 +242,7 @@ def build_job(step: str, arg: str | None):
         if not P:
             return "no active project — run 'scenes' with a video first"
         return ([[PY_EVAL, str(ROOT / "07_make_sequences.py"),
-                  "--in", "letters_clean", "--keypoints", "keypoints.json",
+                  "--in", "letters_sam2_small", "--keypoints", "keypoints.json",
                   "--prefix", f"{P}_"]], pdir(P), False)
     if step == "index":
         return ([[PY_EVAL, str(BENCH / "scripts" /
