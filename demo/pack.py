@@ -166,6 +166,36 @@ def interp_frames(qs, src_hz: float):
     return out
 
 
+_JOINT_LIMITS = "unset"
+DEPLOY_MODEL_XML = (Path.home() / "Documents/GitHub/fleet-shadow-art"
+                    / "Shadow_robot_ui/assets/SO101_urdf/so101_new_calib.xml")
+
+
+def joint_limits():
+    """(6,2) lo/hi array for the deploy model's actuated joints, in the
+    envelope's q order, read from the UI's own MJCF so the numbers can
+    never drift from what deploy actually loads. None when the checkout
+    is not present (the check is then skipped, not faked)."""
+    global _JOINT_LIMITS
+    if not isinstance(_JOINT_LIMITS, str):
+        return _JOINT_LIMITS
+    order = ["shoulder_pan", "shoulder_lift", "elbow_flex",
+             "wrist_flex", "wrist_roll", "gripper"]
+    try:
+        x = DEPLOY_MODEL_XML.read_text(encoding="utf-8")
+        found = {}
+        for mt in re.finditer(r"<joint[^>]*>", x):
+            nm = re.search(r'name="([^"]+)"', mt.group(0))
+            rg = re.search(r'range="([^"]+)"', mt.group(0))
+            if nm and rg and nm.group(1) in order:
+                found[nm.group(1)] = [float(v) for v in rg.group(1).split()]
+        _JOINT_LIMITS = (np.array([found[k] for k in order])
+                         if len(found) == 6 else None)
+    except OSError:
+        _JOINT_LIMITS = None
+    return _JOINT_LIMITS
+
+
 def write_choreo(dest: Path, name: str, hz: float, qs: list[np.ndarray]):
     """The unified clip envelope Shadow_robot_ui consumes, one file per element.
 
@@ -214,6 +244,22 @@ def write_choreo(dest: Path, name: str, hz: float, qs: list[np.ndarray]):
         step = float(np.abs(np.diff(np.stack(qs), axis=0)).max())
         flag = "  [!] near/over 0.21 rad" if step > 0.2 else ""
         print(f"    {name}: max step {step:.4f} rad{flag}")
+    # limit-margin check: some solves settle EXACTLY on a joint stop and the
+    # letters hold that pose statically for seconds. deploy.py streams frames
+    # unclamped, so a real arm whose calibration zero is slightly off the
+    # model would stall against its stop -- make zero-margin poses visible.
+    lims = joint_limits()
+    if lims is not None and qs:
+        JN = ["pan", "lift", "elbow", "wrist_flex", "wrist_roll", "gripper"]
+        Q = np.stack(qs).reshape(len(qs), -1, 6)
+        per_j = np.minimum((Q - lims[None, None, :, 0]).min(axis=(0, 1)),
+                           (lims[None, None, :, 1] - Q).min(axis=(0, 1)))
+        worst = int(per_j.argmin())
+        if per_j[worst] < 0.01:
+            tight = [JN[k] for k in range(6) if per_j[k] < 0.01]
+            print(f"    {name}: [!] {'/'.join(tight)} within "
+                  f"{max(float(per_j[worst]), 0):.4f} rad of a joint stop "
+                  "-- zero hardware margin if calibration drifts")
     clip = {"name": name, "stage": None,
             "source": {"method": "umbra-bench demo/pack.py"},
             "hz": int(round(hz)), "n_frames": len(qs), "kind": "clip",
