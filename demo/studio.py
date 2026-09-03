@@ -202,6 +202,9 @@ def mount_jobs(P):
                 jobs.append([PY_EVAL, str(ROOT / "08_place_library.py"),
                              "--sequence", sid,
                              "--library-id", ass["library_id"]])
+            elif ass.get("mode") == "sequence" and ass.get("donor"):
+                jobs.append([PY_EVAL, str(ROOT / "08_place_sequence.py"),
+                             "--sequence", sid, "--donor", ass["donor"]])
     return jobs
 
 
@@ -441,8 +444,10 @@ def state() -> dict:
             "solved": solved,
             "assign": mode,
             "library_id": ass.get("library_id"),
+            "donor": ass.get("donor"),
             "resolved": (mode == "solve" and solved) or
-                        (mode == "library" and bool(ass.get("library_id"))),
+                        (mode == "library" and bool(ass.get("library_id"))) or
+                        (mode == "sequence" and bool(ass.get("donor"))),
             "reassembled": (ROOT / "out" / "reassembled" / sid /
                             "reassembly.json").exists(),
         })
@@ -558,6 +563,20 @@ def library() -> list:
                      "subset": r["subset"], "stem": stem,
                      "solved": (BENCH / "optimized" / "big-budget-grounded" /
                                 r["subset"] / stem / "results.json").exists()})
+    # sequences are library citizens too: a solved clip can stand in for a
+    # whole element (the board's "seq" assignment), timing re-aligned
+    try:
+        for line in (BENCH / "sequences.jsonl").read_text(
+                encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            rows.append({"id": r["id"], "cls": str(r.get("class", r["id"])),
+                         "subset": "sequence", "stem": r["id"], "kind": "seq",
+                         "solved": bool(list((BENCH / "optimized" / r["id"])
+                                             .glob("summary_*.json")))})
+    except OSError:
+        pass
     LIB_CACHE = rows
     return rows
 
@@ -569,6 +588,26 @@ def thumb(subset: str, stem: str) -> bytes | None:
     # The solved SHADOW, not the authored target: the library exists to pick
     # what the rig can actually cast, and the best-render is that answer.
     # Unsolved rows fall back to the target (they render dimmed in the UI).
+    if subset == "sequence":
+        run = BENCH / "optimized" / stem
+        js = sorted(run.glob("summary_*.json"))
+        p = None
+        if js:
+            ts = js[-1].stem[len("summary_"):]
+            sh = sorted(run.glob(f"frame_*_{ts}/best_shadow.png"))
+            p = sh[0] if sh else None
+        if p is None:
+            f0 = sorted((BENCH / "sequences" / stem).glob("f*.png"))
+            p = f0[0] if f0 else None
+        if p is None:
+            return None
+        from PIL import Image
+        import io
+        im = Image.open(p).convert("L").resize((96, 96), Image.NEAREST)
+        b = io.BytesIO()
+        im.save(b, "PNG", optimize=True)
+        THUMBS[key] = b.getvalue()
+        return THUMBS[key]
     p = (BENCH / "optimized" / "big-budget-grounded" / subset / stem /
          f"{stem}_best.png")
     if not p.exists():
@@ -776,10 +815,17 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json(400, {"error": f"unknown sequence {sid!r}"})
             mode = body.get("mode")
             a = assignments(P)
-            if mode not in ("solve", "library", None):
-                return self._json(400, {"error": "mode: solve|library|null"})
+            if mode not in ("solve", "library", "sequence", None):
+                return self._json(400, {"error": "mode: solve|library|sequence|null"})
             if mode is None:
                 a.pop(sid, None)
+            elif mode == "sequence":
+                don = str(body.get("donor", ""))
+                if not NAME_RE.match(don) or                         not (BENCH / "sequences" / don).is_dir():
+                    return self._json(400, {"error": f"{don!r} is not a sequence"})
+                if don == sid:
+                    return self._json(400, {"error": "an element cannot stand in for itself"})
+                a[sid] = {"mode": "sequence", "donor": don}
             elif mode == "library":
                 lid = str(body.get("library_id", ""))
                 if not any(json.loads(l)["id"] == lid for l in

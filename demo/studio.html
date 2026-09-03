@@ -193,7 +193,7 @@
 <div class="toast" id="toast"></div>
 <script>
 const $ = s => document.querySelector(s);
-let LIB = [], S = null, SCENE = "all", TAB = "edit", LASTLIB = null;
+let LIB = [], S = null, SCENE = "all", TAB = "edit", LASTLIB = null, LASTKIND = null;
 let LF = [], LFall = [], LI = 0, KP = {frames: {}, decisions: {}};
 let SHOW_MASKS = true;
 const MASKC = new Map();          // fid -> {overlay: Image|null}
@@ -275,11 +275,13 @@ async function refresh(){
         <td class="lane-${q.lane || "dynamic"}">${q.lane || "?"}</td>
         <td class="mono" style="color:${q.resolved ? "var(--ok)" : "var(--warn)"}">${
           q.assign === "library" ? "lib: " + (q.library_id || "?")
+          : q.assign === "sequence" ? "seq: " + (q.donor || "?")
           : q.assign === "solve" ? (q.solved ? "solved" : "to solve") : "—"}</td>
         <td><span class="dot ${q.reassembled ? "on" : ""}"></span></td>
         <td style="white-space:nowrap">
           <button onclick="assign('${q.id}','solve')">solve</button>
           <button onclick="assign('${q.id}','library')">lib</button>
+          <button onclick="assign('${q.id}','sequence')" title="the selected library SEQUENCE stands in, timing re-aligned">seq</button>
           <button onclick="assign('${q.id}',null)" title="clear">✕</button>
           <button onclick="oshow('${q.id}')" title="play">▶</button>
         </td></tr>`).join("");
@@ -303,7 +305,13 @@ async function assign(seq, mode){
   const body = {seq, mode};
   if(mode === "library"){
     if(!LASTLIB){ toast("click a library shape first (right rail)"); return; }
+    if(LASTKIND === "seq"){ toast("that selection is a SEQUENCE — use the seq button"); return; }
     body.library_id = LASTLIB;
+  }
+  if(mode === "sequence"){
+    if(!LASTLIB || LASTKIND !== "seq"){
+      toast("select a SEQUENCE in the library first (badge ▶)"); return; }
+    body.donor = LASTLIB;
   }
   const r = await fetch("/api/assign", {method: "POST",
     headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
@@ -588,13 +596,15 @@ function renderLib(){
   }
   $("#lib").innerHTML = hits.slice(0, 96).map(e => `
     <div class="cell ${e.solved ? "" : "unsolved"} ${e.id === LASTLIB ? "sel" : ""}"
-         data-id="${e.id}" title="${e.id}${e.solved ? "" : " (unsolved)"}">
+         data-id="${e.id}" data-kind="${e.kind || ""}"
+         title="${e.id}${e.solved ? "" : " (unsolved)"}${e.kind === "seq" ? " — sequence" : ""}">
       <img loading="lazy" src="/thumb/${e.subset}/${e.stem}">
-      <div class="nm">${e.cls}</div>
+      <div class="nm">${e.kind === "seq" ? "▶ " : ""}${e.cls}</div>
     </div>`).join("");
   $("#lib").querySelectorAll(".cell").forEach(c =>
     c.addEventListener("click", () => {
       LASTLIB = c.dataset.id;
+      LASTKIND = c.dataset.kind || null;
       document.querySelectorAll("#lib .cell.sel").forEach(x =>
         x.classList.remove("sel"));
       c.classList.add("sel");

@@ -292,10 +292,21 @@ def main():
 
     names = list(a.sequence)
     if a.all:
-        # every sequence with a solve, whatever its project is called --
-        # the demo_* prefix died with the project rename
-        names += [p.name for p in sorted((BENCH / "sequences").iterdir())
-                  if p.is_dir() and (BENCH / "optimized" / p.name).is_dir()]
+        # every solved FILM-CUT sequence, whatever its project is called:
+        # reassembly needs the crop that ties a clip to its source canvas,
+        # so only sequences whose source.json carries one qualify (the
+        # generated family -- bird, wiper... -- has no canvas to return to)
+        import json as _json
+        for p in sorted((BENCH / "sequences").iterdir()):
+            sj = p / "source.json"
+            if not (p.is_dir() and sj.exists()
+                    and (BENCH / "optimized" / p.name).is_dir()):
+                continue
+            try:
+                if "crop" in _json.loads(sj.read_text(encoding="utf-8")):
+                    names.append(p.name)
+            except (OSError, ValueError):
+                continue
     names = sorted(set(names))
     if not names:
         raise SystemExit("nothing to do: pass --sequence NAME or --all")

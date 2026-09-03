@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import re
 import json
 import shutil
 import sys
@@ -138,6 +139,30 @@ def pack_library(stem: str, sweep: str, dest: Path):
     return 1
 
 
+CHOREO_HZ = 30
+
+
+def interp_frames(qs, src_hz: float):
+    """Linear per-joint interpolation from solve keyframes up to CHOREO_HZ.
+
+    The deploy loop sends each frame raw at 1/hz with no interpolation of its
+    own (verified in render_server/deploy.py), so a 5 Hz clip commands up to
+    68 deg of travel in one 200 ms tick -- and the Arrange compiler resamples
+    nearest-neighbour, making it 33 ms. Shipping 30 Hz with the solver poses
+    as keyframes keeps the same motion, smooth on hardware and in Play.
+    """
+    qs = [np.asarray(q, dtype=float).ravel() for q in qs]
+    if len(qs) < 2:
+        return qs
+    steps = max(1, int(round(CHOREO_HZ / max(src_hz, 0.1))))
+    out = []
+    for a, b in zip(qs, qs[1:]):
+        for t in range(steps):
+            out.append(a + (b - a) * (t / steps))
+    out.append(qs[-1])
+    return out
+
+
 def write_choreo(dest: Path, name: str, hz: float, qs: list[np.ndarray]):
     """The unified clip envelope Shadow_robot_ui consumes, one file per element.
 
@@ -147,7 +172,10 @@ def write_choreo(dest: Path, name: str, hz: float, qs: list[np.ndarray]):
     uncalibrated (the driver applies per-arm visual offsets at send time).
     Name and filename stem must match and may only use [A-Za-z0-9_-].
     """
-    n_arms = qs[0].size // 6
+    src_hz = hz
+    qs = interp_frames(qs, src_hz)
+    hz = CHOREO_HZ if len(qs) > 1 else hz
+    n_arms = np.asarray(qs[0]).size // 6
     robots = []
     for i in range(n_arms):
         robots.append({
@@ -244,11 +272,45 @@ def main():
                      pack_clip.last_qs)
         elements[sid] = {"kind": "clip", "n_frames": n}
         print(f"  clip     {sid:<28} {n} frames + choreo")
+    # several elements may reuse the same library entry; pack it once
+    seen_lib = set()
+    a.library = [x for x in a.library
+                 if not (x in seen_lib or seen_lib.add(x))]
     for lid in a.library:
         n = pack_library(lid, a.sweep, pkg / "elements" / lid)
         write_choreo(pkg / "choreo", lid, 5.0, pack_library.last_qs)
         elements[lid] = {"kind": "library_static", "sweep": a.sweep}
         print(f"  library  {lid:<28} 1 pose ({a.sweep}) + choreo")
+
+    # Scene replay: one UI arrangement per scene, elements offset by when
+    # they enter the shot (source frame ids at the footage's 25 fps). Copy
+    # these into fleet-shadow-art/arrangements/ next to the choreo files --
+    # Play's Arrange loader compiles them into a single timeline.
+    by_scene = {}
+    for sid in a.clip:
+        mj = pkg / "elements" / sid / "meta.json"
+        if not mj.exists():
+            continue
+        meta = json.loads(mj.read_text(encoding="utf-8"))
+        ids = meta.get("source_frame_ids") or []
+        m = re.search(r"_(scene_\d+)", sid)
+        if not (ids and m):
+            continue
+        by_scene.setdefault(m.group(1), []).append(
+            (sid, int(str(ids[0]).lstrip("f"))))
+    import re as _re
+    for scene, entries in sorted(by_scene.items()):
+        first = min(f for _, f in entries)
+        arr = {"name": f"{a.name}_{scene}",
+               "segs": [{"name": sid, "offset": round((f - first) / 25.0, 3)}
+                        for sid, f in sorted(entries, key=lambda t: t[1])],
+               "musicOffset": 0.0}
+        d = pkg / "choreo" / "arrangements"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"{a.name}_{scene}.json").write_text(json.dumps(arr, indent=1),
+                                                  encoding="utf-8")
+    if by_scene:
+        print(f"  arrange  {len(by_scene)} scene timeline(s) -> choreo/arrangements/")
 
     vids = [] if a.no_video else sorted((ROOT / "out" / "video").glob("*.mp4"))
     if vids:

@@ -138,15 +138,25 @@ def main() -> None:
     if not masks:
         raise SystemExit(f"no masks under {src}/by_frame")
 
+    # A mask's scene comes from the scenes/ tree itself -- keypoints.json
+    # only holds the frames somebody clicked, and with video propagation
+    # most masked frames were never clicked. Gating on kp silently dropped
+    # every propagated-only frame (pixar: 43 of 54).
+    scene_of = {}
+    scenes_root = Path(a.keypoints).resolve().parent / "scenes"
+    for d in sorted(scenes_root.glob("scene_*")):
+        for f in d.glob("f*.png"):
+            scene_of[f.stem] = d.name
     seqs = defaultdict(list)
     for p in masks:
         m = re.match(r"(f\d+)_(.+)_mask\.png$", p.name)
         if not m:
             continue
         fid, letter = m.group(1), m.group(2)
-        if fid not in kp or f"{fid}_{letter}" in set(a.exclude or []):
+        sc = scene_of.get(fid) or kp.get(fid, {}).get("scene")
+        if not sc or f"{fid}_{letter}" in set(a.exclude or []):
             continue
-        seqs[f"{prefix}{kp[fid]['scene']}_{letter}"].append((fid, p))
+        seqs[f"{prefix}{sc}_{letter}"].append((fid, p))
     for v in seqs.values():
         v.sort()
 
