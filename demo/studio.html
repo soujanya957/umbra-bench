@@ -90,7 +90,9 @@
     <canvas id="lcanvas" style="width:100%;border:1px solid var(--line);
             border-radius:6px;cursor:crosshair"></canvas>
     <div class="st" style="color:var(--ink2);margin-top:4px">
-      saves on every click, straight into <span class="mono">keypoints.json</span> —
+      <b>one frame per scene per object is enough</b> — segment (video) tracks it
+      through the clip; extra clicks on later frames become corrections.
+      saves on every click into <span class="mono">keypoints.json</span> —
       the native window (step 2's run button) reads and writes the same file.
       <b>reuse…</b> records "this label uses an existing library element" for the
       current scene; 04 then skips segmenting it.
@@ -121,8 +123,10 @@
     <input type="text" id="q" placeholder="search 600+ shapes: candle, upper K, crab…">
     <div id="lib"></div>
     <div class="st" style="margin-top:6px;color:var(--ink2)">
-      paste the id into the labeller's <b>.</b> reuse prompt, or into
-      <span class="mono">pack.py --library</span>. dimmed = not solved yet.
+      thumbnails are the SOLVED SHADOW (what the rig actually casts); dimmed =
+      unsolved, showing the target. clicking sets the current label to the
+      shape's class AND copies the full id for the <b>reuse…</b> prompt or
+      <span class="mono">pack.py --library</span>.
     </div>
   </section>
 </div>
@@ -166,7 +170,7 @@ async function refresh(){
   const w = S.workspace;
   $("#steps").innerHTML =
     stepCard("label", "2 · label", `${w.labelled} frames labelled`, w.labelled > 0)
-    + stepCard("segment", "3 · segment (GPU)", `${w.masks} masks`, w.masks > 0)
+    + stepCard("segment", "3 · segment (video, GPU)", `${w.masks} masks`, w.masks > 0)
     + stepCard("clean", "4 · clean", `${w.clean} cleaned`, w.clean > 0)
     + stepCard("sequences", "5 · sequences", S.sequences.length + " clips", S.sequences.length > 0)
     + stepCard("index", "6 · index track", "sequences.jsonl", true)

@@ -608,3 +608,24 @@ keypoints.json schema 03 and 04 read -- verified by clicking through the
 API and reading the file back. Clicking a library shape copies its id
 AND sets it as the current label. Family labels archived at
 out/keypoints_family_ad.json before the workspace swap.
+
+## Video segmentation lands (SAM2 now, SAM3 one nod away)
+
+The user asked for SAM3 + video segmentation. Two facts found by probing:
+transformers 5.15.1 in fh_l1 already ships the FULL Sam3 suite
+(Sam3TrackerVideoModel for click-tracking, Sam3VideoModel for
+text-concept segmentation) -- only the facebook/sam3 checkpoint download
+stands between us and it; and SAM2's own video predictor was already
+installed and needs nothing. 04_video_segment.py: seeds from the same
+keypoints.json (earliest labelled frame per (scene, object); later
+labelled frames act as drift corrections; reuse-marked labels skipped),
+propagates forward+backward, writes 04-compatible outputs so 06 onward
+run unchanged. Smoke test on real pixar footage: ONE seed point on the
+R tracked through 17/17 frames at 1.00 -- including the frames where
+Luxo Jr lands on it -- in 1.3 s on the 5070 Ti. Labelling cost drops
+from every-frame to one-frame-per-scene-per-object. Studio's segment
+button now runs the video path; library thumbnails switched to the
+SOLVED SHADOW (what the rig can cast -- the user's point) with target
+fallback for unsolved rows, and a library click sets the label (class)
+AND copies the id (reuse). --backend sam3 exits with a clear
+not-yet-approved message until the download is okayed.

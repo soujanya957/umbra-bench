@@ -218,11 +218,10 @@ def build_job(step: str, arg: str | None):
     if step == "label":
         return [[PY_EVAL, "03_label_keypoints.py"]], ROOT, True
     if step == "segment":
-        ckpt, cfg = SAM_SMALL
-        return ([[PY_GPU, "04_sam_segment.py", "--backend", "sam2",
-                  "--device", "cuda", "--sam2-checkpoint", ckpt,
-                  "--sam2-config", cfg, "--out", "letters_sam2_small"]],
-                ROOT, False)
+        # video propagation: one labelled frame per (scene, object) is
+        # enough; the per-frame segmenter stays available from the terminal
+        return ([[PY_GPU, "04_video_segment.py", "--device", "cuda",
+                  "--out", "letters_sam2_small"]], ROOT, False)
     if step == "clean":
         return ([[PY_EVAL, "06_clean_masks.py", "--in", "letters_sam2_small",
                   "--out", "letters_clean", "--sigma", "3.0"]], ROOT, False)
@@ -419,7 +418,13 @@ def thumb(subset: str, stem: str) -> bytes | None:
     key = f"{subset}/{stem}"
     if key in THUMBS:
         return THUMBS[key]
-    p = BENCH / "targets_grounded" / subset / f"{stem}.png"
+    # The solved SHADOW, not the authored target: the library exists to pick
+    # what the rig can actually cast, and the best-render is that answer.
+    # Unsolved rows fall back to the target (they render dimmed in the UI).
+    p = (BENCH / "optimized" / "big-budget-grounded" / subset / stem /
+         f"{stem}_best.png")
+    if not p.exists():
+        p = BENCH / "targets_grounded" / subset / f"{stem}.png"
     if not p.exists():
         p = BENCH / "targets" / subset / f"{stem}.png"
     if not p.exists():
