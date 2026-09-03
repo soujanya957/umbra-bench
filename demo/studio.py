@@ -418,10 +418,59 @@ def build_job(step: str, arg: str | None):
     return f"unknown step {step!r}"
 
 
+MAX_FIT_SCALE = 6.4
+
+
+def escalate_fit(argv):
+    """(next_cmd | None, log_note | None) after a run_sequence solve.
+
+    The lamp lesson, automated: bounds 1.6/2.4/3.4 all had the fit settle ON
+    the scale ceiling (tc_iou 0.29); free at 4.8 it chose 4.115 and the shape
+    score doubled (0.60). So when a solve's target_fit lands on the scale MAX,
+    double the bound and re-solve, up to MAX_FIT_SCALE. Only the max
+    escalates: riding the MIN means an undrawably small target (the
+    arm-thickness floor), and the dx/dy clamps are placement semantics, not
+    search budget -- those just get a log note."""
+    argv = [str(x) for x in argv]
+    if not any("run_sequence.py" in a for a in argv):
+        return None, None
+    try:
+        bound = float(argv[argv.index("--fit-scale-max") + 1])
+        outdir = Path(argv[argv.index("--outdir") + 1])
+    except (ValueError, IndexError):
+        return None, None
+    js = sorted(outdir.glob("summary_*.json"))
+    if not js:
+        return None, None
+    try:
+        tf = (json.loads(js[-1].read_text(encoding="utf-8"))
+              .get("target_fit")) or {}
+    except (OSError, json.JSONDecodeError):
+        return None, None
+    scale = tf.get("scale")
+    if scale is None:
+        return None, None
+    if scale >= 0.995 * bound:
+        if bound >= MAX_FIT_SCALE:
+            return None, (f"[fit] {outdir.name}: scale still on the ceiling "
+                          f"at the {MAX_FIT_SCALE:g} cap -- left as is")
+        new = min(bound * 2, MAX_FIT_SCALE)
+        cmd = list(argv)
+        cmd[cmd.index("--fit-scale-max") + 1] = f"{new:g}"
+        return cmd, (f"[fit] {outdir.name}: scale settled ON the {bound:g} "
+                     f"ceiling -> re-solving with --fit-scale-max {new:g}")
+    if tf.get("at_bound"):
+        return None, (f"[fit] {outdir.name}: fit rode a SHIFT clamp "
+                      f"(scale {scale:g} is free) -- not auto-escalated")
+    return None, None
+
+
 def run_jobs(step: str, jobs, cwd, log_path: Path):
     rc = 0
+    queue = list(jobs)
     with open(log_path, "a", encoding="utf-8") as log:
-        for j in jobs:
+        while queue:
+            j = queue.pop(0)
             if isinstance(j, tuple) and j[0] == "SOLVE_LATER":
                 j = night_solve_cmd(seq_frames(j[1]), j[1])
             log.write(f"\n$ {' '.join(map(str, j))}\n")
@@ -433,6 +482,12 @@ def run_jobs(step: str, jobs, cwd, log_path: Path):
             if rc:
                 log.write(f"\n[exit {rc}] chain stopped\n")
                 break
+            nxt, note = escalate_fit(j)
+            if note:
+                log.write("\n" + note + "\n")
+                log.flush()
+            if nxt:
+                queue.insert(0, nxt)
         else:
             log.write("\n[done]\n")
     if rc == 0:
