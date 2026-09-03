@@ -213,31 +213,13 @@ def main():
         # each other's shadow to grey. Stretch the whole lateral layout
         # (sizes/depths untouched) until neighbouring trios sit at least
         # MIN_GAP apart -- the stage is allowed to be wide.
-        MIN_GAP = 1.7      # a spot pool wide enough to cover an arm spans
-        STACKED = 0.25     # ~1.8 m of wall; closer rigs grey each other out.
-        # Pairwise relaxation, order preserved: walk the trios left to right
-        # and push each at least MIN_GAP from its neighbour -- except pairs
-        # the footage intentionally stacks (the lamp lands ON the I), which
-        # keep sharing a pool. Applied as a rigid per-group offset so travel
-        # paths shift with their group.
-        order = sorted(range(len(entries)),
-                       key=lambda ii: entries[ii]["lat_path_m"][0])
-        shift = {order[0]: 0.0} if order else {}
-        for prev, cur in zip(order, order[1:]):
-            p0 = entries[prev]["lat_path_m"][0] + shift[prev]
-            c0 = entries[cur]["lat_path_m"][0]
-            gap = c0 - (entries[prev]["lat_path_m"][0])
-            if gap < STACKED:
-                shift[cur] = shift[prev]          # intentional stack rides along
-            else:
-                shift[cur] = max(0.0, (p0 + MIN_GAP) - c0)
-        mid = float(np.mean([entries[ii]["lat_path_m"][0] + shift[ii]
-                             for ii in order])) if order else 0.0
-        for ii, e in enumerate(entries):
-            d = shift.get(ii, 0.0) - mid + float(np.mean(
-                [entries[k]["lat_path_m"][0] for k in order])) if order else 0.0
-            e["lat_path_m"] = [round(v + shift.get(ii, 0.0) - mid, 4)
-                               for v in e["lat_path_m"]]
+        # NO artificial spacing: the footage's relative geometry IS the
+        # choreography (scene_02's lamp trio JUMPS ONTO the I -- their
+        # laterals must converge). Wide-cone lights overlap where elements
+        # stack; that is the physics of the piece, and stacked pairs are
+        # naturally de-collided in DEPTH because their magnifications
+        # differ. (An equal-spacing relaxation lived here briefly and
+        # flattened the narrative -- owner's call: never again.)
         name = f"{a.project}_{scene}"
         n_film = max(e["entry"] + e["n_frames"] for e in entries)
         doc = {

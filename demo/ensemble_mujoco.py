@@ -89,7 +89,8 @@ def build(man):
     tbl_near, tbl_far = 0.12, max(y_mids) + a_rig + 0.4
     spec.worldbody.add_geom(
         type=mujoco.mjtGeom.mjGEOM_BOX,
-        pos=[float(np.mean(lats)), (tbl_near + tbl_far) / 2, TABLE_H / 2],
+        pos=[(max(lats) + min(lats)) / 2, (tbl_near + tbl_far) / 2,
+             TABLE_H / 2],
         size=[(max(lats) - min(lats)) / 2 + 0.8,
               (tbl_far - tbl_near) / 2, TABLE_H / 2],
         rgba=[0.28, 0.28, 0.30, 1])
