@@ -727,3 +727,16 @@ both sides), then a 1.5 s display body for single-pose letter clips
 after their solo-time measurement showed interior letters on screen
 alone for one frame. Their reports were exemplary peer review; the
 scale ladder and the seam scheme both shipped pre-verified.
+
+## Round 4 green; verification boundary stated
+
+umbra-bench-16 passed every structural check: letters 3.5 s with 1.5 s
+solo (43%) each, all ten arrangements <= 0.2002 rad/frame with the worst
+being in-clip not seam, zero accidental overlaps, deploy gate honoured
+across four rounds. Two caveats carried verbatim into the record: the
+preview can confirm distinct stable silhouettes per solo window but NOT
+glyph legibility -- that is quantified only by solver IoU vs the target
+silhouettes (library letters 0.67-0.90, solved elements 0.36-0.83) and
+finally needs the user's eye on a real projection; and
+family_ad_scene_06 L_stab is the one rushed element (0.63 s solo, 24%),
+fixable only by lengthening that clip, left as the user's call.
