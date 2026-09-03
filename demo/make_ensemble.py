@@ -56,23 +56,63 @@ Z_MID = 0.2                        # trio arms sit at depth 0/0.2/0.4
 MAGNIFICATION = (SCENE["screenX"] - SCENE["lightX"]) / (Z_MID - SCENE["lightX"])
 
 
-def lat_path(sid: str) -> list[float]:
-    """Per-authored-frame trio lateral (m) from the element's canvas centroid."""
+def shadow_geometry(clip: str) -> tuple[float, float]:
+    """(centre_off_m, width_m) of the clip's cast shadow on the UI wall when
+    its trio stands at lateral 0 — measured from the solve's own best render
+    (the UI maps the solver frame onto SCREEN_W_FILM metres of wall, so a
+    content fraction IS a wall fraction). This is the 'reverse' half of the
+    placement: where the shadow already sits, so the trio can be moved by
+    exactly (where it must sit − where it sits)."""
+    import glob as _glob
+    p = None
+    white = True
+    run = BENCH / "optimized" / clip
+    js = sorted(run.glob("summary_*.json"))
+    if js:                                  # a sequence solve: first frame
+        ts = js[-1].stem[len("summary_"):]
+        sh = sorted(run.glob(f"frame_*_{ts}/best_shadow.png"))
+        p = sh[0] if sh else None
+    if p is None:                           # a library id: the benchmark best
+        rows = {json.loads(l)["id"]: json.loads(l)
+                for l in open(BENCH / "metadata.jsonl", encoding="utf-8")}
+        if clip in rows:
+            rec = rows[clip]
+            p = (BENCH / "optimized" / "big-budget-grounded" / rec["subset"]
+                 / Path(rec["target"]).stem
+                 / (Path(rec["target"]).stem + "_best.png"))
+            white = False                   # polarity = minority side
+    if p is None or not p.exists():
+        return 0.0, 0.9                     # unknown: centred, generic width
+    g = np.array(Image.open(p).convert("L"))
+    m = g > 128
+    if not white and m.mean() > 0.5:
+        m = ~m
+    ys, xs = np.where(m)
+    if not len(xs):
+        return 0.0, 0.9
+    W = m.shape[1]
+    off = (xs.mean() / W - 0.5) * SCREEN_W_FILM
+    width = (xs.max() - xs.min() + 1) / W * SCREEN_W_FILM
+    return float(off), float(width)
+
+
+def canvas_centroids(sid: str) -> tuple[list[float], float]:
+    """Per-frame authored centroid x (canvas px) and median bbox width px."""
     seq = BENCH / "sequences" / sid
     src = json.loads((seq / "source.json").read_text(encoding="utf-8"))
     crop = src["crop"]
     side = crop["pad_side"]
     ox = (side - crop["w"]) // 2
-    out, last = [], 0.0
+    cxs, widths, last = [], [], CANVAS_PX / 2
     for fp in sorted(seq.glob("f*.png")):
         au = np.array(Image.open(fp).convert("L")) < 128
         ys, xs = np.where(au)
         if len(xs):
             k = side / au.shape[0]
-            cx = crop["x"] + xs.mean() * k - ox
-            last = ((cx / CANVAS_PX) - 0.5) * SCREEN_W_FILM / MAGNIFICATION
-        out.append(round(last, 4))
-    return out
+            last = crop["x"] + xs.mean() * k - ox
+            widths.append((xs.max() - xs.min() + 1) * k)
+        cxs.append(last)
+    return cxs, float(np.median(widths)) if widths else 100.0
 
 
 def clip_for(sid: str, ass: dict) -> str | None:
@@ -126,20 +166,53 @@ def main():
         if not id_sets:
             continue
         t0 = min(ids[0] for _, _, ids, _, _ in id_sets)
+        # Per-group optics, the owner's design: every trio carries ITS OWN
+        # point light rigidly (A_RIG behind the mid arm, 0.30 m above base
+        # height), all groups share ONE screen. Sliding the rigid rig toward
+        # or away from the wall changes only the magnification -- same rays,
+        # longer throw -- so shadow SIZE becomes a solved quantity:
+        #   m_i = m_ref * wanted_width / measured_width, depth = f(m_i)
+        # and lateral solves the wanted centre given the solve's own offset.
+        A_RIG = Z_MID - SCENE["lightX"]
+        M_COMFORT = 2.0                  # the median group sits here
+        geo = {}
         for sid, clip, ids, step, src in id_sets:
+            off_ref, w_ref = shadow_geometry(clip)
+            cxs, wpx = canvas_centroids(sid)
+            geo[sid] = (off_ref, w_ref, wpx, cxs)
+        # widen the shared screen until the MEDIAN element's film share equals
+        # its shadow at the comfort magnification; relative size differences
+        # between elements then live in per-group depth (their own throw)
+        w_v = float(np.clip(np.median(
+            [w_ref * (M_COMFORT / MAGNIFICATION) * CANVAS_PX / max(wpx, 1.0)
+             for off_ref, w_ref, wpx, cxs in geo.values()]),
+            SCREEN_W_FILM, 10.0))
+        for sid, clip, ids, step, src in id_sets:
+            off_ref, w_ref, wpx, cxs = geo[sid]
+            want_w = wpx / CANVAS_PX * w_v
+            m_i = float(np.clip(MAGNIFICATION * want_w / max(w_ref, 1e-6),
+                                1.35, 6.0))
+            depth = SCENE["screenX"] + A_RIG - A_RIG * m_i
             entries.append({
                 "element": sid.rsplit("_", 1)[1],
                 "sequence": sid,
                 "clip": clip,
                 "entry": (ids[0] - t0) // step,
                 "n_frames": len(ids),
-                "lat_path_m": lat_path(sid),
+                "mag": round(m_i, 3),
+                "depth_m": round(depth, 3),
+                "lat_path_m": [round(((cx / CANVAS_PX) - 0.5) * w_v
+                                     - off_ref * m_i / MAGNIFICATION, 4)
+                               for cx in cxs],
+                "light": {"ddepth": -round(A_RIG, 3), "h": 0.30},
             })
         name = f"{a.project}_{scene}"
         n_film = max(e["entry"] + e["n_frames"] for e in entries)
         doc = {
             "name": name, "kind": "ensemble", "fps": 5.0,
             "n_frames": n_film, "scene": SCENE,
+            "screen_w_m": round(w_v, 3),
+            "per_group_light": True,
             "choreo_head_pad": 30, "interp_factor": 6,
             "default_blend_s": 1.0,
             "entries": entries,

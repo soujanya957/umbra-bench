@@ -396,6 +396,16 @@ def build_job(step: str, arg: str | None):
         return jobs, MAS, False
     if step == "reassemble":
         return mount_jobs(P), ROOT, False
+    if step == "ensemble":
+        P = active_project()
+        if not P:
+            return "no active project"
+        sc = str(arg or "")
+        if not re.match(r"^scene_" + chr(92) + "d+$", sc):
+            return f"pick one scene first (got {sc!r})"
+        return ([[PY_FLEET, str(ROOT / "ensemble_mujoco.py"),
+                  "--ensemble", f"{P}_{sc}", "--loop",
+                  "--regen", f"{P}:{sc}"]], ROOT, True)
     if step == "export_lib":
         lid = str(arg or "")
         if not NAME_RE.match(lid):
