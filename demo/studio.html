@@ -145,6 +145,8 @@
         <button title="whole scene at once, native MuJoCo window: every element's trio + its own light, shared screen"
           onclick="SCENE === 'all' ? toast('pick one scene in the SCENE bar first')
                                    : run('ensemble', SCENE)">&#9654; ensemble (mujoco)</button>
+        <button title="stream this scene's clips to the PHYSICAL fleet, in arrangement order, via the robot UI's deploy server (:8001). Opens a console window; closing it = E-STOP (fleet freezes, torque held)."
+          onclick="deployRobot()">&#8674; deploy to robot</button>
         <span id="ovids" class="mono hint"></span>
       </div>
       <canvas id="ocanvas" style="width:100%;border:1px solid var(--line);
@@ -632,6 +634,22 @@ fetch("/api/library").then(r => r.json()).then(l => { LIB = l; renderLib(); });
 /* ---- boot ------------------------------------------------------------- */
 linit(); refresh(); orefresh();
 setInterval(refresh, 6000);
+
+async function deployRobot(){
+  if(SCENE === 'all'){ toast('pick one scene in the SCENE bar first'); return; }
+  const dflt = (S && S.deploy_arms) ||
+    'SR101|COM3|so-101|serial,SR102|COM4|so-101|serial,SR103|COM5|so-101|serial';
+  const arms = prompt(
+    'fleet ports  (ID|PORT|MODEL|CONN, comma-separated — remembered for next time)',
+    dflt);
+  if(!arms) return;
+  const r = await fetch('/api/run', {method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({step: 'deploy_robot', arg: {scene: SCENE, arms}})});
+  const j = await r.json();
+  if(j.error) toast(j.error);
+  else toast('deploy console opened — closing that window = E-STOP');
+}
 
 /* ---- sequence motion preview: library seq thumbs play their frames ---- */
 let SEQTICK = 0;

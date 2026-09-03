@@ -155,6 +155,18 @@ def seq_thumb(stem: str, i: int = 0) -> bytes | None:
     return THUMBS[key]
 
 
+def state_load() -> dict:
+    try:
+        return json.loads(STATE_F.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def state_save(d: dict) -> None:
+    STATE_F.parent.mkdir(parents=True, exist_ok=True)
+    STATE_F.write_text(json.dumps(d, indent=1), encoding="utf-8")
+
+
 def active_project() -> str | None:
     try:
         return json.loads(STATE_F.read_text(encoding="utf-8"))["project"]
@@ -163,9 +175,10 @@ def active_project() -> str | None:
 
 
 def set_active(project: str, video: str) -> None:
-    STATE_F.parent.mkdir(parents=True, exist_ok=True)
-    STATE_F.write_text(json.dumps({"project": project, "video": video}),
-                       encoding="utf-8")
+    # merge, not rewrite: the state file also carries deploy_arms history
+    st = state_load()
+    st.update(project=project, video=video)
+    state_save(st)
 
 
 def env_for(py: str) -> dict:
@@ -418,6 +431,37 @@ def build_job(step: str, arg: str | None):
         return ([[PY_FLEET, str(ROOT / "ensemble_mujoco.py"),
                   "--ensemble", f"{P}_{sc}", "--loop",
                   "--regen", f"{P}:{sc}"]], ROOT, True)
+    if step == "deploy_robot":
+        P = active_project()
+        if not P:
+            return "no active project"
+        d = arg if isinstance(arg, dict) else {}
+        arms = str(d.get("arms", "")).strip()
+        if not re.match(r"^[A-Za-z0-9|,._: \-]+$", arms):
+            return "bad arms string (ID|PORT|MODEL|CONN,...)"
+        clips = []
+        if d.get("clip"):
+            clips = [str(d["clip"])]
+        elif d.get("scene"):
+            sc = str(d["scene"])
+            if not re.match(r"^scene_" + chr(92) + "d+$", sc):
+                return f"pick one scene first (got {sc!r})"
+            arr = (BENCH.parent / "fleet-shadow-art" / "arrangements"
+                   / f"{P}_{sc}.json")
+            if not arr.exists():
+                return f"no arrangement for {P}_{sc} -- run 8 pack first"
+            clips = [seg["name"] for seg in
+                     json.loads(arr.read_text(encoding="utf-8"))["segs"]]
+        if not clips:
+            return "nothing to deploy"
+        with KP_LOCK:
+            st = state_load()
+            st["deploy_arms"] = arms
+            state_save(st)
+        cmd = [PY_FLEET, str(ROOT / "deploy_to_robot.py"), "--arms", arms]
+        for c in clips:
+            cmd += ["--clip", c]
+        return ([cmd], ROOT, True)
     if step == "export_lib":
         lid = str(arg or "")
         if not NAME_RE.match(lid):
@@ -716,6 +760,7 @@ def state() -> dict:
                             (pdir(P) / "out" / "video").glob("*.mp4")) if P else [],
             "package": bool(P and (ROOT / "packages" / P).is_dir()),
         },
+        "deploy_arms": state_load().get("deploy_arms", ""),
         "job": {k: JOB[k] for k in ("running", "step", "rc")} |
                {"elapsed": round(time.time() - JOB["t0"]) if JOB["t0"] and
                 JOB["running"] else None},
