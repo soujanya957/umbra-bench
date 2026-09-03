@@ -708,3 +708,22 @@ thumbnail blank is the UI's own floor-vs-table inconsistency (left
 alone), collinear-base shadow superposition is by design here.
 Arrangements now seat library/sequence stand-ins too, so a scene
 timeline carries every element. Round-2 verification brief sent.
+
+## The lamp scale ladder converges; final adoption
+
+pixar_scene_01_lamp (the 5.2x-travel jumping lamp) kept riding the fit
+upper bound, so the bound walked up until the optimizer stopped asking:
+1.6 -> 0.281, 2.4 -> 0.429, 3.4 -> 0.596, and at a 4.8 bound the fit
+freely settles at scale 4.115 for avg_iou 0.627 -- off-bound, converged,
+10x the original 0.062. Winning run copied into the canonical stab dir
+(newest-summary-wins), remounted, recomposed. En route: 10_compose
+--scene rebuilds the whole-cut from only the filtered scenes and
+clobbered pixar.mp4 to 17 frames -- caught on the same output line,
+full recompose restored 54/92. Probe dirs kept for the record.
+
+Rounds 3-4 with umbra-bench-16 hardened the deploy packages: crossfade
+seams (263.6 deg snap -> 0.15 rad morphs, verified independently on
+both sides), then a 1.5 s display body for single-pose letter clips
+after their solo-time measurement showed interior letters on screen
+alone for one frame. Their reports were exemplary peer review; the
+scale ladder and the seam scheme both shipped pre-verified.
