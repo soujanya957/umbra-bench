@@ -95,6 +95,12 @@ def build(man):
               (tbl_far - tbl_near) / 2, TABLE_H / 2],
         rgba=[0.28, 0.28, 0.30, 1])
 
+    # crowding-aware dimming: where the footage stacks elements, their
+    # wide cones add up on the wall -- scale each lamp down by how many
+    # rigs share its patch so the peak stays constant across scenes
+    lat0s = [-e["lat_path_m"][0] for e in man["entries"]]
+    crowd = [sum(1 for o in lat0s if abs(o - x) < 1.5) for x in lat0s]
+
     rigs = []
     for i, e in enumerate(man["entries"]):
         lat0 = -e["lat_path_m"][0]          # audience-side handedness
@@ -132,7 +138,7 @@ def build(man):
         lt.cutoff = LIGHT["cutoff"]
         lt.exponent = LIGHT["exponent"]
         lt.ambient = [0, 0, 0]
-        d = LIGHT["diffuse"]
+        d = LIGHT["diffuse"] / max(1.0, crowd[i]) ** 0.7
         lt.diffuse = [d, d, d * 0.96]
         rigs.append((arms, f"grp{i}_slide", lat0))
     model = spec.compile()
