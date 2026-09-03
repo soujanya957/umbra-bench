@@ -467,12 +467,58 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if self.path == "/api/state":
             return self._json(200, state())
+        if self.path.startswith("/api/masks/"):
+            fid = self.path.rsplit("/", 1)[1]
+            if not NAME_RE.match(fid):
+                return self._json(400, {"error": "bad fid"})
+            def entry(p: Path, base: str):
+                lab = p.stem[len(fid) + 1:]
+                if lab.endswith("_mask"):
+                    lab = lab[:-5]
+                return {"label": lab, "file": f"{base}/{p.name}"}
+            # cleaned masks win over the raw segmentation for the same label
+            seg = {e["label"]: e for p in sorted(
+                       (ROOT / "letters_sam2_small" / "by_frame" / fid)
+                       .glob(f"{fid}_*_mask.png"))
+                   for e in [entry(p, f"letters_sam2_small/by_frame/{fid}")]}
+            for p in sorted((ROOT / "letters_clean")
+                            .glob(f"{fid}_*_mask.png")):
+                e = entry(p, "letters_clean")
+                e["clean"] = True
+                seg[e["label"]] = e
+            return self._json(200, {"masks": list(seg.values())})
+        if self.path == "/api/output":
+            P = active_project() or ""
+            vids = [{"name": v.name, "mb": round(v.stat().st_size / 1e6, 1)}
+                    for v in sorted((ROOT / "out" / "video").glob("*.mp4"))
+                    if v.name.startswith(P)]
+            re_dirs = {}
+            for d in sorted((ROOT / "out" / "reassembled").glob(f"{P}_*")):
+                fr = sorted(f.name for f in d.glob("f*.png"))
+                if fr:
+                    rj = {}
+                    try:
+                        rj = json.loads((d / "reassembly.json")
+                                        .read_text(encoding="utf-8"))
+                    except (OSError, json.JSONDecodeError):
+                        pass
+                    re_dirs[d.name] = {"frames": fr,
+                                       "fps": rj.get("fps", 5)}
+            return self._json(200, {"videos": vids, "reassembled": re_dirs})
         if self.path == "/api/frames":
+            kp = kp_load()
             frames = []
             for d in sorted((ROOT / "scenes").glob("scene_*")):
                 for f in sorted(d.glob("f*.png")):
-                    frames.append({"fid": f.stem, "scene": d.name,
-                                   "file": f"scenes/{d.name}/{f.name}"})
+                    fid = f.stem
+                    rec = kp["frames"].get(fid, {})
+                    frames.append({
+                        "fid": fid, "scene": d.name,
+                        "file": f"scenes/{d.name}/{f.name}",
+                        "labelled": bool(rec.get("objects")),
+                        "masked": (ROOT / "letters_sam2_small" / "by_frame" /
+                                   fid).is_dir(),
+                    })
             return self._json(200, frames)
         if self.path == "/api/keypoints":
             return self._json(200, kp_load())

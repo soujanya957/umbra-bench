@@ -46,6 +46,13 @@
   .cell.unsolved img{opacity:.45}
   #log{background:#0a0c0f;border-radius:6px;padding:10px;height:230px;
        overflow-y:auto;white-space:pre-wrap;font-size:11.5px;color:#b7c0cc}
+  #lstrip{display:flex;flex-wrap:wrap;gap:2px;margin:6px 0}
+  #lstrip .fq{width:12px;height:12px;border-radius:2px;background:#3a4150;
+              cursor:pointer;border:1px solid transparent}
+  #lstrip .fq.lab{background:var(--acc)}
+  #lstrip .fq.msk{background:var(--ok)}
+  #lstrip .fq.cur{border-color:#fff}
+  #lstrip .gap{width:8px}
   .busy{color:var(--warn)} .toast{position:fixed;bottom:16px;right:16px;
        background:var(--acc);color:#04222f;padding:8px 14px;border-radius:6px;
        font-weight:600;display:none}
@@ -88,8 +95,10 @@
       <button onclick="lundo()">undo</button>
       <button onclick="lcopyPrev()">copy prev</button>
       <button onclick="lreuse()">reuse…</button>
+      <button id="lmasks" onclick="ltoggleMasks()">masks: on</button>
       <span id="lsum" class="mono" style="color:var(--ink2)"></span>
     </div>
+    <div id="lstrip"></div>
     <canvas id="lcanvas" style="width:100%;border:1px solid var(--line);
             border-radius:6px;cursor:crosshair"></canvas>
     <div class="st" style="color:var(--ink2);margin-top:4px">
@@ -114,6 +123,18 @@
       <button onclick="run('atlas')">rebuild atlas</button>
     </div>
     <div id="outs" class="mono" style="margin-top:8px;color:var(--ink2)"></div>
+  </section>
+  <section>
+    <h2>output — the show so far</h2>
+    <div id="ovids" class="mono" style="color:var(--ink2);margin-bottom:8px"></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+      <select id="oseq" style="width:auto"></select>
+      <button onclick="oplay()">play</button>
+      <span class="st" style="color:var(--ink2)">reassembled frames, canvas
+        playback (the mp4s use a codec browsers dislike; open them in a player)</span>
+    </div>
+    <canvas id="ocanvas" style="width:100%;border:1px solid var(--line);
+            border-radius:6px;display:none"></canvas>
   </section>
   <section>
     <h2>log</h2>
@@ -212,7 +233,17 @@ function poll(){
   clearInterval(timer);
   timer = setInterval(async () => {
     await refresh();
-    if(!S.job.running) clearInterval(timer);
+    if(!S.job.running){
+      clearInterval(timer);
+      // a finished job may have produced masks or frames: refresh the
+      // labeller's world without losing the current position
+      const fid = LF[LI] && LF[LI].fid;
+      LF = await fetch("/api/frames").then(r => r.json());
+      MASKC.clear();
+      const at = LF.findIndex(f => f.fid === fid);
+      LI = at >= 0 ? at : 0;
+      if(LF.length) lshow();
+    }
   }, 2000);
 }
 
@@ -243,8 +274,63 @@ function renderLib(){
     }));
 }
 
+/* ---- output workspace ---------------------------------------------- */
+let OUT = null, OTIMER = null;
+async function orefresh(){
+  OUT = await fetch("/api/output").then(r => r.json());
+  $("#ovids").textContent = OUT.videos.length
+    ? "video files: " + OUT.videos.map(v => `${v.name} (${v.mb}MB)`).join("  ")
+    : "no composed video yet — run compose";
+  const names = Object.keys(OUT.reassembled);
+  $("#oseq").innerHTML = names.map(n => `<option>${n}</option>`).join("")
+    || "<option>— nothing reassembled —</option>";
+}
+function oplay(){
+  clearInterval(OTIMER);
+  const name = $("#oseq").value;
+  const d = OUT && OUT.reassembled[name];
+  if(!d) return;
+  const cv = $("#ocanvas"); cv.style.display = "block";
+  const g = cv.getContext("2d");
+  let i = 0;
+  const step = () => {
+    const im = new Image();
+    im.onload = () => {
+      cv.width = im.naturalWidth; cv.height = im.naturalHeight;
+      g.drawImage(im, 0, 0);
+    };
+    im.src = `/out/reassembled/${name}/${d.frames[i]}`;
+    i = (i + 1) % d.frames.length;
+  };
+  step();
+  OTIMER = setInterval(step, 1000 / (d.fps || 5));
+}
+orefresh();
+
 /* ---- in-browser labeller ------------------------------------------- */
 let LF = [], LI = 0, KP = {frames: {}, decisions: {}};
+let SHOW_MASKS = true;
+const MASKC = new Map();          // fid -> [{label, img, clean}]
+
+function ltoggleMasks(){
+  SHOW_MASKS = !SHOW_MASKS;
+  $("#lmasks").textContent = "masks: " + (SHOW_MASKS ? "on" : "off");
+  ldraw();
+}
+
+async function lmasksFor(fid){
+  if(MASKC.has(fid)) return MASKC.get(fid);
+  const info = await fetch("/api/masks/" + fid).then(r => r.json());
+  const loaded = await Promise.all((info.masks || []).map(m => new Promise(res => {
+    const im = new Image();
+    im.onload = () => res({label: m.label, clean: !!m.clean, img: im});
+    im.onerror = () => res(null);
+    im.src = "/" + m.file + "?t=" + Date.now();
+  })));
+  const out = loaded.filter(Boolean);
+  MASKC.set(fid, out);
+  return out;
+}
 const limg = new Image();
 const lcv = $("#lcanvas");
 
@@ -255,6 +341,22 @@ async function linit(){
 }
 
 function lcur(){ return LF[LI]; }
+
+function lstrip(){
+  const el = $("#lstrip");
+  let html = "", prev = null;
+  LF.forEach((f, i) => {
+    if(prev && f.scene !== prev) html += '<span class="gap"></span>';
+    prev = f.scene;
+    const cls = ["fq", f.masked ? "msk" : (f.labelled ? "lab" : ""),
+                 i === LI ? "cur" : ""].join(" ");
+    html += `<span class="${cls}" data-i="${i}" title="${f.fid} (${f.scene})` +
+            `${f.masked ? " · masked" : f.labelled ? " · labelled" : ""}"></span>`;
+  });
+  el.innerHTML = html;
+  el.querySelectorAll(".fq").forEach(q =>
+    q.addEventListener("click", () => { LI = +q.dataset.i; lshow(); }));
+}
 function lobjs(){
   const f = lcur();
   return (KP.frames[f.fid] && KP.frames[f.fid].objects) || {};
@@ -263,18 +365,49 @@ function lobjs(){
 function lshow(){
   const f = lcur();
   if(!f) return;
+  lstrip();
   $("#lpos").textContent = `${LI + 1}/${LF.length}  ${f.fid} (${f.scene})`;
   limg.onload = ldraw;
   limg.src = "/" + f.file;
 }
 
-function ldraw(){
+async function ldraw(){
   lcv.width = limg.naturalWidth; lcv.height = limg.naturalHeight;
   const g = lcv.getContext("2d");
   g.drawImage(limg, 0, 0);
+  const hue = n => `hsl(${[...n].reduce((a, c) => a + c.charCodeAt(0), 0) * 47 % 360},90%,60%)`;
+  if(SHOW_MASKS){
+    const masks = await lmasksFor(lcur().fid);
+    for(const m of masks){
+      // binary mask, glyph dark: tint the glyph pixels with the label's colour
+      const oc = document.createElement("canvas");
+      oc.width = lcv.width; oc.height = lcv.height;
+      const og = oc.getContext("2d");
+      og.drawImage(m.img, 0, 0, oc.width, oc.height);
+      const d = og.getImageData(0, 0, oc.width, oc.height);
+      const col = hue(m.label);
+      const tmp = document.createElement("canvas");
+      tmp.width = tmp.height = 1;
+      const tg = tmp.getContext("2d");
+      tg.fillStyle = col; tg.fillRect(0, 0, 1, 1);
+      const [cr, cg2, cb] = tg.getImageData(0, 0, 1, 1).data;
+      for(let i = 0; i < d.data.length; i += 4){
+        if(d.data[i] < 128){                      // glyph pixel
+          d.data[i] = cr; d.data[i+1] = cg2; d.data[i+2] = cb;
+          d.data[i+3] = m.clean ? 150 : 110;
+        } else d.data[i+3] = 0;
+      }
+      og.putImageData(d, 0, 0);
+      g.drawImage(oc, 0, 0);
+    }
+    if(masks.length){
+      g.font = "bold 16px monospace"; g.fillStyle = "#fff";
+      g.fillText(masks.some(m => m.clean) ? "masks: cleaned" : "masks: raw seg",
+                 10, lcv.height - 12);
+    }
+  }
   const objs = lobjs();
   const names = Object.keys(objs).sort();
-  const hue = n => `hsl(${[...n].reduce((a, c) => a + c.charCodeAt(0), 0) * 47 % 360},90%,60%)`;
   for(const n of names){
     const o = objs[n];
     g.fillStyle = g.strokeStyle = hue(n);
@@ -292,6 +425,8 @@ function ldraw(){
   const dec = (KP.decisions[lcur().scene] || {})[$("#llabel").value];
   if(dec) $("#lsum").textContent += `   reuse:${dec.reuse}`;
 }
+
+function linvalidate(){ MASKC.delete(lcur().fid); }
 
 async function lsave(){
   const f = lcur();
@@ -314,6 +449,7 @@ function laddPoint(ev, positive){
   const o = KP.frames[f.fid].objects[lab] =
     KP.frames[f.fid].objects[lab] || {points: [], labels: []};
   o.points.push([x, y]); o.labels.push(positive ? 1 : 0);
+  lcur().labelled = true; lstrip();
   ldraw(); lsave();
 }
 
