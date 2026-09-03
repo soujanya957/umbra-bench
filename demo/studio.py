@@ -387,6 +387,12 @@ def build_job(step: str, arg: str | None):
         return jobs, MAS, False
     if step == "reassemble":
         return mount_jobs(P), ROOT, False
+    if step == "export_lib":
+        lid = str(arg or "")
+        if not NAME_RE.match(lid):
+            return f"bad library id {lid!r}"
+        return ([[PY_EVAL, str(ROOT / "export_library_clip.py"),
+                  "--library-id", lid]], ROOT, False)
     if step == "score":
         return [[PY_GPU, "09_clip_score.py"]], ROOT, False
     if step == "compose":

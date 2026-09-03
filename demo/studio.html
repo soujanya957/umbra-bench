@@ -153,6 +153,9 @@
     <h2>4 · sequences → assign each element
       <label style="float:right;font-weight:400;text-transform:none">
         <input type="checkbox" id="seqall" onchange="refresh()"> all projects</label></h2>
+    <button id="librobot" style="display:none;margin-bottom:6px"
+      title="write this shadow's single-pose choreography straight into the robot UI's library (fleet-shadow choreographies/)"
+      onclick="run('export_lib', LASTLIB)">&rarr; robot</button>
     <div id="seldisp" class="mono" style="color:var(--warn);margin-bottom:6px">
       no library shape selected — click one in the rail, then a row's <b>lib</b></div>
     <table id="seqs"></table>
@@ -613,6 +616,7 @@ function renderLib(){
       document.querySelectorAll("#lib .cell.sel").forEach(x =>
         x.classList.remove("sel"));
       c.classList.add("sel");
+      $("#librobot").style.display = (c.dataset.kind === "seq") ? "none" : "";
       $("#seldisp").textContent = "selected: " + LASTLIB +
         "   (each lib button assigns this)";
       navigator.clipboard.writeText(c.dataset.id);
