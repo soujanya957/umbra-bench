@@ -100,6 +100,7 @@ def build(man):
     # rigs share its patch so the peak stays constant across scenes
     lat0s = [-e["lat_path_m"][0] for e in man["entries"]]
     crowd = [sum(1 for o in lat0s if abs(o - x) < 1.5) for x in lat0s]
+    base_diffuse = []
 
     rigs = []
     for i, e in enumerate(man["entries"]):
@@ -140,9 +141,10 @@ def build(man):
         lt.ambient = [0, 0, 0]
         d = LIGHT["diffuse"] / max(1.0, crowd[i]) ** 0.7
         lt.diffuse = [d, d, d * 0.96]
+        base_diffuse.append(d)
         rigs.append((arms, f"grp{i}_slide", lat0))
     model = spec.compile()
-    return model, rigs
+    return model, rigs, base_diffuse
 
 
 def clip_index(t, fps, entry, n, clip_n, head, itf, blend_s):
@@ -199,7 +201,7 @@ def main():
                         "--project", proj, "--scene", sc], check=True)
     import mujoco
     man, clips = load(a.ensemble)
-    model, rigs = build(man)
+    model, rigs, base_diffuse = build(man)
     data = mujoco.MjData(model)
     fps = man["fps"]
     head, itf = man["choreo_head_pad"], man["interp_factor"]
@@ -228,6 +230,14 @@ def main():
             # group glide, light riding along (slide axis is scene-x,
             # manifest lateral is mirrored)
             data.qpos[slide_adr] = -lat_at(e, t, fps) - lat0
+        # moving things get the light: a gliding rig's lamp brightens, so
+        # its shadow gains contrast and the eye follows the action
+        for i2, e2 in enumerate(man["entries"]):
+            speed = abs(lat_at(e2, t + 0.06, fps)
+                        - lat_at(e2, t - 0.06, fps)) / 0.12
+            boost = 1.0 + 1.0 * min(1.0, speed / 0.15)
+            d = base_diffuse[i2] * boost
+            model.light_diffuse[i2] = [d, d, d * 0.96]
         mujoco.mj_forward(model, data)
 
     def default_cam(cam):
