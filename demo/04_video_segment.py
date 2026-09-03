@@ -126,7 +126,14 @@ def main():
             for i, (_, p) in enumerate(frames):
                 Image.open(p).convert("RGB").save(f"{td}/{i:05d}.jpg",
                                                   quality=95)
-            with torch.inference_mode():
+            # SAM2 stores its memory bank in bfloat16 by design and expects
+            # autocast at inference (Meta's reference usage). Without it the
+            # reverse pass -- any seed not on frame 0 -- dies with
+            # "mat1 and mat2 must have the same dtype".
+            import contextlib
+            ac = (torch.autocast("cuda", dtype=torch.bfloat16)
+                  if a.device == "cuda" else contextlib.nullcontext())
+            with torch.inference_mode(), ac:
                 state = pred.init_state(video_path=td)
                 obj_ids = {}
                 for oi, (lab, seedlist) in enumerate(sorted(seeds.items()), 1):
