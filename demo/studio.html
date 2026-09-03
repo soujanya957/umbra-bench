@@ -8,53 +8,45 @@
   body{margin:0;background:var(--bg);color:var(--ink);
        font:13px/1.5 "IBM Plex Sans",system-ui,sans-serif}
   .mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
-  header{display:flex;gap:14px;align-items:baseline;padding:14px 18px;
+  header{display:flex;gap:14px;align-items:baseline;padding:12px 18px;
          border-bottom:1px solid var(--line)}
   header h1{font-size:15px;margin:0}
   header .proj{color:var(--acc);font-weight:600}
   main{display:grid;grid-template-columns:minmax(0,8fr) minmax(0,4fr);
        gap:14px;padding:14px 18px;align-items:start}
-  #side{position:sticky;top:10px;max-height:calc(100vh - 20px);
-        overflow-y:auto}
+  #side{position:sticky;top:10px;max-height:calc(100vh - 20px);overflow-y:auto}
   section{background:var(--panel);border:1px solid var(--line);border-radius:8px;
           padding:12px 14px;margin-bottom:14px}
   h2{font-size:12px;margin:0 0 10px;color:var(--ink2);text-transform:uppercase;
      letter-spacing:.06em}
   select,input[type=text]{background:#0c0e12;color:var(--ink);border:1px solid var(--line);
-         border-radius:5px;padding:5px 8px;font:inherit;width:100%}
+         border-radius:5px;padding:5px 8px;font:inherit}
   button{background:#232833;color:var(--ink);border:1px solid var(--line);
          border-radius:5px;padding:5px 10px;font:inherit;cursor:pointer}
   button:hover{border-color:var(--acc)}
+  button.primary{border-color:var(--acc)}
   button:disabled{opacity:.4;cursor:default}
-  .steps{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
-  .step{border:1px solid var(--line);border-radius:6px;padding:8px 10px;
-        display:flex;flex-direction:column;gap:5px}
-  .step .st{font-size:11px;color:var(--ink2)}
-  .step .st.ok{color:var(--ok)}
-  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  .chipbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .chip{padding:3px 12px;border-radius:12px;border:1px solid var(--line);
+        cursor:pointer;font-size:12px;background:#20242d}
+  .chip.on{border-color:var(--acc);color:var(--acc);font-weight:600}
+  .tabs{display:flex;gap:2px;margin:0 0 10px;align-items:center}
+  .tabs .tab{padding:5px 16px;border:1px solid var(--line);cursor:pointer;
+             border-radius:6px 6px 0 0;color:var(--ink2);font-size:12px}
+  .tabs .tab.on{color:var(--ink);border-bottom-color:var(--panel);
+                background:#20242d;font-weight:600}
+  table{width:100%;border-collapse:collapse}
   td,th{padding:3px 6px;text-align:left;border-bottom:1px solid var(--line);
         font-size:12px;white-space:nowrap}
-  #seqs td:nth-child(4){max-width:190px;overflow:hidden;text-overflow:ellipsis}
+  th{color:var(--ink2);font-weight:500}
+  #seqs td:nth-child(3){max-width:200px;overflow:hidden;text-overflow:ellipsis}
   #seqs{display:block;overflow-x:auto}
   #seqs button{padding:2px 7px;font-size:11.5px}
-  #seqs td .mono{font-size:11.5px}
-  th{color:var(--ink2);font-weight:500}
   .lane-static{color:var(--ok)} .lane-translation{color:var(--warn)}
   .lane-dynamic{color:var(--acc)}
   .dot{display:inline-block;width:8px;height:8px;border-radius:4px;background:#3a4150}
   .dot.on{background:var(--ok)}
-  #lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));
-       gap:8px;max-height:calc(100vh - 480px);overflow-y:auto;margin-top:8px}
-  .cell{cursor:pointer;text-align:center}
-  .cell img{width:100%;image-rendering:pixelated;background:#fff;border-radius:4px;
-            border:1px solid var(--line)}
-  .cell:hover img{border-color:var(--acc)}
-  .cell.sel img{border-color:var(--warn);border-width:2px}
-  .cell .nm{font-size:10px;color:var(--ink2);overflow:hidden;white-space:nowrap;
-            text-overflow:ellipsis}
-  .cell.unsolved img{opacity:.45}
-  #log{background:#0a0c0f;border-radius:6px;padding:10px;height:170px;
-       overflow-y:auto;white-space:pre-wrap;font-size:11.5px;color:#b7c0cc}
+  #lchips{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0}
   #lchips .lc{padding:2px 10px;border-radius:10px;border:1px solid var(--line);
               cursor:pointer;font-size:12px;background:#20242d}
   #lchips .lc.on{border-color:var(--acc);color:var(--acc)}
@@ -64,10 +56,23 @@
   #lstrip .fq.lab{background:var(--acc)}
   #lstrip .fq.msk{background:var(--ok)}
   #lstrip .fq.cur{border-color:#fff}
-  #lstrip .gap{width:8px}
-  .busy{color:var(--warn)} .toast{position:fixed;bottom:16px;right:16px;
-       background:var(--acc);color:#04222f;padding:8px 14px;border-radius:6px;
-       font-weight:600;display:none}
+  #lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));
+       gap:8px;max-height:calc(100vh - 480px);overflow-y:auto;margin-top:8px}
+  #sheet{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+  .cell{cursor:pointer;text-align:center}
+  .cell img{width:100%;image-rendering:pixelated;background:#fff;border-radius:4px;
+            border:1px solid var(--line)}
+  .cell:hover img{border-color:var(--acc)}
+  .cell.sel img{border-color:var(--warn);border-width:2px}
+  .cell.unsolved img{opacity:.45}
+  .cell .nm{font-size:10px;color:var(--ink2);overflow:hidden;white-space:nowrap;
+            text-overflow:ellipsis}
+  #log{background:#0a0c0f;border-radius:6px;padding:10px;height:170px;
+       overflow-y:auto;white-space:pre-wrap;font-size:11.5px;color:#b7c0cc}
+  .busy{color:var(--warn)}
+  .hint{font-size:12px;color:var(--ink2)}
+  .toast{position:fixed;bottom:16px;right:16px;background:var(--acc);color:#04222f;
+         padding:8px 14px;border-radius:6px;font-weight:600;display:none;z-index:9}
 </style>
 <header>
   <h1>demo design studio</h1>
@@ -75,103 +80,97 @@
   <div id="jobline" class="mono"></div>
 </header>
 <main>
-<div>
+<div><!-- left: the workflow -->
   <section>
     <h2>video → project</h2>
     <div style="display:flex;gap:8px">
-      <select id="video"></select>
-      <button onclick="run('trim', vid())">0 · trim on white frames</button>
-      <button onclick="run('scenes', vid())"
-        title="switches the workspace to this video's project: current labels are archived, a returning project's labels are restored, trims (_01/_02) continue their project">1 · scenes (start/switch project)</button>
-    </div>
-    <div class="st" style="margin-top:6px;color:var(--ink2)">
-      the filename stem names the project (trim numbers _01/_02 fold into it).
-      <b>start / switch project</b> is also how you change projects: labels are
-      archived per project and restored when you come back. drop new footage
-      into <span class="mono">demo/</span> and refresh
+      <select id="video" style="flex:1"></select>
+      <button onclick="run('trim', vid())">0 · trim on white</button>
+      <button onclick="run('scenes', vid())" class="primary"
+        title="switches to this video's project: labels are archived per project and restored when you return; trims (_01/_02) continue their project">1 · scenes (start/switch)</button>
     </div>
   </section>
 
   <section>
-    <h2>2 · label — click the frame (left = include, right = exclude)
-      <span id="wlab" class="mono" style="font-weight:400"></span>
-      <button style="float:right" onclick="run('label')">native window</button></h2>
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-      <button onclick="lgo(-1)">&larr;</button>
-      <span id="lpos" class="mono">–</span>
-      <button onclick="lgo(1)">&rarr;</button>
-      <button onclick="lnextEmpty()">next unlabelled</button>
-      <input type="text" id="llabel" placeholder="label (or click a library shape)"
-             style="width:180px">
-      <button onclick="lundo()">undo</button>
-      <button onclick="lcopyPrev()">copy prev</button>
-      <button onclick="lreuse()">reuse…</button>
-      <button id="lmasks" onclick="ltoggleMasks()">masks: on</button>
-      <span id="lsum" class="mono" style="color:var(--ink2)"></span>
-    </div>
-    <div id="lchips" style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0"></div>
-    <div id="lstrip"></div>
-    <canvas id="lcanvas" style="width:100%;border:1px solid var(--line);
-            border-radius:6px;cursor:crosshair"></canvas>
-    <div class="st" style="color:var(--ink2);margin-top:4px">
-      <b>one frame per scene per object is enough</b> — segment (video) tracks it
-      through the clip; extra clicks on later frames become corrections.
-      saves on every click into <span class="mono">keypoints.json</span> —
-      the native window (step 2's run button) reads and writes the same file.
-      <b>reuse…</b> records "this label uses an existing library element" for the
-      current scene; 04 then skips segmenting it.
-    </div>
+    <h2>scene</h2>
+    <div class="chipbar" id="scenebar"></div>
   </section>
+
   <section>
-    <h2>3 · segment → masks (contact sheet, one tile per frame)
-      <span id="wmasks" class="mono" style="font-weight:400"></span>
-      <button style="float:right" onclick="grefresh()">refresh</button>
-      <button style="float:right;margin-right:6px;border-color:var(--acc)"
-              onclick="run('segment')">run segment (GPU)</button></h2>
-    <div id="gal" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;max-height:300px;overflow-y:auto"></div>
-    <div class="st" style="color:var(--ink2);margin-top:4px">
-      click a mask to jump the labeller to that frame and fix it
-      (add points there, re-run segment).</div>
+    <div class="tabs">
+      <span class="tab on" data-t="edit">2 · edit — points &amp; masks</span>
+      <span class="tab" data-t="sheet">review — contact sheet</span>
+      <span class="tab" data-t="output">output — play</span>
+      <span style="flex:1"></span>
+      <button onclick="run('label')" title="the matplotlib window, same file">native window</button>
+      <button onclick="run('segment')" class="primary"
+              title="segment + build sequences + index, one batch">3 · segment (GPU)</button>
+    </div>
+
+    <div id="v-edit">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+        <button onclick="lgo(-1)">&larr;</button>
+        <span id="lpos" class="mono">–</span>
+        <button onclick="lgo(1)">&rarr;</button>
+        <button onclick="lnextEmpty()">next unlabelled</button>
+        <input type="text" id="llabel" placeholder="label" style="width:130px">
+        <button onclick="lundo()">undo</button>
+        <button onclick="lcopyPrev()">copy prev</button>
+        <button onclick="lreuse()">reuse…</button>
+        <button id="lmasks" onclick="ltoggleMasks()">masks: on</button>
+        <button onclick="ldropFrame()" style="border-color:var(--bad)"
+                title="remove this frame from the whole project: scene png, labels, masks">drop frame</button>
+        <span id="lsum" class="mono hint"></span>
+      </div>
+      <div id="lchips"></div>
+      <div id="lstrip"></div>
+      <canvas id="lcanvas" style="width:100%;border:1px solid var(--line);
+              border-radius:6px;cursor:crosshair"></canvas>
+      <div class="hint">left = include, right/shift = exclude · one frame per scene
+        per object is enough — segment tracks it; later clicks are corrections ·
+        masks view = the pipeline's own overlay (bbox + label + tint) ·
+        saves on every click</div>
+    </div>
+
+    <div id="v-sheet" style="display:none">
+      <div id="sheet"></div>
+      <div class="hint" style="margin-top:6px">one tile per frame, every mask
+        tinted. click a tile to fix it in the edit tab.</div>
+    </div>
+
+    <div id="v-output" style="display:none">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+        <select id="oseq" style="width:auto"></select>
+        <button onclick="oplay()">play</button>
+        <span id="ovids" class="mono hint"></span>
+      </div>
+      <canvas id="ocanvas" style="width:100%;border:1px solid var(--line);
+              border-radius:6px;display:none"></canvas>
+    </div>
   </section>
+
   <section>
     <h2>4 · sequences → assign each element
       <label style="float:right;font-weight:400;text-transform:none">
-        <input type="checkbox" id="seqall" onchange="refresh()"> all projects</label>
-      <button style="float:right;margin-right:10px;border-color:var(--acc)"
-              onclick="run('sequences')">build + index</button></h2>
+        <input type="checkbox" id="seqall" onchange="refresh()"> all projects</label></h2>
     <div id="seldisp" class="mono" style="color:var(--warn);margin-bottom:6px">
-      no library shape selected — click one below, then hit a row's <b>lib</b></div>
-    <table id="seqs"><tr><th>sequence</th><th>project</th><th>lane</th>
-      <th>assignment</th><th>reassembled</th><th></th></tr></table>
-    <div id="seqhint" class="st" style="color:var(--ink2);margin-top:6px"></div>
-    <div style="display:flex;gap:8px;margin-top:10px">
+      no library shape selected — click one in the rail, then a row's <b>lib</b></div>
+    <table id="seqs"></table>
+    <div id="seqhint" class="hint" style="margin-top:6px"></div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
       <button onclick="run('route')">5 · route lanes</button>
-      <button onclick="run('solve_all')" style="border-color:var(--acc)">6 · solve all "to solve"</button>
-      <button onclick="run('reassemble')">7 · reassemble all</button>
+      <button onclick="solveScene()" class="primary" id="solvescene">6 · solve + mount scene</button>
+      <button onclick="run('solve_all')">6b · solve + mount all</button>
+      <button onclick="run('reassemble')" title="mount only: re-cast library picks and solved elements without solving anything">re-mount</button>
+      <button onclick="run('compose')" class="primary">7 · compose video</button>
+      <button onclick="run('pack')">8 · pack (deploy)</button>
+      <button onclick="run('score')">score</button>
+      <button onclick="run('atlas')">atlas</button>
     </div>
-    <div id="outs" class="mono" style="margin-top:8px;color:var(--ink2)"></div>
   </section>
-  <section>
-    <h2>output — the show so far
-      <button style="float:right" onclick="run('atlas')">rebuild atlas</button>
-      <button style="float:right;margin-right:6px" onclick="run('score')">score (CLIP)</button>
-      <button style="float:right;margin-right:6px" onclick="run('pack')">9 · pack show</button>
-      <button style="float:right;margin-right:6px;border-color:var(--acc)"
-              onclick="run('compose')">8 · compose video</button></h2>
-    <div id="ovids" class="mono" style="color:var(--ink2);margin-bottom:8px"></div>
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-      <select id="oseq" style="width:auto"></select>
-      <button onclick="oplay()">play</button>
-      <span class="st" style="color:var(--ink2)">reassembled frames, canvas
-        playback (the mp4s use a codec browsers dislike; open them in a player)</span>
-    </div>
-    <canvas id="ocanvas" style="width:100%;border:1px solid var(--line);
-            border-radius:6px;display:none"></canvas>
-  </section>
-
-
 </div>
-<div id="side">
+
+<div id="side"><!-- right rail: sticky -->
   <section>
     <h2>terminal</h2>
     <div id="log" class="mono"></div>
@@ -179,108 +178,116 @@
   <section>
     <h2>library — click to select</h2>
     <div style="display:flex;gap:8px;align-items:center">
-      <input type="text" id="q" placeholder="class: K, candle, crab… (exact class first)">
+      <input type="text" id="q" style="flex:1"
+             placeholder="class: K, candle, crab… (exact class first)">
       <label style="white-space:nowrap;color:var(--ink2);font-size:11px">
         <input type="checkbox" id="qunsolved"> unsolved too</label>
     </div>
     <div id="lib"></div>
-    <div class="st" style="margin-top:6px;color:var(--ink2)">
-      SOLVED SHADOWS only (tick "unsolved too" to widen). search matches the
-      class exactly first — "K" is the letter K, not everything containing k.
-      click = select (highlighted); the sequence rows' <b>lib</b> buttons
-      assign the selection. nothing to paste anywhere.
-    </div>
+    <div class="hint" style="margin-top:6px">solved shadows only by default.
+      click = select (highlighted); the rows' <b>lib</b> buttons assign it.
+      nothing to paste.</div>
   </section>
 </div>
 </main>
-
 <div class="toast" id="toast"></div>
 <script>
 const $ = s => document.querySelector(s);
-let LIB = [], S = null;
-
+let LIB = [], S = null, SCENE = "all", TAB = "edit", LASTLIB = null;
+let LF = [], LFall = [], LI = 0, KP = {frames: {}, decisions: {}};
+let SHOW_MASKS = true;
+const MASKC = new Map();          // fid -> {overlay: Image|null}
 const vid = () => $("#video").value;
-
-let LASTLIB = null;
-async function assign(seq, mode){
-  let body = {seq, mode};
-  if(mode === "library"){
-    if(!LASTLIB){ toast("click a library shape first (right panel)"); return; }
-    body.library_id = LASTLIB;
-  }
-  if(mode === "solve"){
-    const r = await fetch("/api/assign", {method: "POST",
-      headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
-    if(!r.ok){ toast((await r.json()).error); return; }
-    run("solve", seq);           // assigning solve also launches it
-    return;
-  }
-  const r = await fetch("/api/assign", {method: "POST",
-    headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
-  if(!r.ok) toast((await r.json()).error); else refresh();
-}
-function oshow(seq){
-  const sel = $("#oseq");
-  if([...sel.options].some(o => o.value === seq)){
-    sel.value = seq; oplay();
-    $("#ocanvas").scrollIntoView({block: "center"});
-  } else toast("not reassembled yet — assign + solve, then reassemble");
-}
-async function run(step, arg){
-  const r = await fetch("/api/run", {method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({step, arg})});
-  const j = await r.json();
-  if(j.error) toast(j.error);
-  else if(j.note) toast(j.note);
-  poll();
-}
 
 function toast(t){
   const el = $("#toast"); el.textContent = t; el.style.display = "block";
   setTimeout(() => el.style.display = "none", 2600);
 }
 
+/* ---- jobs ------------------------------------------------------------- */
+async function run(step, arg){
+  const r = await fetch("/api/run", {method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({step, arg})});
+  const j = await r.json();
+  if(j.error) toast(j.error); else if(j.note) toast(j.note);
+  poll();
+}
+function solveScene(){
+  if(SCENE === "all"){ toast("pick a scene first (scene bar)"); return; }
+  run("solve_scene", SCENE);
+}
+let timer = null;
+function poll(){
+  clearInterval(timer);
+  timer = setInterval(async () => {
+    await refresh();
+    if(!S.job.running){
+      clearInterval(timer);
+      const fid = LF[LI] && LF[LI].fid;
+      await linit(fid);
+      if(TAB === "sheet") grefresh();
+      orefresh();
+    }
+  }, 2000);
+}
 
+/* ---- scene bar -------------------------------------------------------- */
+function scenebar(){
+  const scs = [...new Set(LFall.map(f => f.scene))].sort();
+  const bar = $("#scenebar");
+  bar.innerHTML = ['all', ...scs].map(sc =>
+    `<span class="chip ${sc === SCENE ? "on" : ""}" data-sc="${sc}">${sc}</span>`
+  ).join("") || '<span class="hint">no scenes yet — run 1 · scenes</span>';
+  bar.querySelectorAll(".chip").forEach(c => c.addEventListener("click", () => {
+    SCENE = c.dataset.sc;
+    applyScene();
+  }));
+  $("#solvescene").textContent = SCENE === "all"
+    ? "6 · solve + mount scene (pick one)" : `6 · solve + mount ${SCENE}`;
+}
+function applyScene(){
+  LF = SCENE === "all" ? LFall : LFall.filter(f => f.scene === SCENE);
+  LI = Math.min(LI, Math.max(0, LF.length - 1));
+  scenebar();
+  if(LF.length) lshow();
+  if(TAB === "sheet") grefresh();
+  if(TAB === "output") orefresh();
+  refresh();
+}
 
+/* ---- state / board ---------------------------------------------------- */
 async function refresh(){
   S = await fetch("/api/state").then(r => r.json());
   $("#proj").textContent = S.project || "—";
   const vs = $("#video");
-  if(vs.options.length !== S.videos.length){
+  if(vs.options.length !== S.videos.length)
     vs.innerHTML = S.videos.map(v => `<option>${v}</option>`).join("");
-  }
-  const w = S.workspace;
-  if($("#wlab")) $("#wlab").textContent = ` — ${w.labelled} frames labelled`;
-  if($("#wmasks")) $("#wmasks").textContent = ` — ${w.masks} masks`;
-  const showAll = $("#seqall") && $("#seqall").checked;
-  const rows = S.sequences.filter(q => showAll || q.project === S.project);
-  $("#seqs").innerHTML = "<tr><th>sequence</th><th>project</th><th>lane</th>"
-    + "<th>assignment</th><th>reassembled</th><th></th></tr>"
+  const showAll = $("#seqall").checked;
+  const sceneOf = id => (id.match(/_(scene_\d+)_/) || [])[1] || "";
+  let rows = S.sequences.filter(q => showAll || q.project === S.project);
+  if(SCENE !== "all") rows = rows.filter(q => sceneOf(q.id) === SCENE);
+  $("#seqs").innerHTML = "<tr><th>element</th><th>lane</th>"
+    + "<th>assignment</th><th>re</th><th></th></tr>"
     + rows.map(q => `<tr>
-        <td class="mono">${q.id}</td>
-        <td class="mono" style="color:${q.project === S.project ? "var(--acc)" : "var(--ink2)"}">${q.project}</td>
+        <td class="mono" title="${q.id}">${showAll ? q.id :
+            q.id.replace((S.project || "") + "_", "")}</td>
         <td class="lane-${q.lane || "dynamic"}">${q.lane || "?"}</td>
         <td class="mono" style="color:${q.resolved ? "var(--ok)" : "var(--warn)"}">${
           q.assign === "library" ? "lib: " + (q.library_id || "?")
-          : q.assign === "solve" ? (q.solved ? "solved" : "to solve")
-          : "—"}</td>
+          : q.assign === "solve" ? (q.solved ? "solved" : "to solve") : "—"}</td>
         <td><span class="dot ${q.reassembled ? "on" : ""}"></span></td>
         <td style="white-space:nowrap">
           <button onclick="assign('${q.id}','solve')">solve</button>
           <button onclick="assign('${q.id}','library')">lib</button>
           <button onclick="assign('${q.id}',null)" title="clear">✕</button>
-          <button onclick="oshow('${q.id}')" title="play this sequence">▶</button>
+          <button onclick="oshow('${q.id}')" title="play">▶</button>
         </td></tr>`).join("");
   const un = rows.filter(q => !q.resolved).length;
   $("#seqhint").textContent = rows.length
-    ? (un ? `${un} element(s) still unassigned/unsolved — assign every one, `
-            + "then reassemble → compose mounts them back into the video"
-       : "all elements resolved — reassemble, then compose")
+    ? (un ? `${un} element(s) unassigned/unsolved here — assign all, then 6 solves AND mounts`
+          : "all resolved here — 6 (or re-mount) then 7 · compose")
     : "";
-  $("#outs").textContent = (S.outputs.video.length
-      ? "video: " + S.outputs.video.join("  ") : "no video yet")
-    + (S.outputs.package ? "   package: demo/packages/" + S.project : "");
   const j = S.job;
   $("#jobline").innerHTML = j.running
     ? `<span class="busy">running: ${j.step} … ${j.elapsed}s</span>`
@@ -291,146 +298,110 @@ async function refresh(){
   }
 }
 
-let timer = null;
-function poll(){
-  clearInterval(timer);
-  timer = setInterval(async () => {
-    await refresh();
-    if(!S.job.running){
-      clearInterval(timer);
-      // a finished job may have produced masks or frames: refresh the
-      // labeller's world without losing the current position
-      const fid = LF[LI] && LF[LI].fid;
-      LF = await fetch("/api/frames").then(r => r.json());
-      MASKC.clear();
-      const at = LF.findIndex(f => f.fid === fid);
-      LI = at >= 0 ? at : 0;
-      if(LF.length) lshow();
-    }
-  }, 2000);
-}
-
-function renderLib(){
-  const q = $("#q").value.trim().toLowerCase();
-  // shadows only by default: the library is what the rig can cast
-  let pool = $("#qunsolved").checked ? LIB : LIB.filter(e => e.solved);
-  let hits;
-  if(!q) hits = pool;
-  else {
-    hits = pool.filter(e => e.cls.toLowerCase() === q);          // exact class
-    if(!hits.length) hits = pool.filter(e => e.cls.toLowerCase().startsWith(q));
-    if(!hits.length) hits = pool.filter(e => e.id.toLowerCase().includes(q));
+/* ---- assignment ------------------------------------------------------- */
+async function assign(seq, mode){
+  const body = {seq, mode};
+  if(mode === "library"){
+    if(!LASTLIB){ toast("click a library shape first (right rail)"); return; }
+    body.library_id = LASTLIB;
   }
-  hits = hits.slice(0, 96);
-  $("#lib").innerHTML = hits.map(e => `
-    <div class="cell ${e.solved ? "" : "unsolved"}" data-id="${e.id}"
-         title="${e.id}${e.solved ? "" : " (unsolved)"}">
-      <img loading="lazy" src="/thumb/${e.subset}/${e.stem}">
-      <div class="nm">${e.cls}</div>
-    </div>`).join("");
-  document.querySelectorAll(".cell").forEach(c =>
-    c.addEventListener("click", () => {
-      LASTLIB = c.dataset.id;
-      document.querySelectorAll(".cell.sel").forEach(x => x.classList.remove("sel"));
-      c.classList.add("sel");
-      $("#seldisp").textContent = "selected: " + LASTLIB +
-        "   (each lib button assigns this)";
-      navigator.clipboard.writeText(c.dataset.id);
-    }));
+  const r = await fetch("/api/assign", {method: "POST",
+    headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  if(!r.ok){ toast((await r.json()).error); return; }
+  if(mode === "solve") run("solve", seq); else refresh();
 }
 
-/* ---- mask gallery --------------------------------------------------- */
+/* ---- tabs ------------------------------------------------------------- */
+document.querySelectorAll(".tabs .tab").forEach(t =>
+  t.addEventListener("click", () => {
+    TAB = t.dataset.t;
+    document.querySelectorAll(".tabs .tab").forEach(x =>
+      x.classList.toggle("on", x === t));
+    for(const v of ["edit", "sheet", "output"])
+      $("#v-" + v).style.display = v === TAB ? "" : "none";
+    if(TAB === "sheet") grefresh();
+    if(TAB === "output") orefresh();
+  }));
+
+/* ---- contact sheet (review) ------------------------------------------ */
 async function grefresh(){
   const items = await fetch("/api/gallery").then(r => r.json());
-  $("#gal").innerHTML = items.map(m => `
-    <div class="cell" data-fid="${m.fid}" title="${m.fid} (${m.scene}): ${m.labels.join(", ")}">
+  const here = SCENE === "all" ? items : items.filter(m => m.scene === SCENE);
+  $("#sheet").innerHTML = here.map(m => `
+    <div class="cell" data-fid="${m.fid}"
+         title="${m.fid} (${m.scene}): ${m.labels.join(", ")}">
       <img loading="lazy" src="/maskthumb/${m.fid}?t=${Date.now()}">
       <div class="nm">${m.fid} · ${m.labels.length} obj</div>
-    </div>`).join("") || '<span style="color:var(--ink2)">no masks yet</span>';
-  $("#gal").querySelectorAll(".cell").forEach(c =>
+    </div>`).join("") || '<span class="hint">no masks in this scene yet</span>';
+  $("#sheet").querySelectorAll(".cell").forEach(c =>
     c.addEventListener("click", () => {
       const at = LF.findIndex(f => f.fid === c.dataset.fid);
-      if(at >= 0){ LI = at; lshow();
-        $("#lcanvas").scrollIntoView({block: "center"}); }
+      if(at >= 0) LI = at;
+      document.querySelector('[data-t="edit"]').click();
+      lshow();
     }));
 }
-grefresh();
 
-/* ---- output workspace ---------------------------------------------- */
+/* ---- output (play) ---------------------------------------------------- */
 let OUT = null, OTIMER = null;
 async function orefresh(){
   OUT = await fetch("/api/output").then(r => r.json());
-  $("#ovids").innerHTML = (OUT.videos.length
-    ? "video files: " + OUT.videos.map(v => `${v.name} (${v.mb}MB)`).join("  ")
-    : "no composed video yet — run compose")
-    + (OUT.choreo && OUT.choreo.length
-       ? `<br>robot deploy: demo/packages/${OUT.package}/choreo/ (${OUT.choreo.length}` +
-         ` clip envelopes) — copy into fleet-shadow-art/choreographies/, open Play`
-       : "<br>robot deploy: run pack — choreo/*.json is what the robot UI plays");
-  const names = Object.keys(OUT.reassembled);
+  const names = Object.keys(OUT.reassembled)
+    .filter(n => SCENE === "all" || n.includes("_" + SCENE + "_"));
   $("#oseq").innerHTML = names.map(n => `<option>${n}</option>`).join("")
-    || "<option>— nothing reassembled —</option>";
+    || "<option>— nothing reassembled here —</option>";
+  $("#ovids").innerHTML = (OUT.videos.length
+    ? "video: " + OUT.videos.map(v => v.name).join(" ") : "no video yet")
+    + (OUT.choreo && OUT.choreo.length
+       ? ` · deploy: packages/${OUT.package}/choreo (${OUT.choreo.length})`
+       : " · deploy: run 8 · pack");
 }
 function oplay(){
   clearInterval(OTIMER);
-  const name = $("#oseq").value;
-  const d = OUT && OUT.reassembled[name];
+  const d = OUT && OUT.reassembled[$("#oseq").value];
   if(!d) return;
   const cv = $("#ocanvas"); cv.style.display = "block";
   const g = cv.getContext("2d");
   let i = 0;
   const step = () => {
     const im = new Image();
-    im.onload = () => {
-      cv.width = im.naturalWidth; cv.height = im.naturalHeight;
-      g.drawImage(im, 0, 0);
-    };
-    im.src = `/out/reassembled/${name}/${d.frames[i]}`;
+    im.onload = () => { cv.width = im.naturalWidth; cv.height = im.naturalHeight;
+                        g.drawImage(im, 0, 0); };
+    im.src = `/out/reassembled/${$("#oseq").value}/${d.frames[i]}`;
     i = (i + 1) % d.frames.length;
   };
   step();
   OTIMER = setInterval(step, 1000 / (d.fps || 5));
 }
-orefresh();
-
-/* ---- in-browser labeller ------------------------------------------- */
-let LF = [], LI = 0, KP = {frames: {}, decisions: {}};
-let SHOW_MASKS = true;
-const MASKC = new Map();          // fid -> [{label, img, clean}]
-
-function ltoggleMasks(){
-  SHOW_MASKS = !SHOW_MASKS;
-  $("#lmasks").textContent = "masks: " + (SHOW_MASKS ? "on" : "off");
-  ldraw();
+function oshow(seq){
+  document.querySelector('[data-t="output"]').click();
+  setTimeout(() => {
+    const sel = $("#oseq");
+    if([...sel.options].some(o => o.value === seq)){ sel.value = seq; oplay(); }
+    else toast("not reassembled yet — 6 mounts after solving, or re-mount");
+  }, 250);
 }
 
-async function lmasksFor(fid){
-  if(MASKC.has(fid)) return MASKC.get(fid);
-  const info = await fetch("/api/masks/" + fid).then(r => r.json());
-  const loaded = await Promise.all((info.masks || []).map(m => new Promise(res => {
-    const im = new Image();
-    im.onload = () => res({label: m.label, clean: !!m.clean, img: im});
-    im.onerror = () => res(null);
-    im.src = "/" + m.file + "?t=" + Date.now();
-  })));
-  const out = loaded.filter(Boolean);
-  MASKC.set(fid, out);
-  return out;
-}
+/* ---- labeller (edit tab) --------------------------------------------- */
 const limg = new Image();
 const lcv = $("#lcanvas");
 
-async function linit(){
-  LF = await fetch("/api/frames").then(r => r.json());
+async function linit(keepFid){
+  LFall = await fetch("/api/frames").then(r => r.json());
   KP = await fetch("/api/keypoints").then(r => r.json());
-  if(LF.length){ LI = 0; lshow(); }
+  MASKC.clear();
+  LF = SCENE === "all" ? LFall : LFall.filter(f => f.scene === SCENE);
+  const at = keepFid ? LF.findIndex(f => f.fid === keepFid) : -1;
+  LI = at >= 0 ? at : Math.min(LI, Math.max(0, LF.length - 1));
+  scenebar();
+  if(LF.length) lshow();
 }
-
 function lcur(){ return LF[LI]; }
-
+function lobjs(){
+  const f = lcur();
+  return (KP.frames[f.fid] && KP.frames[f.fid].objects) || {};
+}
 function lchips(){
-  // the PROJECT's own label vocabulary: click instead of retyping, so P vs p
-  // or a typo can never mint a phantom second object
   const seen = {};
   Object.values(KP.frames || {}).forEach(f =>
     Object.keys(f.objects || {}).forEach(l => seen[l] = (seen[l] || 0) + 1));
@@ -442,27 +413,20 @@ function lchips(){
     c.addEventListener("click", () => { $("#llabel").value = c.dataset.l;
                                         lchips(); ldraw(); }));
 }
-
 function lstrip(){
   const el = $("#lstrip");
   let html = "", prev = null;
   LF.forEach((f, i) => {
-    if(prev && f.scene !== prev) html += '<span class="gap"></span>';
+    if(prev && f.scene !== prev) html += '<span style="width:8px"></span>';
     prev = f.scene;
     const cls = ["fq", f.masked ? "msk" : (f.labelled ? "lab" : ""),
                  i === LI ? "cur" : ""].join(" ");
-    html += `<span class="${cls}" data-i="${i}" title="${f.fid} (${f.scene})` +
-            `${f.masked ? " · masked" : f.labelled ? " · labelled" : ""}"></span>`;
+    html += `<span class="${cls}" data-i="${i}" title="${f.fid} (${f.scene})"></span>`;
   });
   el.innerHTML = html;
   el.querySelectorAll(".fq").forEach(q =>
     q.addEventListener("click", () => { LI = +q.dataset.i; lshow(); }));
 }
-function lobjs(){
-  const f = lcur();
-  return (KP.frames[f.fid] && KP.frames[f.fid].objects) || {};
-}
-
 function lshow(){
   const f = lcur();
   if(!f) return;
@@ -471,47 +435,42 @@ function lshow(){
   limg.onload = ldraw;
   limg.src = "/" + f.file;
 }
-
+function ltoggleMasks(){
+  SHOW_MASKS = !SHOW_MASKS;
+  $("#lmasks").textContent = "masks: " + (SHOW_MASKS ? "on" : "off");
+  ldraw();
+}
+async function loverlayFor(fid){
+  if(MASKC.has(fid)) return MASKC.get(fid);
+  const info = await fetch("/api/masks/" + fid).then(r => r.json());
+  const entry = {overlay: null};
+  if(info.overlay){
+    entry.overlay = await new Promise(res => {
+      const im = new Image();
+      im.onload = () => res(im);
+      im.onerror = () => res(null);
+      im.src = "/" + info.overlay + "?t=" + Date.now();
+    });
+  }
+  MASKC.set(fid, entry);
+  return entry;
+}
+const hue = n => `hsl(${[...n].reduce((a, c) => a + c.charCodeAt(0), 0) * 47 % 360},90%,60%)`;
 async function ldraw(){
   lcv.width = limg.naturalWidth; lcv.height = limg.naturalHeight;
   const g = lcv.getContext("2d");
-  g.drawImage(limg, 0, 0);
-  const hue = n => `hsl(${[...n].reduce((a, c) => a + c.charCodeAt(0), 0) * 47 % 360},90%,60%)`;
+  // masks view = the pipeline's own overlay jpg: bbox + label tag + tint,
+  // exactly what sits in letters_sam2_small/overlay/ on disk
+  let base = limg;
   if(SHOW_MASKS){
-    const masks = await lmasksFor(lcur().fid);
-    for(const m of masks){
-      // binary mask, glyph dark: tint the glyph pixels with the label's colour
-      const oc = document.createElement("canvas");
-      oc.width = lcv.width; oc.height = lcv.height;
-      const og = oc.getContext("2d");
-      og.drawImage(m.img, 0, 0, oc.width, oc.height);
-      const d = og.getImageData(0, 0, oc.width, oc.height);
-      const col = hue(m.label);
-      const tmp = document.createElement("canvas");
-      tmp.width = tmp.height = 1;
-      const tg = tmp.getContext("2d");
-      tg.fillStyle = col; tg.fillRect(0, 0, 1, 1);
-      const [cr, cg2, cb] = tg.getImageData(0, 0, 1, 1).data;
-      for(let i = 0; i < d.data.length; i += 4){
-        if(d.data[i] < 128){                      // glyph pixel
-          d.data[i] = cr; d.data[i+1] = cg2; d.data[i+2] = cb;
-          d.data[i+3] = m.clean ? 150 : 110;
-        } else d.data[i+3] = 0;
-      }
-      og.putImageData(d, 0, 0);
-      g.drawImage(oc, 0, 0);
-    }
-    if(masks.length){
-      g.font = "bold 16px monospace"; g.fillStyle = "#fff";
-      g.fillText(masks.some(m => m.clean) ? "masks: cleaned" : "masks: raw seg",
-                 10, lcv.height - 12);
-    }
+    const e = await loverlayFor(lcur().fid);
+    if(e.overlay) base = e.overlay;
   }
+  g.drawImage(base, 0, 0, lcv.width, lcv.height);
   const objs = lobjs();
-  const names = Object.keys(objs).sort();
-  for(const n of names){
-    const o = objs[n];
-    g.fillStyle = g.strokeStyle = hue(n);
+  for(const n of Object.keys(objs).sort()){
+    const c = hue(n), o = objs[n];
+    g.fillStyle = g.strokeStyle = c;
     g.lineWidth = 3; g.font = "bold 22px monospace";
     o.points.forEach(([x, y], i) => {
       g.beginPath();
@@ -521,13 +480,25 @@ async function ldraw(){
       g.fillText(n, x + 12, y - 8);
     });
   }
-  $("#lsum").textContent = names.map(n => `${n}:${objs[n].points.length}`)
-                                .join("  ") || "no points";
+  $("#lsum").textContent = Object.keys(objs).sort()
+    .map(n => `${n}:${objs[n].points.length}`).join("  ") || "";
   const dec = (KP.decisions[lcur().scene] || {})[$("#llabel").value];
-  if(dec) $("#lsum").textContent += `   reuse:${dec.reuse}`;
+  if(dec) $("#lsum").textContent += `  reuse:${dec.reuse}`;
 }
-
-function linvalidate(){ MASKC.delete(lcur().fid); }
+async function ldropFrame(){
+  const f = lcur();
+  if(!f) return;
+  if(!confirm(`drop ${f.fid} from the project? removes the frame, its labels ` +
+              "and its masks. re-run 3 afterwards to rebuild sequences."))
+    return;
+  const r = await fetch("/api/dropframe", {method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({fid: f.fid})});
+  const j = await r.json();
+  if(j.error){ toast(j.error); return; }
+  toast("dropped " + f.fid + " — " + j.note);
+  await linit();
+}
 
 async function lsave(){
   const f = lcur();
@@ -536,11 +507,10 @@ async function lsave(){
     body: JSON.stringify({fid: f.fid, scene: f.scene, file: f.file,
                           objects: lobjs()})});
 }
-
 function laddPoint(ev, positive){
   ev.preventDefault();
   const lab = $("#llabel").value.trim();
-  if(!lab){ toast("type a label first (or click a library shape)"); return; }
+  if(!lab){ toast("type or click a label first"); return; }
   const r = lcv.getBoundingClientRect();
   const x = Math.round((ev.clientX - r.left) / r.width * lcv.width * 10) / 10;
   const y = Math.round((ev.clientY - r.top) / r.height * lcv.height * 10) / 10;
@@ -550,13 +520,11 @@ function laddPoint(ev, positive){
   const o = KP.frames[f.fid].objects[lab] =
     KP.frames[f.fid].objects[lab] || {points: [], labels: []};
   o.points.push([x, y]); o.labels.push(positive ? 1 : 0);
-  lcur().labelled = true; lstrip(); lchips();
-  ldraw(); lsave();
+  lcur().labelled = true;
+  lstrip(); lchips(); ldraw(); lsave();
 }
-
 lcv.addEventListener("click", ev => laddPoint(ev, !ev.shiftKey));
 lcv.addEventListener("contextmenu", ev => laddPoint(ev, false));
-
 function lgo(d){ LI = Math.max(0, Math.min(LF.length - 1, LI + d)); lshow(); }
 function lnextEmpty(){
   for(let j = LI + 1; j < LF.length; j++){
@@ -568,10 +536,12 @@ function lnextEmpty(){
 function lundo(){
   const objs = lobjs();
   let best = null;
-  for(const n in objs) if(!best || objs[n].points.length > objs[best].points.length) best = n;
+  for(const n in objs)
+    if(!best || objs[n].points.length > objs[best].points.length) best = n;
   if(!best || !objs[best].points.length) return;
   objs[best].points.pop(); objs[best].labels.pop();
   if(!objs[best].points.length) delete objs[best];
+  MASKC.delete(lcur().fid);
   ldraw(); lsave();
 }
 function lcopyPrev(){
@@ -587,10 +557,9 @@ async function lreuse(){
   const lab = $("#llabel").value.trim();
   if(!lab){ toast("set a label first"); return; }
   const cur = (KP.decisions[lcur().scene] || {})[lab];
-  const id = prompt(`reuse element id for '${lab}' in ${lcur().scene}
-` +
-                    "(click a library shape first to copy one; empty clears)",
-                    cur ? cur.reuse : "");
+  const dft = LASTLIB || (cur ? cur.reuse : "");
+  const id = prompt(`reuse element id for '${lab}' in ${lcur().scene}` +
+                    " (empty clears)", dft);
   if(id === null) return;
   await fetch("/api/decision", {method: "POST",
     headers: {"Content-Type": "application/json"},
@@ -605,11 +574,40 @@ document.addEventListener("keydown", ev => {
   if(ev.key === "u") lundo();
   if(ev.key === "c") lcopyPrev();
 });
-linit();
 
+/* ---- library rail ----------------------------------------------------- */
+function renderLib(){
+  const q = $("#q").value.trim().toLowerCase();
+  let pool = $("#qunsolved").checked ? LIB : LIB.filter(e => e.solved);
+  let hits;
+  if(!q) hits = pool;
+  else {
+    hits = pool.filter(e => e.cls.toLowerCase() === q);
+    if(!hits.length) hits = pool.filter(e => e.cls.toLowerCase().startsWith(q));
+    if(!hits.length) hits = pool.filter(e => e.id.toLowerCase().includes(q));
+  }
+  $("#lib").innerHTML = hits.slice(0, 96).map(e => `
+    <div class="cell ${e.solved ? "" : "unsolved"} ${e.id === LASTLIB ? "sel" : ""}"
+         data-id="${e.id}" title="${e.id}${e.solved ? "" : " (unsolved)"}">
+      <img loading="lazy" src="/thumb/${e.subset}/${e.stem}">
+      <div class="nm">${e.cls}</div>
+    </div>`).join("");
+  $("#lib").querySelectorAll(".cell").forEach(c =>
+    c.addEventListener("click", () => {
+      LASTLIB = c.dataset.id;
+      document.querySelectorAll("#lib .cell.sel").forEach(x =>
+        x.classList.remove("sel"));
+      c.classList.add("sel");
+      $("#seldisp").textContent = "selected: " + LASTLIB +
+        "   (each lib button assigns this)";
+      navigator.clipboard.writeText(c.dataset.id);
+    }));
+}
 $("#q").addEventListener("input", renderLib);
 $("#qunsolved").addEventListener("change", renderLib);
 fetch("/api/library").then(r => r.json()).then(l => { LIB = l; renderLib(); });
-refresh();
+
+/* ---- boot ------------------------------------------------------------- */
+linit(); refresh(); orefresh();
 setInterval(refresh, 6000);
 </script>

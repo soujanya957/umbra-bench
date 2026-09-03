@@ -663,3 +663,22 @@ Lesson repeated thrice tonight, now protocol: a multi-rep patch script
 that fails one assert loses ALL its reps (write happens at the end) --
 after any FAIL, re-verify which pieces actually landed before building
 on them. The assignments NameError was exactly that.
+
+## Studio v3: scene-centric, one stage, batch numbered 0-8
+
+The operator's redesign, delivered whole: a SCENE BAR filters every
+surface (frame strip, contact sheet, assignment rows, output picker) and
+names the per-scene batch button; the label/masks/output panels merged
+into ONE stage with tabs (edit / review sheet / play); masks display is
+now the pipeline's own overlay jpg -- bbox + label + score, exactly what
+sits in letters_sam2_small/overlay/ -- instead of the confusing direct
+tint. Buttons collapsed to the batch line: segment chains
+sequences+index (the build button died), 6 solves AND mounts (scene or
+all -- solve_all/solve_scene append the reassemble+place_library chain),
+re-mount alone for library-only changes, then compose and pack. Fixed en
+route: 08_reassemble --all still globbed demo_* and saw none of pixar's
+sequences (the user's failed run). Frame dropping is the one manual
+cleanup kept: /api/dropframe removes a frame project-wide (scene png,
+labels, masks) with a re-segment reminder; the letters_clean concept is
+fully retired. The multi-rep-patch-loses-all-on-one-FAIL trap fired
+TWICE more; whole-file rewrite was the right call for the html.

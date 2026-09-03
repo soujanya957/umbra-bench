@@ -292,8 +292,10 @@ def main():
 
     names = list(a.sequence)
     if a.all:
-        names += [p.name for p in sorted((BENCH / "sequences").glob("demo_*"))
-                  if (BENCH / "optimized" / p.name).is_dir()]
+        # every sequence with a solve, whatever its project is called --
+        # the demo_* prefix died with the project rename
+        names += [p.name for p in sorted((BENCH / "sequences").iterdir())
+                  if p.is_dir() and (BENCH / "optimized" / p.name).is_dir()]
     names = sorted(set(names))
     if not names:
         raise SystemExit("nothing to do: pass --sequence NAME or --all")

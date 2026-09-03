@@ -189,6 +189,22 @@ def solve_jobs(sid: str) -> list:
     return jobs
 
 
+def mount_jobs(P):
+    """Reassemble everything solved + cast the library assignments."""
+    jobs = [[PY_EVAL, "08_reassemble.py", "--all"],
+            [PY_EVAL, "08_reassemble.py"] + sum(
+                [["--sequence", d.name] for d in
+                 sorted((BENCH / "sequences").glob("*_stab"))
+                 if (BENCH / "optimized" / d.name).is_dir()], [])]
+    if P:
+        for sid, ass in sorted(assignments(P).items()):
+            if ass.get("mode") == "library" and ass.get("library_id"):
+                jobs.append([PY_EVAL, str(ROOT / "08_place_library.py"),
+                             "--sequence", sid,
+                             "--library-id", ass["library_id"]])
+    return jobs
+
+
 def build_job(step: str, arg: str | None):
     """-> (argv|list-of-argv, cwd, detach) or an error string."""
     P = active_project()
@@ -249,9 +265,16 @@ def build_job(step: str, arg: str | None):
         # SAM2 video propagation is clean enough on its own (the user's
         # call); 06_clean_masks stays available from the terminal for
         # footage that needs it
+        # segment, then group into sequences and index -- one batch, no
+        # separate build button to remember
         return ([[PY_GPU, str(ROOT / "04_video_segment.py"),
                   "--workdir", str(pdir(P)), "--device", "cuda",
-                  "--out", "letters_sam2_small"]], pdir(P), False)
+                  "--out", "letters_sam2_small"],
+                 [PY_EVAL, str(ROOT / "07_make_sequences.py"),
+                  "--in", "letters_sam2_small", "--keypoints", "keypoints.json",
+                  "--prefix", f"{P}_"],
+                 [PY_EVAL, str(BENCH / "scripts" / "build_sequence_metadata.py")]],
+                pdir(P), False)
     if step == "clean":
         if not P:
             return "no active project"
@@ -294,22 +317,31 @@ def build_job(step: str, arg: str | None):
         jobs = []
         for sid in pending:
             jobs += solve_jobs(sid)
+        jobs += mount_jobs(P)
+        return jobs, MAS, False
+    if step == "solve_scene":
+        if not P:
+            return "no active project"
+        scene = arg or ""
+        if not re.match(r"^scene_\d+$", scene):
+            return f"bad scene {scene!r}"
+        pending = []
+        for sid, ass in sorted(assignments(P).items()):
+            if ass.get("mode") != "solve" or f"_{scene}_" not in sid + "_":
+                continue
+            use = sid + "_stab" if (BENCH / "optimized" / (sid + "_stab")
+                                    ).is_dir() else sid
+            if not list((BENCH / "optimized" / use).glob("summary_*.json")):
+                pending.append(sid)
+        if not pending:
+            return f"nothing in {scene} is marked 'to solve' and unsolved"
+        jobs = []
+        for sid in pending:
+            jobs += solve_jobs(sid)
+        jobs += mount_jobs(P)
         return jobs, MAS, False
     if step == "reassemble":
-        jobs = [[PY_EVAL, "08_reassemble.py", "--all"],
-                [PY_EVAL, "08_reassemble.py"] + sum(
-                    [["--sequence", d.name] for d in
-                     sorted((BENCH / "sequences").glob("*_stab"))
-                     if (BENCH / "optimized" / d.name).is_dir()], [])]
-        # library-assigned elements are cast from the library, replacing any
-        # solved reassembly: the assignment is the decision
-        if P:
-            for sid, ass in sorted(assignments(P).items()):
-                if ass.get("mode") == "library" and ass.get("library_id"):
-                    jobs.append([PY_EVAL, str(ROOT / "08_place_library.py"),
-                                 "--sequence", sid,
-                                 "--library-id", ass["library_id"]])
-        return jobs, ROOT, False
+        return mount_jobs(P), ROOT, False
     if step == "score":
         return [[PY_GPU, "09_clip_score.py"]], ROOT, False
     if step == "compose":
@@ -591,22 +623,20 @@ class Handler(SimpleHTTPRequestHandler):
             if not P:
                 return self._json(200, {"masks": []})
             wd, pbase = pdir(P), f"projects/{P}"
+            ov = wd / "letters_sam2_small" / "overlay" / f"{fid}.jpg"
             def entry(p: Path, base: str):
                 lab = p.stem[len(fid) + 1:]
                 if lab.endswith("_mask"):
                     lab = lab[:-5]
                 return {"label": lab, "file": f"{base}/{p.name}"}
-            # cleaned masks win over the raw segmentation for the same label
             seg = {e["label"]: e for p in sorted(
                        (wd / "letters_sam2_small" / "by_frame" / fid)
                        .glob(f"{fid}_*_mask.png"))
                    for e in [entry(p, f"{pbase}/letters_sam2_small/by_frame/{fid}")]}
-            for p in sorted((wd / "letters_clean")
-                            .glob(f"{fid}_*_mask.png")):
-                e = entry(p, f"{pbase}/letters_clean")
-                e["clean"] = True
-                seg[e["label"]] = e
-            return self._json(200, {"masks": list(seg.values())})
+            return self._json(200, {
+                "masks": list(seg.values()),
+                "overlay": f"{pbase}/letters_sam2_small/overlay/{fid}.jpg"
+                           if ov.exists() else None})
         if self.path == "/api/gallery":
             P = active_project()
             if not P:
@@ -706,6 +736,34 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
+        if self.path == "/api/dropframe":
+            try:
+                body = json.loads(self.rfile.read(
+                    int(self.headers.get("Content-Length", 0))))
+            except (ValueError, json.JSONDecodeError):
+                return self._json(400, {"error": "bad body"})
+            P = active_project()
+            fid = str(body.get("fid", ""))
+            if not P or not NAME_RE.match(fid):
+                return self._json(400, {"error": "bad fid"})
+            import shutil as _sh
+            wd = pdir(P)
+            removed = []
+            for f in wd.glob(f"scenes/scene_*/{fid}.png"):
+                f.unlink()
+                removed.append(str(f.name))
+            _sh.rmtree(wd / "letters_sam2_small" / "by_frame" / fid,
+                       ignore_errors=True)
+            ovf = wd / "letters_sam2_small" / "overlay" / f"{fid}.jpg"
+            ovf.unlink(missing_ok=True)
+            with KP_LOCK:
+                d = kp_load()
+                d["frames"].pop(fid, None)
+                kp_save(d)
+            MASKTHUMB.pop(f"{P}/{fid}", None)
+            return self._json(200, {"ok": True, "removed": removed,
+                                    "note": "re-run 3 to rebuild sequences "
+                                            "without this frame"})
         if self.path == "/api/assign":
             try:
                 body = json.loads(self.rfile.read(
