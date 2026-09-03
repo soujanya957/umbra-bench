@@ -75,8 +75,8 @@
   </section>
   <section>
     <h2>sequences — solve per element</h2>
-    <table id="seqs"><tr><th>sequence</th><th>lane</th><th>solved</th>
-      <th>reassembled</th><th></th></tr></table>
+    <table id="seqs"><tr><th>sequence</th><th>project</th><th>lane</th>
+      <th>solved</th><th>reassembled</th><th></th></tr></table>
     <div style="display:flex;gap:8px;margin-top:10px">
       <button onclick="run('route')">route</button>
       <button onclick="run('reassemble')">reassemble all</button>
@@ -150,10 +150,11 @@ async function refresh(){
     + `<div class="step"><b>1 · scenes</b>
        <span class="st ${w.scenes ? "ok" : ""}">${w.scenes} frames</span>
        <span class="st">run from the video row above</span></div>`;
-  $("#seqs").innerHTML = "<tr><th>sequence</th><th>lane</th><th>solved</th>"
-    + "<th>reassembled</th><th></th></tr>"
+  $("#seqs").innerHTML = "<tr><th>sequence</th><th>project</th><th>lane</th>"
+    + "<th>solved</th><th>reassembled</th><th></th></tr>"
     + S.sequences.map(q => `<tr>
         <td class="mono">${q.id}</td>
+        <td class="mono" style="color:${q.project === S.project ? "var(--acc)" : "var(--ink2)"}">${q.project}</td>
         <td class="lane-${q.lane || "dynamic"}">${q.lane || "?"}</td>
         <td><span class="dot ${q.solved ? "on" : ""}"></span></td>
         <td><span class="dot ${q.reassembled ? "on" : ""}"></span></td>

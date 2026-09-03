@@ -251,19 +251,22 @@ def state() -> dict:
                         .read_text(encoding="utf-8")).get("frames", {})
     except (OSError, json.JSONDecodeError):
         pass
+    # Every film-cut sequence, tagged by its own project -- the active
+    # project's prefix and a video's numbered trims (pixar vs pixar_01)
+    # need not agree, and a filter that assumes they do shows an empty table.
     seqs = []
     rt = routing()
-    if P:
-        for d in sorted((BENCH / "sequences").glob(f"{P}_*")):
-            sid = d.name
-            run = BENCH / "optimized" / sid
-            seqs.append({
-                "id": sid,
-                "lane": rt.get(sid, {}).get("lane"),
-                "solved": bool(list(run.glob("summary_*.json"))),
-                "reassembled": (ROOT / "out" / "reassembled" / sid /
-                                "reassembly.json").exists(),
-            })
+    for d in sorted((BENCH / "sequences").glob("*_scene_*")):
+        sid = d.name
+        run = BENCH / "optimized" / sid
+        seqs.append({
+            "id": sid,
+            "project": sid.split("_scene_")[0],
+            "lane": rt.get(sid, {}).get("lane"),
+            "solved": bool(list(run.glob("summary_*.json"))),
+            "reassembled": (ROOT / "out" / "reassembled" / sid /
+                            "reassembly.json").exists(),
+        })
     return {
         "project": P,
         "videos": sorted(str(p.relative_to(ROOT)).replace(os.sep, "/")
