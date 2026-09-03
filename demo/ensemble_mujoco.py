@@ -29,7 +29,7 @@ from pathlib import Path
 
 import numpy as np
 
-LIGHT = {"cutoff": 26, "exponent": 2, "diffuse": 0.8, "fill": 0.08}
+LIGHT = {"cutoff": 40, "exponent": 10, "diffuse": 0.9, "fill": 0.08}
 
 BENCH = Path(__file__).resolve().parent.parent
 FSA = BENCH.parent / "fleet-shadow-art"
@@ -122,6 +122,12 @@ def build(man):
         aim /= np.linalg.norm(aim)
         lt = grp.add_light(pos=[0, ly, lz], dir=[float(v) for v in aim])
         lt.castshadow = True
+        # RENDERER QUIRK (mujoco 3.11, measured): a spot whose cone is
+        # narrower than ~35 deg goes DARK when placed off the scene centre
+        # -- a lone light at x=4.25 with cutoff 26 lights nothing, cutoff
+        # 35+ works, and aiming the same 26-deg cone AT the centre revives
+        # it. So the cone stays wide for the renderer and the EXPONENT
+        # focuses the beam so pools still read as per-element.
         lt.cutoff = LIGHT["cutoff"]
         lt.exponent = LIGHT["exponent"]
         lt.ambient = [0, 0, 0]
