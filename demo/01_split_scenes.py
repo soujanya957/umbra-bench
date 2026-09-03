@@ -65,6 +65,7 @@ def ffmpeg_works() -> bool:
 
 
 USE_CV2 = False
+FRAME_OFF = 0
 
 
 def need(tool: str) -> None:
@@ -160,7 +161,7 @@ def extract_scene_cv(video: str, out: Path, seg, fmt: str, sample: int) -> int:
         if not ok:
             break
         if idx in keep:
-            cv2.imwrite(str(out / f"f{idx+1:04d}.{fmt}"), f)
+            cv2.imwrite(str(out / f"f{idx+1+FRAME_OFF:04d}.{fmt}"), f)
         idx += 1
     cap.release()
     return len(list(out.glob(f"f*.{fmt}")))
@@ -274,7 +275,7 @@ def extract_scene(video: str, out: Path, seg, fmt: str, sample: int) -> int:
         print(f"  [!] ffmpeg produced {len(produced)} frame(s), "
               f"expected {len(want)} — ids may be off")
     for src, idx in zip(produced, want):
-        src.rename(out / f"f{idx+1:04d}.{fmt}")
+        src.rename(out / f"f{idx+1+FRAME_OFF:04d}.{fmt}")
     shutil.rmtree(raw, ignore_errors=True)
     return len(list(out.glob(f"f*.{fmt}")))
 
@@ -405,13 +406,18 @@ def main() -> None:
                     help="number the first scene this (a numbered trim of a "
                          "project continues its predecessor's scene numbers, "
                          "so pixar_02's scenes never collide with pixar_01's)")
+    ap.add_argument("--frame-start", type=int, default=0,
+                    help="offset added to every global frame id (a later trim "
+                         "of the same project continues its predecessor's ids, "
+                         "so keypoints.json entries never collide)")
     ap.add_argument("--scenes", nargs="*", type=int, default=None,
                     metavar="N",
                     help="only process these scene numbers, e.g. --scenes 1 2. "
                          "Useful to spread a big job over several runs.")
     args = ap.parse_args()
 
-    global USE_CV2
+    global USE_CV2, FRAME_OFF
+    FRAME_OFF = args.frame_start
     USE_CV2 = not ffmpeg_works()
     if USE_CV2:
         print("backend: OpenCV (no runnable ffmpeg found -- a which() hit "

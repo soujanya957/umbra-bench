@@ -85,6 +85,31 @@ def set_active(project: str, video: str) -> None:
                        encoding="utf-8")
 
 
+def switch_workspace(old_proj: str | None, new_proj: str) -> str | None:
+    """The footage workspace holds ONE project. Trims of the same project
+    share it (scenes and frame ids continue); a different project archives
+    the old labels by PROJECT name, clears the transient dirs, and restores
+    the new project's archived labels if it has been here before."""
+    import shutil
+    if old_proj == new_proj:
+        return None
+    msg = []
+    kp = ROOT / "keypoints.json"
+    if old_proj and kp.exists():
+        dst = ROOT / "out" / f"keypoints_{old_proj}.json"
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(kp, dst)
+        msg.append(f"labels of {old_proj} archived")
+    for d in ("scenes", "letters_sam2_small", "letters_clean", "review"):
+        shutil.rmtree(ROOT / d, ignore_errors=True)
+    kp.unlink(missing_ok=True)
+    back = ROOT / "out" / f"keypoints_{new_proj}.json"
+    if back.exists():
+        shutil.copyfile(back, kp)
+        msg.append(f"labels of {new_proj} restored")
+    return "; ".join(msg) or f"workspace cleared for {new_proj}"
+
+
 def env_for(py: str) -> dict:
     """Activation-equivalent environment for a conda env, from its python.exe.
 
@@ -153,34 +178,42 @@ def build_job(step: str, arg: str | None):
         # ffprobe leave the workspace holding project A while the state said
         # B, and stage 5 then minted B-named sequences from A's masks
         JOB["pending_active"] = (proj, arg)
-        # a numbered trim continues its project's scene numbering
+        prev_proj = None
+        try:
+            pv = json.loads(STATE_F.read_text(encoding="utf-8")).get("video")
+            prev_proj = project_of(Path(pv).stem) if pv else None
+        except (OSError, json.JSONDecodeError):
+            pass
+        note = switch_workspace(prev_proj, proj)
+        if note:
+            print(f"[studio] {note}")
+        # a numbered trim continues its project's scene AND frame numbering
         taken = []
         for d in (BENCH / "sequences").glob(proj + "_scene_*"):
             m = re.search(r"_scene_(" + chr(92) + "d+)_", d.name + "_")
             if m:
                 taken.append(int(m.group(1)))
+        for d in (ROOT / "scenes").glob("scene_*"):
+            m = re.match(r"scene_(" + chr(92) + "d+)$", d.name)
+            if m:
+                taken.append(int(m.group(1)))
         start = max(taken, default=0) + 1
-        # switching footage: archive the labels (hand labour) and clear the
-        # single-project workspace so stale masks cannot leak into the next
-        # project's sequences
-        prev = None
-        try:
-            prev = json.loads(STATE_F.read_text(encoding="utf-8")).get("video")
-        except (OSError, json.JSONDecodeError):
-            pass
-        pre = []
-        if prev and prev != arg and (ROOT / "keypoints.json").exists():
-            stamp = sanitize(Path(prev).stem)
-            pre.append([PY_EVAL, "-c",
-                        "import shutil, pathlib; "
-                        "shutil.copyfile('keypoints.json', "
-                        "'out/keypoints_" + stamp + ".json'); "
-                        "[shutil.rmtree(d, ignore_errors=True) for d in "
-                        "('scenes', 'letters_sam2_small', 'letters_clean')]; "
-                        "pathlib.Path('keypoints.json').unlink(); "
-                        "print('workspace cleared; labels archived')"])
-        return (pre + [[PY_EVAL, "01_split_scenes.py", str(v),
-                        "--sample", "5", "--scene-start", str(start)]],
+        if start > 1 and prev_proj != proj:
+            # scene numbers continue because the project already has scenes
+            # in the track. Right for NEW footage of the same project; if
+            # this VIDEO is footage the project already processed, stop --
+            # re-splitting it just duplicates every scene under new numbers.
+            print(f"[studio] CAUTION: {proj} already has scenes up to "
+                  f"{start - 1} in the track; only proceed if this video is "
+                  "new footage for it")
+        fmax = 0
+        for f in (ROOT / "scenes").glob("scene_*/f*.png"):
+            m = re.match(r"f(" + chr(92) + "d+)$", f.stem)
+            if m:
+                fmax = max(fmax, int(m.group(1)))
+        return ([[PY_EVAL, "01_split_scenes.py", str(v),
+                  "--sample", "5", "--scene-start", str(start),
+                  "--frame-start", str(fmax)]],
                 ROOT, False)
     if step == "label":
         return [[PY_EVAL, "03_label_keypoints.py"]], ROOT, True
