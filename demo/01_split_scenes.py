@@ -51,6 +51,15 @@ from pathlib import Path
 def run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, **kw)
 
+import os as _os
+if _os.name == "nt":
+    # the lerobot env's ffprobe.exe is broken (ENTRYPOINT_NOT_FOUND in
+    # gdk_pixbuf); probing it must FAIL QUIETLY so the OpenCV fallback kicks
+    # in -- without this Windows pops a modal "Entry Point Not Found" dialog
+    # over the user's desktop on every probe. Children inherit the mode.
+    import ctypes
+    ctypes.windll.kernel32.SetErrorMode(0x0001 | 0x0002 | 0x8000)
+
 
 def ffmpeg_works() -> bool:
     """A which() hit is not enough: a conda ffmpeg with mismatched DLLs dies

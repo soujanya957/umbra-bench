@@ -56,6 +56,15 @@ SAM_SMALL = ("C:/Users/hexia/Documents/GitHub/animal_inspired_BC/thirdparty/"
 LOG_DIR = ROOT / "out" / "studio_logs"
 STATE_F = ROOT / "out" / "studio_state.json"
 NAME_RE = re.compile(r"^[A-Za-z0-9_\-]+$")
+import os as _os
+if _os.name == "nt":
+    # the lerobot env's ffprobe.exe is broken (ENTRYPOINT_NOT_FOUND in
+    # gdk_pixbuf); probing it must FAIL QUIETLY so the OpenCV fallback kicks
+    # in -- without this Windows pops a modal "Entry Point Not Found" dialog
+    # over the user's desktop on every probe. Children inherit the mode.
+    import ctypes
+    ctypes.windll.kernel32.SetErrorMode(0x0001 | 0x0002 | 0x8000)
+
 
 JOB = {"running": False, "step": None, "log": None, "rc": None, "t0": None}
 LOCK = threading.Lock()
