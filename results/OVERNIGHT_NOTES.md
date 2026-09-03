@@ -563,3 +563,18 @@ a native window on the machine (a matplotlib tool cannot live in a web
 page, but the server can launch it). While building this the user was
 already using the folder: pixar.mp4 arrived and was white-frame-trimmed
 into pixar_01..04 with 00_trim's naming -- the flow is being used.
+
+## Studio runs GPU steps as if conda-activated; legibility regenerated
+
+env_for() builds the activation-equivalent PATH (Library/bin, Scripts,
+CONDA_PREFIX) per interpreter -- the user's exact words: "you need to
+activate fh_l1". Verified: torch cuda True + cv2 + open_clip resolve
+under the constructed env. ffmpeg fact-check: the BINARY is in the
+lerobot env; fh_l1 carries only the ffmpeg-python wrapper (my earlier
+BOTH-OK misread corrected) -- FFMPEG_DIR points at lerobot and both
+envs resolve ffmpeg/ffprobe through it. First real studio job: score
+(09 on fh_l1 GPU) regenerated clip_legibility -- 340/340 rows, 71 value
+changes confined to the F/M clips whose solves the scale sweep replaced
+after the original scoring; L/Y unchanged because 09 scores the
+non-stab reassembled dirs. The regenerated numbers are the current
+truth; payload and atlas rebuilt on them.

@@ -17,8 +17,9 @@ need:
                          user's standing instruction is to prioritise it)
     fleet  fleet-shadow  run_sequence solves (mujoco)
 
-ffmpeg comes from fh_l1's Library/bin (per the user), prepended to the
-subprocess PATH — the system PATH has none.
+ffmpeg's binary comes from the lerobot env's Library/bin, prepended to every
+subprocess PATH (fh_l1 has the ffmpeg-python wrapper, which resolves the
+binary through that same PATH).
 
 One job at a time; the page tails the log live. The footage workspace
 (scenes/, keypoints.json, letters_*) holds ONE project at a time — the page
@@ -44,7 +45,9 @@ HOME = Path.home()
 PY_EVAL = str(HOME / "miniconda3/envs/umbra-bench/python.exe")
 PY_GPU = str(HOME / "miniconda3/envs/fh_l1/python.exe")
 PY_FLEET = str(HOME / "miniconda3/envs/fleet-shadow/python.exe")
-FFMPEG_DIR = str(HOME / "miniconda3/envs/fh_l1/Library/bin")
+# The ffmpeg BINARY lives in the lerobot env; fh_l1 carries only the
+# ffmpeg-python wrapper, which finds the binary through PATH.
+FFMPEG_DIR = str(HOME / "miniconda3/envs/lerobot/Library/bin")
 MAS = str(BENCH.parent / "fleet-shadow-art" / "motion-aware-shadow")
 SAM_SMALL = ("C:/Users/hexia/Documents/GitHub/animal_inspired_BC/thirdparty/"
              "sam2/checkpoints/sam2.1_hiera_small.pt",
@@ -75,9 +78,21 @@ def set_active(project: str, video: str) -> None:
                        encoding="utf-8")
 
 
-def env_with_ffmpeg() -> dict:
-    e = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
-    e["PATH"] = FFMPEG_DIR + os.pathsep + e.get("PATH", "")
+def env_for(py: str) -> dict:
+    """Activation-equivalent environment for a conda env, from its python.exe.
+
+    On Windows a bare interpreter path is not enough: torch/cv2/ffmpeg resolve
+    DLLs through the directories `conda activate` prepends. Build that PATH
+    set explicitly so every subprocess behaves as if the env were activated
+    -- the user's instruction, verbatim: "you need to activate fh_l1".
+    """
+    root = Path(py).parent
+    pre = [root, root / "Library" / "mingw-w64" / "bin",
+           root / "Library" / "usr" / "bin", root / "Library" / "bin",
+           root / "Scripts", root / "bin", Path(FFMPEG_DIR)]
+    e = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1",
+             CONDA_PREFIX=str(root), CONDA_DEFAULT_ENV=root.name)
+    e["PATH"] = os.pathsep.join(str(x) for x in pre) + os.pathsep + e.get("PATH", "")
     return e
 
 
@@ -215,7 +230,7 @@ def run_jobs(step: str, jobs, cwd, log_path: Path):
                 j = night_solve_cmd(seq_frames(j[1]), j[1])
             log.write(f"\n$ {' '.join(map(str, j))}\n")
             log.flush()
-            r = subprocess.run(j, cwd=cwd, env=env_with_ffmpeg(),
+            r = subprocess.run(j, cwd=cwd, env=env_for(str(j[0])),
                                stdout=log, stderr=subprocess.STDOUT,
                                text=True, encoding="utf-8", errors="replace")
             rc = r.returncode
@@ -374,7 +389,7 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(400, {"error": built})
         jobs, cwd, detach = built
         if detach:
-            subprocess.Popen(jobs[0], cwd=cwd, env=env_with_ffmpeg(),
+            subprocess.Popen(jobs[0], cwd=cwd, env=env_for(str(jobs[0][0])),
                              creationflags=subprocess.CREATE_NEW_CONSOLE
                              if os.name == "nt" else 0)
             return self._json(200, {"ok": True,
