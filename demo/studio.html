@@ -80,9 +80,9 @@
     <h2>video → project</h2>
     <div style="display:flex;gap:8px">
       <select id="video"></select>
-      <button onclick="run('trim', vid())">trim on white frames</button>
+      <button onclick="run('trim', vid())">0 · trim on white frames</button>
       <button onclick="run('scenes', vid())"
-        title="switches the workspace to this video's project: current labels are archived, a returning project's labels are restored, trims (_01/_02) continue their project">start / switch project</button>
+        title="switches the workspace to this video's project: current labels are archived, a returning project's labels are restored, trims (_01/_02) continue their project">1 · scenes (start/switch project)</button>
     </div>
     <div class="st" style="margin-top:6px;color:var(--ink2)">
       the filename stem names the project (trim numbers _01/_02 fold into it).
@@ -91,12 +91,11 @@
       into <span class="mono">demo/</span> and refresh
     </div>
   </section>
+
   <section>
-    <h2>footage workspace <span id="wsproj"></span></h2>
-    <div class="steps" id="steps"></div>
-  </section>
-  <section>
-    <h2>label — click on the frame (left = include, right = exclude)</h2>
+    <h2>2 · label — click the frame (left = include, right = exclude)
+      <span id="wlab" class="mono" style="font-weight:400"></span>
+      <button style="float:right" onclick="run('label')">native window</button></h2>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
       <button onclick="lgo(-1)">&larr;</button>
       <span id="lpos" class="mono">–</span>
@@ -124,34 +123,41 @@
     </div>
   </section>
   <section>
-    <h2>masks — contact sheet, one tile per frame
-      <button style="float:right" onclick="grefresh()">refresh</button></h2>
+    <h2>3 · segment → masks (contact sheet, one tile per frame)
+      <span id="wmasks" class="mono" style="font-weight:400"></span>
+      <button style="float:right" onclick="grefresh()">refresh</button>
+      <button style="float:right;margin-right:6px;border-color:var(--acc)"
+              onclick="run('segment')">run segment (GPU)</button></h2>
     <div id="gal" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;max-height:300px;overflow-y:auto"></div>
     <div class="st" style="color:var(--ink2);margin-top:4px">
       click a mask to jump the labeller to that frame and fix it
       (add points there, re-run segment).</div>
   </section>
   <section>
-    <h2>sequences — solve per element
+    <h2>4 · sequences → assign each element
       <label style="float:right;font-weight:400;text-transform:none">
-        <input type="checkbox" id="seqall" onchange="refresh()"> all projects</label></h2>
+        <input type="checkbox" id="seqall" onchange="refresh()"> all projects</label>
+      <button style="float:right;margin-right:10px;border-color:var(--acc)"
+              onclick="run('sequences')">build + index</button></h2>
     <div id="seldisp" class="mono" style="color:var(--warn);margin-bottom:6px">
       no library shape selected — click one below, then hit a row's <b>lib</b></div>
     <table id="seqs"><tr><th>sequence</th><th>project</th><th>lane</th>
       <th>assignment</th><th>reassembled</th><th></th></tr></table>
     <div id="seqhint" class="st" style="color:var(--ink2);margin-top:6px"></div>
     <div style="display:flex;gap:8px;margin-top:10px">
-      <button onclick="run('route')">route</button>
-      <button onclick="run('reassemble')">reassemble all</button>
-      <button onclick="run('score')">score (CLIP)</button>
-      <button onclick="run('compose')">compose video</button>
-      <button onclick="run('pack')">pack show</button>
-      <button onclick="run('atlas')">rebuild atlas</button>
+      <button onclick="run('route')">5 · route lanes</button>
+      <button onclick="run('solve_all')" style="border-color:var(--acc)">6 · solve all "to solve"</button>
+      <button onclick="run('reassemble')">7 · reassemble all</button>
     </div>
     <div id="outs" class="mono" style="margin-top:8px;color:var(--ink2)"></div>
   </section>
   <section>
-    <h2>output — the show so far</h2>
+    <h2>output — the show so far
+      <button style="float:right" onclick="run('atlas')">rebuild atlas</button>
+      <button style="float:right;margin-right:6px" onclick="run('score')">score (CLIP)</button>
+      <button style="float:right;margin-right:6px" onclick="run('pack')">9 · pack show</button>
+      <button style="float:right;margin-right:6px;border-color:var(--acc)"
+              onclick="run('compose')">8 · compose video</button></h2>
     <div id="ovids" class="mono" style="color:var(--ink2);margin-bottom:8px"></div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
       <select id="oseq" style="width:auto"></select>
@@ -235,30 +241,18 @@ function toast(t){
   setTimeout(() => el.style.display = "none", 2600);
 }
 
-function stepCard(name, label, status, ok, btnArg){
-  return `<div class="step"><b>${label}</b>
-    <span class="st ${ok ? "ok" : ""}">${status}</span>
-    <button onclick="run('${name}'${btnArg ? ",vid()" : ""})">run</button></div>`;
-}
+
 
 async function refresh(){
   S = await fetch("/api/state").then(r => r.json());
   $("#proj").textContent = S.project || "—";
-  $("#wsproj").textContent = S.project ? `(holds: ${S.project})` : "";
   const vs = $("#video");
   if(vs.options.length !== S.videos.length){
     vs.innerHTML = S.videos.map(v => `<option>${v}</option>`).join("");
   }
   const w = S.workspace;
-  $("#steps").innerHTML =
-    stepCard("label", "2 · label", `${w.labelled} frames labelled`, w.labelled > 0)
-    + stepCard("segment", "3 · segment (video, GPU)",
-               `${w.masks} masks`, w.masks > 0)
-    + stepCard("sequences", "4 · sequences", S.sequences.length + " clips", S.sequences.length > 0)
-    + stepCard("index", "5 · index track", "sequences.jsonl", true)
-    + `<div class="step"><b>1 · scenes</b>
-       <span class="st ${w.scenes ? "ok" : ""}">${w.scenes} frames</span>
-       <span class="st">run from the video row above</span></div>`;
+  if($("#wlab")) $("#wlab").textContent = ` — ${w.labelled} frames labelled`;
+  if($("#wmasks")) $("#wmasks").textContent = ` — ${w.masks} masks`;
   const showAll = $("#seqall") && $("#seqall").checked;
   const rows = S.sequences.filter(q => showAll || q.project === S.project);
   $("#seqs").innerHTML = "<tr><th>sequence</th><th>project</th><th>lane</th>"

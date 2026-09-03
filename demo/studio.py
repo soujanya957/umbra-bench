@@ -168,6 +168,27 @@ def routing() -> dict:
         return {}
 
 
+def solve_jobs(sid: str) -> list:
+    """The lane-aware solve chain for one element (same as the solve button)."""
+    lane = routing().get(sid, {}).get("lane", "dynamic")
+    jobs = []
+    if lane == "translation" and not sid.endswith("_stab"):
+        jobs.append([PY_EVAL, str(BENCH / "scripts" / "stabilize_sequence.py"),
+                     "--ids", sid])
+        solve_id = sid + "_stab"
+        jobs.append(("SOLVE_LATER", solve_id))
+    else:
+        solve_id = sid
+        fr = seq_frames(sid)
+        if lane == "static":
+            fr = fr[:1]
+        jobs.append(night_solve_cmd(fr, solve_id))
+    jobs.append([PY_EVAL, str(BENCH / "scripts" / "sequence_metrics.py"),
+                 "--run", str(BENCH / "optimized" / solve_id),
+                 "--sequence", solve_id])
+    return jobs
+
+
 def build_job(step: str, arg: str | None):
     """-> (argv|list-of-argv, cwd, detach) or an error string."""
     P = active_project()
@@ -241,9 +262,12 @@ def build_job(step: str, arg: str | None):
     if step == "sequences":
         if not P:
             return "no active project — run 'scenes' with a video first"
+        # one batch step: group into sequences, then index the track
         return ([[PY_EVAL, str(ROOT / "07_make_sequences.py"),
                   "--in", "letters_sam2_small", "--keypoints", "keypoints.json",
-                  "--prefix", f"{P}_"]], pdir(P), False)
+                  "--prefix", f"{P}_"],
+                 [PY_EVAL, str(BENCH / "scripts" / "build_sequence_metadata.py")]],
+                pdir(P), False)
     if step == "index":
         return ([[PY_EVAL, str(BENCH / "scripts" /
                                "build_sequence_metadata.py")]], BENCH, False)
@@ -253,23 +277,23 @@ def build_job(step: str, arg: str | None):
         sid = arg or ""
         if not NAME_RE.match(sid) or not (BENCH / "sequences" / sid).is_dir():
             return f"unknown sequence {sid!r}"
-        lane = routing().get(sid, {}).get("lane", "dynamic")
+        return solve_jobs(sid), MAS, False
+    if step == "solve_all":
+        if not P:
+            return "no active project"
+        pending = []
+        for sid, ass in sorted(assignments(P).items()):
+            if ass.get("mode") != "solve":
+                continue
+            use = sid + "_stab" if (BENCH / "optimized" / (sid + "_stab")
+                                    ).is_dir() else sid
+            if not list((BENCH / "optimized" / use).glob("summary_*.json")):
+                pending.append(sid)
+        if not pending:
+            return "nothing marked 'to solve' is still unsolved"
         jobs = []
-        if lane == "translation" and not sid.endswith("_stab"):
-            jobs.append([PY_EVAL, str(BENCH / "scripts" /
-                                      "stabilize_sequence.py"), "--ids", sid])
-            solve_id = sid + "_stab"
-            # frames won't exist until the stabilizer ran; resolved at runtime
-            jobs.append(("SOLVE_LATER", solve_id))
-        else:
-            solve_id = sid
-            fr = seq_frames(sid)
-            if lane == "static":
-                fr = fr[:1]
-            jobs.append(night_solve_cmd(fr, solve_id))
-        jobs.append([PY_EVAL, str(BENCH / "scripts" / "sequence_metrics.py"),
-                     "--run", str(BENCH / "optimized" / solve_id),
-                     "--sequence", solve_id])
+        for sid in pending:
+            jobs += solve_jobs(sid)
         return jobs, MAS, False
     if step == "reassemble":
         jobs = [[PY_EVAL, "08_reassemble.py", "--all"],
