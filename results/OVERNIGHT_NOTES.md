@@ -740,3 +740,16 @@ silhouettes (library letters 0.67-0.90, solved elements 0.36-0.83) and
 finally needs the user's eye on a real projection; and
 family_ad_scene_06 L_stab is the one rushed element (0.63 s solo, 24%),
 fixable only by lengthening that clip, left as the user's call.
+
+## The tc_iou audit vindicates the lamp adoption -- on the right metric
+
+umbra-bench-16 challenged "quality doubled" as possibly a vs-fitted
+artifact (the exact trap this repo's own memory rule warns about, and
+the ladder adoption HAD leaned on plain avg_iou). Audit from the two
+scored runs: tc_iou 0.2913 -> 0.6009 (shape-normalized, fit-blind) and
+tc_aspect_error 0.4247 -> 0.1129 -- the shape genuinely doubled and the
+OLD solve was the distorted one. Mechanism: below the arm-thickness
+floor a small fitted target is undrawable; scale made it drawable.
+Their correction 1 (a pose change tripled one clip's interpolated step
+to within 6% of the deploy comfort line) is institutionalized: pack now
+prints each clip's max step and flags anything past 0.2 rad.

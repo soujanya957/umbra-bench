@@ -204,6 +204,13 @@ def write_choreo(dest: Path, name: str, hz: float, qs: list[np.ndarray]):
             "frames": [[round(float(v), 6) for v in
                         np.asarray(q).ravel()[i * 6:(i + 1) * 6]] for q in qs],
         })
+    # step check on every pack: a pose change preserves structure but not
+    # step sizes (a re-solve tripled one clip's max step) -- surface it here
+    # so nothing crosses the 0.21 rad/frame deploy comfort line unseen
+    if len(qs) > 1:
+        step = float(np.abs(np.diff(np.stack(qs), axis=0)).max())
+        flag = "  [!] near/over 0.21 rad" if step > 0.2 else ""
+        print(f"    {name}: max step {step:.4f} rad{flag}")
     clip = {"name": name, "stage": None,
             "source": {"method": "umbra-bench demo/pack.py"},
             "hz": int(round(hz)), "n_frames": len(qs), "kind": "clip",
