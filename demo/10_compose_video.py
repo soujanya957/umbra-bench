@@ -45,7 +45,9 @@ def load_scene(re_root: Path):
     """Group reassembled sequences by scene, keyed on source frame id."""
     scenes = defaultdict(lambda: {"frames": defaultdict(list), "fps": None,
                                   "letters": set(), "canvas": None})
-    for d in sorted(re_root.glob("demo_01_*")):
+    for d in sorted(re_root.iterdir() if re_root.is_dir() else []):
+        if not d.is_dir() or "_scene_" not in d.name:
+            continue
         rj = d / "reassembly.json"
         sj = ROOT / "sequences" / d.name / "source.json"
         if not rj.exists() or not sj.exists():
@@ -63,7 +65,8 @@ def load_scene(re_root: Path):
         if len(pngs) != len(ids):
             print(f"  {d.name}: {len(pngs)} frames but {len(ids)} ids, skipped")
             continue
-        sc = scenes[s["scene"]]
+        project = s.get("project") or d.name.split("_scene_")[0]
+        sc = scenes[f"{project}_{s['scene']}"]
         sc["fps"] = r.get("fps") or s.get("fps") or 5.0
         sc["letters"].add(s["letter"])
         sc["canvas"] = (s["canvas"]["w"], s["canvas"]["h"])
@@ -117,7 +120,7 @@ def main() -> None:
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
 
-    film, made = [], 0
+    film, made = {}, 0
     for sc in names:
         d = scenes.get(sc)
         if not d or not d["frames"]:
@@ -133,14 +136,16 @@ def main() -> None:
               f"{ids[0]}..{ids[-1]}  {fps:g}fps  -> {p.name}"
               + ("" if ok else "   WRITE FAILED"))
         made += ok
-        film.extend(frames)
+        # scene keys are <project>_<scene>; the whole cut is per project
+        film.setdefault(sc.rsplit("_scene_", 1)[0], []).extend(frames)
 
     if film and not a.no_film:
         fps = a.fps or 5.0
-        p = out / "demo_01.mp4"
-        ok = write_mp4(film, p, fps)
-        print(f"\n  whole cut: {len(film)} frames at {fps:g}fps -> {p}"
-              + ("" if ok else "   WRITE FAILED"))
+        for proj, fr in film.items():
+            p = out / f"{proj}.mp4"
+            ok = write_mp4(fr, p, fps)
+            print(f"  whole cut [{proj}]: {len(fr)} frames at {fps:g}fps -> "
+                  f"{p.name}" + ("" if ok else "   WRITE FAILED"))
 
     print(f"\n{made}/{len(names)} scenes written to {out}")
     print("dark = cast shadow, on the source 1920x1080 canvas.")

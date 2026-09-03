@@ -208,6 +208,7 @@ def main() -> None:
                 "loop": False, "n_frames": len(frame_ids), "size": a.size,
                 "fps": fps, "source_fps": a.src_fps, "sample_every": a.sample,
                 "scene": kp[frame_ids[0]]["scene"],
+                "project": prefix.rstrip("_"),
                 "letter": name.split("_")[-1],
                 "frame_ids": frame_ids,
                 "crop": {"x": sx, "y": sy, "w": cw, "h": ch, "pad_side": side},

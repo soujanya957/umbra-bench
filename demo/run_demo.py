@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -81,7 +82,11 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--video", default=None, help="source mp4; omit to reuse scenes/")
-    ap.add_argument("--demo-id", default="01", help="names become demo_<id>_<scene>_<letter>")
+    ap.add_argument("--demo-id", default=None,
+                    help="legacy numbering; names become demo_<id>_<scene>_<letter>")
+    ap.add_argument("--project", default=None,
+                    help="project name; default: the video's filename stem, so "
+                         "every video names its own project")
     ap.add_argument("--sample", type=int, default=5, help="keep every Nth frame")
     ap.add_argument("--sam-model", choices=("small", "large"), default="small")
     ap.add_argument("--device", default="cpu")
@@ -91,6 +96,16 @@ def main() -> None:
     ap.add_argument("--force", action="store_true", help="re-run stages that have output")
     a = ap.parse_args()
     py = a.python
+
+    if a.project:
+        project = re.sub(r"[^A-Za-z0-9_\-]", "", a.project)
+    elif a.demo_id:
+        project = f"demo_{a.demo_id}"
+    elif a.video:
+        project = re.sub(r"[^A-Za-z0-9_\-]", "", Path(a.video).stem)
+    else:
+        project = "demo_01"
+    print(f"project: {project}  (sequences become {project}_<scene>_<letter>)")
 
     kp = ROOT / "keypoints.json"
 
@@ -136,13 +151,13 @@ def main() -> None:
     # 5 — sequences
     if a.from_stage <= 5:
         run([py, "07_make_sequences.py", "--in", clean.name,
-             "--demo-id", a.demo_id], "5  sequences")
+             "--prefix", f"{project}_"], "5  sequences")
 
     # 6 — index
     if a.from_stage <= 6:
         run([a.python, str(BENCH / "scripts" / "build_sequence_metadata.py")], "6  index")
 
-    seqs = sorted(p.name for p in (BENCH / "sequences").glob(f"demo_{a.demo_id}_*"))
+    seqs = sorted(p.name for p in (BENCH / "sequences").glob(f"{project}_*"))
     print(f"\ndone — {len(seqs)} sequences in the track")
     for s in seqs:
         print(f"  {s}  ({count('f*.png', BENCH / 'sequences' / s)} frames)")

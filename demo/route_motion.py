@@ -98,8 +98,14 @@ def main():
                 r = json.loads(line)
                 lib.setdefault(str(r.get("class", "")).lower(), []).append(
                     (str(r.get("class", "")), r["id"]))
+    def is_film_cut(rid):
+        sj = BENCH / "sequences" / rid / "source.json"
+        try:
+            return "scene" in json.loads(sj.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
     recs = [r for r in recs if not r["id"].endswith("_stab")
-            and (a.all or r["id"].startswith("demo_"))]
+            and (a.all or is_film_cut(r["id"]))]
 
     routing, counts = {}, {"static": 0, "translation": 0, "dynamic": 0}
     print(f"{'sequence':<24}{'lane':<13}{'step IoU':>9}{'stab gain':>10}   next")

@@ -30,12 +30,14 @@ python demo/00_trim.py edited.mp4                         # 0  (optional) white
                                                           #    frames you inserted
                                                           #    become cut points;
                                                           #    one mp4 per segment
-python demo/run_demo.py --video <clip.mp4> --demo-id 03   # 1  scenes + frames
+python demo/run_demo.py --video <clip.mp4>                # 1  scenes + frames --
+                                                          #    the filename stem
+                                                          #    names the project
 python demo/03_label_keypoints.py                         # 2  label: / = full name
                                                           #    from the library,
                                                           #    . = reuse an element
 python demo/04_sam_segment.py                             # 3  masks (GPU box)
-python demo/run_demo.py --video <clip.mp4> --demo-id 03   # 4  resumes: clean, crop,
+python demo/run_demo.py --video <clip.mp4>                # 4  resumes: clean, crop,
                                                           #    index the track
 python demo/route_motion.py                               # 5  static / translation /
                                                           #    dynamic per element
