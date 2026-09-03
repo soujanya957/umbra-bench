@@ -208,6 +208,36 @@ def main():
                                for cx in cxs],
                 "light": {"ddepth": -round(A_RIG, 3), "h": 0.30},
             })
+        # spot-light physics: a cone wide enough to cover an arm paints a
+        # ~1.8 m pool on the wall, so adjacent rigs closer than that dilute
+        # each other's shadow to grey. Stretch the whole lateral layout
+        # (sizes/depths untouched) until neighbouring trios sit at least
+        # MIN_GAP apart -- the stage is allowed to be wide.
+        MIN_GAP = 1.7      # a spot pool wide enough to cover an arm spans
+        STACKED = 0.25     # ~1.8 m of wall; closer rigs grey each other out.
+        # Pairwise relaxation, order preserved: walk the trios left to right
+        # and push each at least MIN_GAP from its neighbour -- except pairs
+        # the footage intentionally stacks (the lamp lands ON the I), which
+        # keep sharing a pool. Applied as a rigid per-group offset so travel
+        # paths shift with their group.
+        order = sorted(range(len(entries)),
+                       key=lambda ii: entries[ii]["lat_path_m"][0])
+        shift = {order[0]: 0.0} if order else {}
+        for prev, cur in zip(order, order[1:]):
+            p0 = entries[prev]["lat_path_m"][0] + shift[prev]
+            c0 = entries[cur]["lat_path_m"][0]
+            gap = c0 - (entries[prev]["lat_path_m"][0])
+            if gap < STACKED:
+                shift[cur] = shift[prev]          # intentional stack rides along
+            else:
+                shift[cur] = max(0.0, (p0 + MIN_GAP) - c0)
+        mid = float(np.mean([entries[ii]["lat_path_m"][0] + shift[ii]
+                             for ii in order])) if order else 0.0
+        for ii, e in enumerate(entries):
+            d = shift.get(ii, 0.0) - mid + float(np.mean(
+                [entries[k]["lat_path_m"][0] for k in order])) if order else 0.0
+            e["lat_path_m"] = [round(v + shift.get(ii, 0.0) - mid, 4)
+                               for v in e["lat_path_m"]]
         name = f"{a.project}_{scene}"
         n_film = max(e["entry"] + e["n_frames"] for e in entries)
         doc = {

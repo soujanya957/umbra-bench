@@ -29,6 +29,8 @@ from pathlib import Path
 
 import numpy as np
 
+LIGHT = {"cutoff": 26, "exponent": 2, "diffuse": 0.8, "fill": 0.08}
+
 BENCH = Path(__file__).resolve().parent.parent
 FSA = BENCH.parent / "fleet-shadow-art"
 SO101_XML = (FSA / "Shadow_robot_ui" / "assets" / "SO101_urdf"
@@ -38,7 +40,10 @@ JOINT_NAMES = ["shoulder_pan", "shoulder_lift", "elbow_flex",
 SCREEN_Z = 2.4          # manifest coords: light -1.0 ... arms ... wall 2.4
 WALL_H = 2.8
 TABLE_H = 0.55          # arms stand on the lab table, wall runs below it
-STRIP_DZ = (0.10, 0.30, 0.50)   # the vertical strip: three stacked spots
+# One shadow light per group. A "strip" of stacked spots reads wrong in
+# MuJoCo: each spot maps its own hard shadow (triple ghosting) and fills
+# the other two's umbra to 1/3 depth -- grey mush. Softness comes from the
+# spot exponent instead.
 
 
 def load(name: str):
@@ -59,14 +64,17 @@ def build(man):
     spec.visual.quality.shadowsize = 8192
     # dim, even fill: the strip lights carry the picture, the headlight
     # must not wash the wall or the shadows vanish
-    spec.visual.headlight.ambient = [0.12, 0.12, 0.12]
-    spec.visual.headlight.diffuse = [0.10, 0.10, 0.10]
+    f = LIGHT["fill"]
+    spec.visual.headlight.ambient = [f, f, f]
+    spec.visual.headlight.diffuse = [f * 0.8, f * 0.8, f * 0.8]
     spec.visual.map.znear = 0.01
     spec.visual.global_.offwidth = 1280
     spec.visual.global_.offheight = 720
     spec.worldbody.add_geom(type=mujoco.mjtGeom.mjGEOM_PLANE,
                             size=[14, 14, 0.1], rgba=[0.55, 0.56, 0.58, 1])
-    w = max(float(man.get("screen_w_m", 2.21)), 2.6) / 2 + 0.6
+    all_lats = [abs(x) for e in man["entries"] for x in e["lat_path_m"]]
+    w = max(float(man.get("screen_w_m", 2.21)) / 2,
+            max(all_lats) + 1.5, 1.3) + 0.6
     spec.worldbody.add_geom(type=mujoco.mjtGeom.mjGEOM_BOX,
                             pos=[0, -0.03, WALL_H / 2],
                             size=[w, 0.03, WALL_H / 2],
@@ -105,14 +113,20 @@ def build(man):
                         prefix=pfx, frame=frame)
             arms.append(pfx)
         ly = -e.get("light", {}).get("ddepth", -1.2)
-        for dz in STRIP_DZ:                 # the vertical strip
-            aim = np.array([0.0, -(y_mid + ly), WALL_H * 0.4 - (TABLE_H + dz)])
-            aim /= np.linalg.norm(aim)
-            lt = grp.add_light(pos=[0, ly, dz], dir=[float(v) for v in aim])
-            lt.castshadow = True
-            lt.cutoff = 38                  # tight cone: pools stay separate
-            lt.ambient = [0, 0, 0]
-            lt.diffuse = [0.38, 0.38, 0.36]
+        lz = e.get("light", {}).get("h", 0.30)
+        # aim where the shadow actually lands: arm centre (~0.25 above base)
+        # magnified from the light -- not some fixed fraction of the wall
+        mag = float(e.get("mag", 2.0))
+        hit = (TABLE_H + lz) + mag * ((TABLE_H + 0.25) - (TABLE_H + lz))
+        aim = np.array([0.0, -(y_mid + ly), hit - (TABLE_H + lz)])
+        aim /= np.linalg.norm(aim)
+        lt = grp.add_light(pos=[0, ly, lz], dir=[float(v) for v in aim])
+        lt.castshadow = True
+        lt.cutoff = LIGHT["cutoff"]
+        lt.exponent = LIGHT["exponent"]
+        lt.ambient = [0, 0, 0]
+        d = LIGHT["diffuse"]
+        lt.diffuse = [d, d, d * 0.96]
         rigs.append((arms, f"grp{i}_slide", lat0))
     model = spec.compile()
     return model, rigs
@@ -156,8 +170,13 @@ def main():
                     help="az,el,dist,lx,ly,lz override")
     ap.add_argument("--regen", default=None,
                     help="project:scene -- refresh the manifest first")
+    ap.add_argument("--light", default=None,
+                    help="cutoff,exponent,diffuse,fill override")
     a = ap.parse_args()
 
+    if a.light:
+        v = [float(x) for x in a.light.split(",")]
+        LIGHT.update(cutoff=v[0], exponent=v[1], diffuse=v[2], fill=v[3])
     if a.regen:
         import subprocess
         import sys as _sys
