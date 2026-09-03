@@ -174,7 +174,16 @@ def write_choreo(dest: Path, name: str, hz: float, qs: list[np.ndarray]):
     """
     src_hz = hz
     qs = interp_frames(qs, src_hz)
-    hz = CHOREO_HZ if len(qs) > 1 else hz
+    hz = CHOREO_HZ
+    # 1 s of held pose at BOTH ends: the arrangement crossfades consecutive
+    # elements by overlapping exactly this window, so every seam is a pure
+    # static-to-static morph (~0.15 rad/frame) instead of a hard snap --
+    # the compiler blends overlapping spans per joint, which is correct
+    # behavior when the overlap is deliberate (umbra-bench-16's measurement:
+    # un-held seams commanded up to 263 deg in one 33 ms frame).
+    hold = [np.asarray(qs[0], dtype=float)] * CHOREO_HZ
+    tail = [np.asarray(qs[-1], dtype=float)] * CHOREO_HZ
+    qs = hold + [np.asarray(q, dtype=float) for q in qs] + tail
     n_arms = np.asarray(qs[0]).size // 6
     robots = []
     for i in range(n_arms):
@@ -287,32 +296,63 @@ def main():
     # these into fleet-shadow-art/arrangements/ next to the choreo files --
     # Play's Arrange loader compiles them into a single timeline.
     by_scene = {}
+
+    def slot(sid, seg_name, entry, dur):
+        m = re.search(r"_(scene_\d+)", sid)
+        if m:
+            by_scene.setdefault(m.group(1), []).append((seg_name, entry, dur))
+
     for sid in a.clip:
         mj = pkg / "elements" / sid / "meta.json"
         if not mj.exists():
             continue
         meta = json.loads(mj.read_text(encoding="utf-8"))
         ids = meta.get("source_frame_ids") or []
-        m = re.search(r"_(scene_\d+)", sid)
-        if not (ids and m):
-            continue
-        by_scene.setdefault(m.group(1), []).append(
-            (sid, int(str(ids[0]).lstrip("f"))))
+        if ids:
+            slot(sid, sid, int(str(ids[0]).lstrip("f")),
+                 meta.get("n_frames", 1) / float(meta.get("fps") or 5.0))
+    # library/sequence-assigned elements enter the scene timeline too: the
+    # seg references the stand-in clip by name; a single-pose library clip
+    # is short, and the hold gap keeps its pose up for the rest of the slot
+    ass_file = BENCH / "demo" / "projects" / a.name / "assignments.json"
+    if ass_file.exists():
+        for sid, ass in sorted(json.loads(
+                ass_file.read_text(encoding="utf-8")).items()):
+            sj = BENCH / "sequences" / sid / "source.json"
+            if not sj.exists():
+                continue
+            src = json.loads(sj.read_text(encoding="utf-8"))
+            ids = src.get("frame_ids") or []
+            if not ids:
+                continue
+            dur = len(sorted((BENCH / "sequences" / sid).glob("f*.png")))                 / float(src.get("fps") or 5.0)
+            stand_in = (ass.get("library_id") if ass.get("mode") == "library"
+                        else ass.get("donor") if ass.get("mode") == "sequence"
+                        else None)
+            if not stand_in:
+                continue
+            if not (pkg / "choreo" / f"{stand_in}.json").exists():
+                print(f"  [!] arrangement skips {sid}: stand-in {stand_in} "
+                      "has no choreo in this package")
+                continue
+            slot(sid, stand_in, int(str(ids[0]).lstrip("f")), dur)
     # Offsets are CUMULATIVE durations in footage order, never raw entry
     # times: all clips drive the same three arms, and the UI's overlap
     # semantics is a per-joint linear BLEND (a crossfade feature), so
     # co-present entry times would command meaningless in-between poses.
     # Three arms play one element at a time; a 0.5 s gap between elements
     # holds the last pose, which the compiler treats as a safe hold.
-    HOLD_GAP = 0.5
+    XFADE = 1.0          # matches the held second at each clip end
     for scene, entries in sorted(by_scene.items()):
         segs, t = [], 0.0
-        for sid, f in sorted(entries, key=lambda x: x[1]):
-            mj = json.loads((pkg / "elements" / sid / "meta.json")
-                            .read_text(encoding="utf-8"))
-            dur = mj.get("n_frames", 1) / float(mj.get("fps") or 5.0)
-            segs.append({"name": sid, "offset": round(t, 3)})
-            t += dur + HOLD_GAP
+        for seg_name, entry, dur in sorted(entries, key=lambda x: x[1]):
+            cj = pkg / "choreo" / f"{seg_name}.json"
+            c = json.loads(cj.read_text(encoding="utf-8"))
+            # the CLIP's real span, not the element's footage duration --
+            # slots sized from footage left pixar scenes 60-84% dead air
+            clip_dur = c["n_frames"] / float(c["hz"])
+            segs.append({"name": seg_name, "offset": round(t, 3)})
+            t += clip_dur - XFADE
         arr = {"name": f"{a.name}_{scene}", "segs": segs, "musicOffset": 0.0}
         d = pkg / "choreo" / "arrangements"
         d.mkdir(parents=True, exist_ok=True)
