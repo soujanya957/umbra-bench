@@ -298,13 +298,22 @@ def main():
             continue
         by_scene.setdefault(m.group(1), []).append(
             (sid, int(str(ids[0]).lstrip("f"))))
-    import re as _re
+    # Offsets are CUMULATIVE durations in footage order, never raw entry
+    # times: all clips drive the same three arms, and the UI's overlap
+    # semantics is a per-joint linear BLEND (a crossfade feature), so
+    # co-present entry times would command meaningless in-between poses.
+    # Three arms play one element at a time; a 0.5 s gap between elements
+    # holds the last pose, which the compiler treats as a safe hold.
+    HOLD_GAP = 0.5
     for scene, entries in sorted(by_scene.items()):
-        first = min(f for _, f in entries)
-        arr = {"name": f"{a.name}_{scene}",
-               "segs": [{"name": sid, "offset": round((f - first) / 25.0, 3)}
-                        for sid, f in sorted(entries, key=lambda t: t[1])],
-               "musicOffset": 0.0}
+        segs, t = [], 0.0
+        for sid, f in sorted(entries, key=lambda x: x[1]):
+            mj = json.loads((pkg / "elements" / sid / "meta.json")
+                            .read_text(encoding="utf-8"))
+            dur = mj.get("n_frames", 1) / float(mj.get("fps") or 5.0)
+            segs.append({"name": sid, "offset": round(t, 3)})
+            t += dur + HOLD_GAP
+        arr = {"name": f"{a.name}_{scene}", "segs": segs, "musicOffset": 0.0}
         d = pkg / "choreo" / "arrangements"
         d.mkdir(parents=True, exist_ok=True)
         (d / f"{a.name}_{scene}.json").write_text(json.dumps(arr, indent=1),
