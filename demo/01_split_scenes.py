@@ -402,6 +402,10 @@ def main() -> None:
                     help="split a scene's sheet past this many tiles")
     ap.add_argument("--no-extract", action="store_true",
                     help="reuse already-extracted scene folders, just resheet")
+    ap.add_argument("--workdir", default=None,
+                    help="project folder to write scenes/review/manifest into "
+                         "(default: this script's own directory, the legacy "
+                         "single-workspace layout)")
     ap.add_argument("--scene-start", type=int, default=1,
                     help="number the first scene this (a numbered trim of a "
                          "project continues its predecessor's scene numbers, "
@@ -423,7 +427,7 @@ def main() -> None:
         print("backend: OpenCV (no runnable ffmpeg found -- a which() hit "
               "with broken DLLs also lands here)")
     here = Path(__file__).resolve().parent
-    os.chdir(here)
+    os.chdir(Path(args.workdir).resolve() if args.workdir else here)
 
     video = args.video
     if not video:

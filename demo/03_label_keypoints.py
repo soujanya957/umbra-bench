@@ -359,6 +359,8 @@ def main() -> None:
         description="Click SAM point prompts onto the frames.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__)
+    ap.add_argument("--workdir", default=None,
+                    help="project folder holding scenes/ and keypoints.json")
     ap.add_argument("--frames-root", default="scenes")
     ap.add_argument("--scenes", nargs="*",
                     help="limit to these scene folder names")
@@ -370,7 +372,8 @@ def main() -> None:
                     help="print progress and exit, no window")
     args = ap.parse_args()
 
-    os.chdir(Path(__file__).resolve().parent)
+    os.chdir(Path(args.workdir).resolve() if args.workdir
+             else Path(__file__).resolve().parent)
     frames = find_frames(Path(args.frames_root), args.scenes)
     if not frames:
         sys.exit(f"no frames under {args.frames_root}/")

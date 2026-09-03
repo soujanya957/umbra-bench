@@ -48,7 +48,7 @@ SAM2_CFG = "configs/sam2.1/sam2.1_hiera_s.yaml"
 
 def scene_frames(kp: dict, scene: str) -> list[tuple[str, Path]]:
     """(fid, path) for every frame of the scene ON DISK, sorted by id."""
-    d = ROOT / "scenes" / scene
+    d = Path("scenes") / scene
     out = []
     for p in sorted(d.glob("f*.png")):
         out.append((p.stem, p))
@@ -85,6 +85,8 @@ def run_sam2(device: str):
 def main():
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--workdir", default=None,
+                    help="project folder holding scenes/ and keypoints.json")
     ap.add_argument("--keypoints", default="keypoints.json")
     ap.add_argument("--out", default="letters_sam2_small")
     ap.add_argument("--backend", choices=["sam2", "sam3"], default="sam2")
@@ -96,7 +98,7 @@ def main():
     a = ap.parse_args()
 
     import os
-    os.chdir(ROOT)
+    os.chdir(Path(a.workdir).resolve() if a.workdir else ROOT)
     kp = json.loads(Path(a.keypoints).read_text(encoding="utf-8"))
     scenes = sorted({r["scene"] for r in kp.get("frames", {}).values()
                      if r.get("objects")})

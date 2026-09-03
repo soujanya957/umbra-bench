@@ -1,0 +1,39 @@
+
+$ C:\Users\hexia\miniconda3\envs\fh_l1\python.exe 09_clip_score.py
+  family_ad_scene_06_L_stab: 'stab' is not a scoring class, skipped
+  family_ad_scene_06_Y_stab: 'stab' is not a scoring class, skipped
+314 frames over 15 clips, 49-way retrieval (chance top-1 0.0204)
+
+clip                      as    top1    mrr   rank | ceiling top1    mrr |  ratio1  ratioM
+------------------------------------------------------------------------------------------------
+family_ad_scene_01_I       1   0.000  0.028   36.1 |        0.000  0.024 |    --     1.191
+family_ad_scene_02_F       F   0.190  0.309    7.2 |        0.095  0.485 |   2.000   0.638
+family_ad_scene_03_F       F   0.000  0.063   19.2 |        0.000  0.170 |    --     0.374
+family_ad_scene_03_I       1   0.000  0.024   41.1 |        0.000  0.024 |    --     1.032
+family_ad_scene_04_M       M   0.214  0.354    9.4 |        1.000  1.000 |   0.214   0.354
+family_ad_scene_05_I       1   0.000  0.024   41.0 |        0.000  0.024 |    --     1.024
+family_ad_scene_05_M       M   0.000  0.219    5.6 |        1.000  1.000 |   0.000   0.219
+family_ad_scene_06_A       A   0.600  0.800    1.4 |        0.600  0.800 |   1.000   1.000
+family_ad_scene_06_F       F   0.000  0.163    7.1 |        1.000  1.000 |   0.000   0.163
+family_ad_scene_06_I       1   0.000  0.025   40.1 |        0.000  0.024 |    --     1.047
+family_ad_scene_06_L       L   0.000  0.396    2.8 |        1.000  1.000 |   0.000   0.396
+family_ad_scene_06_M       M   0.200  0.366    6.3 |        1.000  1.000 |   0.200   0.366
+family_ad_scene_06_Y       Y   1.000  1.000    1.0 |        0.667  0.833 |   1.500   1.200
+------------------------------------------------------------------------------------------------
+all frames                     0.115  0.222   18.4 |        0.389  0.490 |   0.295   0.454
+
+chance top-1 0.0204 over 49 classes. 'ceiling' is the authored
+frame through the identical path: CLIP is half-blind to 1-bit
+silhouettes, so the ratio is the quotable number, not the raw score.
+
+5 clip(s) have a zero ceiling and so no top-1 ratio: family_ad_scene_01_I, family_ad_scene_03_F, family_ad_scene_03_I, family_ad_scene_05_I, family_ad_scene_06_I.
+The cause is the class design, not the solve. tests/clip_eval.py folds
+I/l/1 into one class because they are the same picture, and glyph_prompt
+then asks for 'the digit 1'. A serif capital I from a title card is not a
+digit 1 to CLIP, so the authored frame misses too and the ratio has no
+denominator. Their MRR ratios near 1.0 say shadow and target are equally
+unreadable here, not that the shadow is good.
+
+wrote C:\Users\hexia\Documents\GitHub\umbra-bench\demo\out\clip_legibility.csv  (340 rows: per frame, plus one aggregate per clip and condition with frame_idx blank)
+
+[done]

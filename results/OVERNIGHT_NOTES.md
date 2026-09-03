@@ -629,3 +629,37 @@ SOLVED SHADOW (what the rig can cast -- the user's point) with target
 fallback for unsolved rows, and a library click sets the label (class)
 AND copies the id (reuse). --backend sam3 exits with a clear
 not-yet-approved message until the download is okayed.
+
+## The studio becomes per-project, and the board becomes assignments
+
+Folder structure settled (user's design): raw videos stay flat in demo/,
+everything derived lives in demo/projects/<name>/ -- scenes, keypoints,
+masks, videos.json (which video produced which scene/frame numbers, so a
+RE-split of the same video replaces its own scenes with identical
+numbering and labels keyed on frame ids survive; a new trim continues).
+Migration preserved every click: pixar's workspace moved whole, the
+scene_05-08 duplicates (a re-split that predated replace semantics) were
+byte-verified identical and their 4 labelled frames remapped by the
+frame-id offset back onto scenes 01-04; family_ad's 92 labelled frames
+restored from the archive into its own folder. The remaining 6
+empty-object frames in pixar are the user's own undos, verified live.
+
+Board redesign to the user's model: "clean" is gone as a concept
+(segment chains 06 automatically); a mask GALLERY shows everything step
+3 produced (clean beats raw, click jumps the labeller there); the
+sequences table is now an ASSIGNMENT board -- per element choose solve
+(launches the lane-aware solve) or lib (a library id, prompted with the
+last-clicked shape), the hint counts unresolved elements, and
+reassemble casts library-assigned elements via the new
+08_place_library.py: the library render scaled into the authored
+per-frame bbox, so placement and motion stay authored while the shape
+comes from the library, output indistinguishable to 10_compose. Pack
+picks up library assignments as --library, so the package's choreo/
+stays the deployable end product; the output panel says so and plays
+any sequence as video. Label chips carry per-label frame counts --
+click, never retype, no case/typo phantoms.
+
+Lesson repeated thrice tonight, now protocol: a multi-rep patch script
+that fails one assert loses ALL its reps (write happens at the end) --
+after any FAIL, re-verify which pieces actually landed before building
+on them. The assignments NameError was exactly that.

@@ -46,6 +46,9 @@
   .cell.unsolved img{opacity:.45}
   #log{background:#0a0c0f;border-radius:6px;padding:10px;height:230px;
        overflow-y:auto;white-space:pre-wrap;font-size:11.5px;color:#b7c0cc}
+  #lchips .lc{padding:2px 10px;border-radius:10px;border:1px solid var(--line);
+              cursor:pointer;font-size:12px;background:#20242d}
+  #lchips .lc.on{border-color:var(--acc);color:var(--acc)}
   #lstrip{display:flex;flex-wrap:wrap;gap:2px;margin:6px 0}
   #lstrip .fq{width:12px;height:12px;border-radius:2px;background:#3a4150;
               cursor:pointer;border:1px solid transparent}
@@ -98,6 +101,7 @@
       <button id="lmasks" onclick="ltoggleMasks()">masks: on</button>
       <span id="lsum" class="mono" style="color:var(--ink2)"></span>
     </div>
+    <div id="lchips" style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0"></div>
     <div id="lstrip"></div>
     <canvas id="lcanvas" style="width:100%;border:1px solid var(--line);
             border-radius:6px;cursor:crosshair"></canvas>
@@ -111,9 +115,20 @@
     </div>
   </section>
   <section>
-    <h2>sequences — solve per element</h2>
+    <h2>masks — everything step 3 produced
+      <button style="float:right" onclick="grefresh()">refresh</button></h2>
+    <div id="gal" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;max-height:300px;overflow-y:auto"></div>
+    <div class="st" style="color:var(--ink2);margin-top:4px">
+      cleaned masks where 06 ran, raw where it hasn't. click one to jump the
+      labeller to that frame and fix it.</div>
+  </section>
+  <section>
+    <h2>sequences — solve per element
+      <label style="float:right;font-weight:400;text-transform:none">
+        <input type="checkbox" id="seqall" onchange="refresh()"> all projects</label></h2>
     <table id="seqs"><tr><th>sequence</th><th>project</th><th>lane</th>
-      <th>solved</th><th>reassembled</th><th></th></tr></table>
+      <th>assignment</th><th>reassembled</th><th></th></tr></table>
+    <div id="seqhint" class="st" style="color:var(--ink2);margin-top:6px"></div>
     <div style="display:flex;gap:8px;margin-top:10px">
       <button onclick="run('route')">route</button>
       <button onclick="run('reassemble')">reassemble all</button>
@@ -166,6 +181,34 @@ let LIB = [], S = null;
 
 const vid = () => $("#video").value;
 
+let LASTLIB = null;
+async function assign(seq, mode){
+  let body = {seq, mode};
+  if(mode === "library"){
+    const id = prompt("library id for " + seq +
+                      (LASTLIB ? " (empty = " + LASTLIB + ")" : ""), LASTLIB || "");
+    if(id === null) return;
+    body.library_id = id || LASTLIB;
+    if(!body.library_id){ toast("click a library shape first"); return; }
+  }
+  if(mode === "solve"){
+    const r = await fetch("/api/assign", {method: "POST",
+      headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    if(!r.ok){ toast((await r.json()).error); return; }
+    run("solve", seq);           // assigning solve also launches it
+    return;
+  }
+  const r = await fetch("/api/assign", {method: "POST",
+    headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  if(!r.ok) toast((await r.json()).error); else refresh();
+}
+function oshow(seq){
+  const sel = $("#oseq");
+  if([...sel.options].some(o => o.value === seq)){
+    sel.value = seq; oplay();
+    $("#ocanvas").scrollIntoView({block: "center"});
+  } else toast("not reassembled yet — assign + solve, then reassemble");
+}
 async function run(step, arg){
   const r = await fetch("/api/run", {method:"POST",
     headers:{"Content-Type":"application/json"},
@@ -198,23 +241,38 @@ async function refresh(){
   const w = S.workspace;
   $("#steps").innerHTML =
     stepCard("label", "2 · label", `${w.labelled} frames labelled`, w.labelled > 0)
-    + stepCard("segment", "3 · segment (video, GPU)", `${w.masks} masks`, w.masks > 0)
-    + stepCard("clean", "4 · clean", `${w.clean} cleaned`, w.clean > 0)
-    + stepCard("sequences", "5 · sequences", S.sequences.length + " clips", S.sequences.length > 0)
-    + stepCard("index", "6 · index track", "sequences.jsonl", true)
+    + stepCard("segment", "3 · segment + clean (GPU)",
+               `${w.masks} masks, ${w.clean} cleaned`, w.clean > 0)
+    + stepCard("sequences", "4 · sequences", S.sequences.length + " clips", S.sequences.length > 0)
+    + stepCard("index", "5 · index track", "sequences.jsonl", true)
     + `<div class="step"><b>1 · scenes</b>
        <span class="st ${w.scenes ? "ok" : ""}">${w.scenes} frames</span>
        <span class="st">run from the video row above</span></div>`;
+  const showAll = $("#seqall") && $("#seqall").checked;
+  const rows = S.sequences.filter(q => showAll || q.project === S.project);
   $("#seqs").innerHTML = "<tr><th>sequence</th><th>project</th><th>lane</th>"
-    + "<th>solved</th><th>reassembled</th><th></th></tr>"
-    + S.sequences.map(q => `<tr>
+    + "<th>assignment</th><th>reassembled</th><th></th></tr>"
+    + rows.map(q => `<tr>
         <td class="mono">${q.id}</td>
         <td class="mono" style="color:${q.project === S.project ? "var(--acc)" : "var(--ink2)"}">${q.project}</td>
         <td class="lane-${q.lane || "dynamic"}">${q.lane || "?"}</td>
-        <td><span class="dot ${q.solved ? "on" : ""}"></span></td>
+        <td class="mono" style="color:${q.resolved ? "var(--ok)" : "var(--warn)"}">${
+          q.assign === "library" ? "lib: " + (q.library_id || "?")
+          : q.assign === "solve" ? (q.solved ? "solved" : "to solve")
+          : "—"}</td>
         <td><span class="dot ${q.reassembled ? "on" : ""}"></span></td>
-        <td><button onclick="run('solve','${q.id}')"
-             ${q.solved ? "" : ""}>solve</button></td></tr>`).join("");
+        <td style="white-space:nowrap">
+          <button onclick="assign('${q.id}','solve')">solve</button>
+          <button onclick="assign('${q.id}','library')">lib</button>
+          <button onclick="assign('${q.id}',null)" title="clear">✕</button>
+          <button onclick="oshow('${q.id}')" title="play this sequence">▶</button>
+        </td></tr>`).join("");
+  const un = rows.filter(q => !q.resolved).length;
+  $("#seqhint").textContent = rows.length
+    ? (un ? `${un} element(s) still unassigned/unsolved — assign every one, `
+            + "then reassemble → compose mounts them back into the video"
+       : "all elements resolved — reassemble, then compose")
+    : "";
   $("#outs").textContent = (S.outputs.video.length
       ? "video: " + S.outputs.video.join("  ") : "no video yet")
     + (S.outputs.package ? "   package: demo/packages/" + S.project : "");
@@ -268,19 +326,41 @@ function renderLib(){
   document.querySelectorAll(".cell").forEach(c =>
     c.addEventListener("click", () => {
       navigator.clipboard.writeText(c.dataset.id);
+      LASTLIB = c.dataset.id;
       const cls = c.querySelector(".nm").textContent;
       if($("#llabel")) $("#llabel").value = cls;
       toast("copied id: " + c.dataset.id + "   label set: " + cls);
     }));
 }
 
+/* ---- mask gallery --------------------------------------------------- */
+async function grefresh(){
+  const items = await fetch("/api/gallery").then(r => r.json());
+  $("#gal").innerHTML = items.map(m => `
+    <div class="cell" data-fid="${m.fid}" title="${m.fid} ${m.label} (${m.scene})">
+      <img loading="lazy" src="/${m.file}?t=${Date.now()}">
+      <div class="nm">${m.fid} · ${m.label}${m.clean ? "" : " (raw)"}</div>
+    </div>`).join("") || '<span style="color:var(--ink2)">no masks yet</span>';
+  $("#gal").querySelectorAll(".cell").forEach(c =>
+    c.addEventListener("click", () => {
+      const at = LF.findIndex(f => f.fid === c.dataset.fid);
+      if(at >= 0){ LI = at; lshow();
+        $("#lcanvas").scrollIntoView({block: "center"}); }
+    }));
+}
+grefresh();
+
 /* ---- output workspace ---------------------------------------------- */
 let OUT = null, OTIMER = null;
 async function orefresh(){
   OUT = await fetch("/api/output").then(r => r.json());
-  $("#ovids").textContent = OUT.videos.length
+  $("#ovids").innerHTML = (OUT.videos.length
     ? "video files: " + OUT.videos.map(v => `${v.name} (${v.mb}MB)`).join("  ")
-    : "no composed video yet — run compose";
+    : "no composed video yet — run compose")
+    + (OUT.choreo && OUT.choreo.length
+       ? `<br>robot deploy: demo/packages/${OUT.package}/choreo/ (${OUT.choreo.length}` +
+         ` clip envelopes) — copy into fleet-shadow-art/choreographies/, open Play`
+       : "<br>robot deploy: run pack — choreo/*.json is what the robot UI plays");
   const names = Object.keys(OUT.reassembled);
   $("#oseq").innerHTML = names.map(n => `<option>${n}</option>`).join("")
     || "<option>— nothing reassembled —</option>";
@@ -342,6 +422,21 @@ async function linit(){
 
 function lcur(){ return LF[LI]; }
 
+function lchips(){
+  // the PROJECT's own label vocabulary: click instead of retyping, so P vs p
+  // or a typo can never mint a phantom second object
+  const seen = {};
+  Object.values(KP.frames || {}).forEach(f =>
+    Object.keys(f.objects || {}).forEach(l => seen[l] = (seen[l] || 0) + 1));
+  const cur = $("#llabel").value;
+  $("#lchips").innerHTML = Object.keys(seen).sort().map(l =>
+    `<span class="lc ${l === cur ? "on" : ""}" data-l="${l}">${l}` +
+    `<span style="opacity:.55"> ×${seen[l]}</span></span>`).join("");
+  document.querySelectorAll("#lchips .lc").forEach(c =>
+    c.addEventListener("click", () => { $("#llabel").value = c.dataset.l;
+                                        lchips(); ldraw(); }));
+}
+
 function lstrip(){
   const el = $("#lstrip");
   let html = "", prev = null;
@@ -365,7 +460,7 @@ function lobjs(){
 function lshow(){
   const f = lcur();
   if(!f) return;
-  lstrip();
+  lstrip(); lchips();
   $("#lpos").textContent = `${LI + 1}/${LF.length}  ${f.fid} (${f.scene})`;
   limg.onload = ldraw;
   limg.src = "/" + f.file;
@@ -449,7 +544,7 @@ function laddPoint(ev, positive){
   const o = KP.frames[f.fid].objects[lab] =
     KP.frames[f.fid].objects[lab] || {points: [], labels: []};
   o.points.push([x, y]); o.labels.push(positive ? 1 : 0);
-  lcur().labelled = true; lstrip();
+  lcur().labelled = true; lstrip(); lchips();
   ldraw(); lsave();
 }
 

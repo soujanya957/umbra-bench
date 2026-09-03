@@ -1,0 +1,74 @@
+
+$ C:\Users\hexia\miniconda3\envs\fh_l1\python.exe 04_video_segment.py --device cuda --out letters_sam2_small
+scene_01: 17 frames, objects: A (seed f@0), I (seed f@0), R (seed f@0), X (seed f@0), p (seed f@0), lamp (seed f@4)
+frame loading (JPEG):   0%|          | 0/17 [00:00<?, ?it/s]frame loading (JPEG):  24%|██▎       | 4/17 [00:00<00:00, 37.00it/s]frame loading (JPEG):  47%|████▋     | 8/17 [00:00<00:00, 37.04it/s]frame loading (JPEG):  71%|███████   | 12/17 [00:00<00:00, 37.13it/s]frame loading (JPEG):  94%|█████████▍| 16/17 [00:00<00:00, 37.47it/s]frame loading (JPEG): 100%|██████████| 17/17 [00:00<00:00, 36.97it/s]
+C:\Users\hexia\miniconda3\envs\fh_l1\Lib\site-packages\sam2\sam2_video_predictor.py:786: UserWarning: cannot import name '_C' from 'sam2' (C:\Users\hexia\miniconda3\envs\fh_l1\Lib\site-packages\sam2\__init__.py)
+
+Skipping the post-processing step due to the error above. You can still use SAM 2 and it's OK to ignore the error above, although some post-processing functionality may be limited (which doesn't affect the results in most cases; see https://github.com/facebookresearch/sam2/blob/main/INSTALL.md).
+  pred_masks_gpu = fill_holes_in_mask_scores(
+propagate in video:   0%|          | 0/17 [00:00<?, ?it/s]propagate in video:   0%|          | 0/17 [00:00<?, ?it/s]
+Traceback (most recent call last):
+  File "C:\Users\hexia\Documents\GitHub\umbra-bench\demo\04_video_segment.py", line 170, in <module>
+    main()
+  File "C:\Users\hexia\Documents\GitHub\umbra-bench\demo\04_video_segment.py", line 140, in main
+    for fidx, oids, logits in pred.propagate_in_video(
+  File "C:\Users\hexia\miniconda3\envs\fh_l1\Lib\site-packages\torch\utils\_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+               ^^^^^^^^^^^^^^
+  File "C:\Users\hexia\miniconda3\envs\fh_l1\Lib\site-packages\sam2\sam2_video_predictor.py", line 603, in propagate_in_video
+    current_out, pred_masks = self._run_single_frame_inference(
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hexia\miniconda3\envs\fh_l1\Lib\site-packages\sam2\sam2_video_predictor.py", line 762, in _run_single_frame_inference
+    current_out = self.track_step(
+                  ^^^^^^^^^^^^^^^^
+  File "C:\Users\hexia\miniconda3\envs\fh_l1\Lib\site-packages\sam2\modeling\sam2_base.py", line 835, in track_step
+    current_out, sam_outputs, _, _ = self._track_step(
+                                     ^^^^^^^^^^^^^^^^^
+  File "C:\Users\hexia\miniconda3\envs\fh_l1\Lib\site-packages\sam2\modeling\sam2_base.py", line 761, in _track_step
+    pix_feat = self._prepare_memory_conditioned_features(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hexia\miniconda3\envs\fh_l1\Lib\site-packages\sam2\modeling\sam2_base.py", line 667, in _prepare_memory_conditioned_features
+    pix_feat_with_mem = self.memory_attention(
+                        ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hexia\miniconda3\envs\fh_l1\Lib\site-packages\torch\nn\modules\module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hexia\miniconda3\envs\fh_l1\Lib\site-packages\torch\nn\modules\module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hexia\miniconda3\envs\fh_l1\Lib\site-packages\sam2\modeling\memory_attention.py", line 155, in forward
+    output = layer(
+             ^^^^^^
+  File "C:\Users\hexia\miniconda3\envs\fh_l1\Lib\site-packages\torch\nn\modules\module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hexia\miniconda3\envs\fh_l1\Lib\site-packages\torch\nn\modules\module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hexia\miniconda3\envs\fh_l1\Lib\site-packages\sam2\modeling\memory_attention.py", line 94, in forward
+    tgt = self._forward_ca(tgt, memory, query_pos, pos, num_k_exclude_rope)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hexia\miniconda3\envs\fh_l1\Lib\site-packages\sam2\modeling\memory_attention.py", line 74, in _forward_ca
+    tgt2 = self.cross_attn_image(
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hexia\miniconda3\envs\fh_l1\Lib\site-packages\torch\nn\modules\module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hexia\miniconda3\envs\fh_l1\Lib\site-packages\torch\nn\modules\module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hexia\miniconda3\envs\fh_l1\Lib\site-packages\sam2\modeling\sam\transformer.py", line 281, in forward
+    v = self.v_proj(v)
+        ^^^^^^^^^^^^^^
+  File "C:\Users\hexia\miniconda3\envs\fh_l1\Lib\site-packages\torch\nn\modules\module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hexia\miniconda3\envs\fh_l1\Lib\site-packages\torch\nn\modules\module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hexia\miniconda3\envs\fh_l1\Lib\site-packages\torch\nn\modules\linear.py", line 134, in forward
+    return F.linear(input, self.weight, self.bias)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: mat1 and mat2 must have the same dtype, but got BFloat16 and Float
+
+[exit 1] chain stopped

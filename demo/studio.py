@@ -72,6 +72,40 @@ def project_of(stem: str) -> str:
     return re.sub(r"_" + chr(92) + "d+$", "", sanitize(stem))
 
 
+def pdir(project: str) -> Path:
+    """demo/projects/<name>/ — every project owns its whole workspace, so
+    nothing is ever overwritten by switching. Raw videos stay in demo/."""
+    d = ROOT / "projects" / project
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def video_registry(project: str) -> dict:
+    f = pdir(project) / "videos.json"
+    try:
+        return json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def save_registry(project: str, reg: dict) -> None:
+    (pdir(project) / "videos.json").write_text(json.dumps(reg, indent=1),
+                                               encoding="utf-8")
+
+
+def assignments(project: str) -> dict:
+    f = pdir(project) / "assignments.json"
+    try:
+        return json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def save_assignments(project: str, a: dict) -> None:
+    (pdir(project) / "assignments.json").write_text(
+        json.dumps(a, indent=1, sort_keys=True), encoding="utf-8")
+
+
 def active_project() -> str | None:
     try:
         return json.loads(STATE_F.read_text(encoding="utf-8"))["project"]
@@ -83,31 +117,6 @@ def set_active(project: str, video: str) -> None:
     STATE_F.parent.mkdir(parents=True, exist_ok=True)
     STATE_F.write_text(json.dumps({"project": project, "video": video}),
                        encoding="utf-8")
-
-
-def switch_workspace(old_proj: str | None, new_proj: str) -> str | None:
-    """The footage workspace holds ONE project. Trims of the same project
-    share it (scenes and frame ids continue); a different project archives
-    the old labels by PROJECT name, clears the transient dirs, and restores
-    the new project's archived labels if it has been here before."""
-    import shutil
-    if old_proj == new_proj:
-        return None
-    msg = []
-    kp = ROOT / "keypoints.json"
-    if old_proj and kp.exists():
-        dst = ROOT / "out" / f"keypoints_{old_proj}.json"
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(kp, dst)
-        msg.append(f"labels of {old_proj} archived")
-    for d in ("scenes", "letters_sam2_small", "letters_clean", "review"):
-        shutil.rmtree(ROOT / d, ignore_errors=True)
-    kp.unlink(missing_ok=True)
-    back = ROOT / "out" / f"keypoints_{new_proj}.json"
-    if back.exists():
-        shutil.copyfile(back, kp)
-        msg.append(f"labels of {new_proj} restored")
-    return "; ".join(msg) or f"workspace cleared for {new_proj}"
 
 
 def env_for(py: str) -> dict:
@@ -174,62 +183,70 @@ def build_job(step: str, arg: str | None):
         if not v.is_file():
             return "pick a video first"
         proj = project_of(v.stem)
-        # activate only when 01 SUCCEEDS -- activating first let a failed
-        # ffprobe leave the workspace holding project A while the state said
-        # B, and stage 5 then minted B-named sequences from A's masks
         JOB["pending_active"] = (proj, arg)
-        prev_proj = None
-        try:
-            pv = json.loads(STATE_F.read_text(encoding="utf-8")).get("video")
-            prev_proj = project_of(Path(pv).stem) if pv else None
-        except (OSError, json.JSONDecodeError):
-            pass
-        note = switch_workspace(prev_proj, proj)
-        if note:
-            print(f"[studio] {note}")
-        # a numbered trim continues its project's scene AND frame numbering
-        taken = []
-        for d in (BENCH / "sequences").glob(proj + "_scene_*"):
-            m = re.search(r"_scene_(" + chr(92) + "d+)_", d.name + "_")
-            if m:
-                taken.append(int(m.group(1)))
-        for d in (ROOT / "scenes").glob("scene_*"):
-            m = re.match(r"scene_(" + chr(92) + "d+)$", d.name)
-            if m:
-                taken.append(int(m.group(1)))
-        start = max(taken, default=0) + 1
-        if start > 1 and prev_proj != proj:
-            # scene numbers continue because the project already has scenes
-            # in the track. Right for NEW footage of the same project; if
-            # this VIDEO is footage the project already processed, stop --
-            # re-splitting it just duplicates every scene under new numbers.
-            print(f"[studio] CAUTION: {proj} already has scenes up to "
-                  f"{start - 1} in the track; only proceed if this video is "
-                  "new footage for it")
-        fmax = 0
-        for f in (ROOT / "scenes").glob("scene_*/f*.png"):
-            m = re.match(r"f(" + chr(92) + "d+)$", f.stem)
-            if m:
-                fmax = max(fmax, int(m.group(1)))
-        return ([[PY_EVAL, "01_split_scenes.py", str(v),
+        wd = pdir(proj)
+        reg = video_registry(proj)
+        vname = v.name
+        if vname in reg:
+            # RE-splitting a video this project already split: replace, not
+            # append -- delete its old scene dirs and reuse its numbering so
+            # frame ids reproduce and every label keyed on them survives.
+            import shutil as _sh
+            r = reg[vname]
+            for k in range(r["scene_start"], r["scene_start"] + r.get("n_scenes", 0)):
+                _sh.rmtree(wd / "scenes" / f"scene_{k:02d}", ignore_errors=True)
+            start, fstart = r["scene_start"], r["frame_start"]
+            print(f"[studio] re-split of {vname}: replacing scenes "
+                  f"{r['scene_start']:02d}.. with the same numbering")
+        else:
+            taken = [rr["scene_start"] + rr.get("n_scenes", 1) - 1
+                     for rr in reg.values()]
+            for d in (wd / "scenes").glob("scene_*"):
+                m = re.match(r"scene_(" + chr(92) + "d+)$", d.name)
+                if m:
+                    taken.append(int(m.group(1)))
+            start = max(taken, default=0) + 1
+            fstart = 0
+            for f in (wd / "scenes").glob("scene_*/f*.png"):
+                m = re.match(r"f(" + chr(92) + "d+)$", f.stem)
+                if m:
+                    fstart = max(fstart, int(m.group(1)))
+        JOB["pending_register"] = (proj, vname, start, fstart)
+        return ([[PY_EVAL, str(ROOT / "01_split_scenes.py"), str(v),
+                  "--workdir", str(wd),
                   "--sample", "5", "--scene-start", str(start),
-                  "--frame-start", str(fmax)]],
-                ROOT, False)
+                  "--frame-start", str(fstart)]],
+                wd, False)
     if step == "label":
-        return [[PY_EVAL, "03_label_keypoints.py"]], ROOT, True
+        if not P:
+            return "no active project"
+        return ([[PY_EVAL, str(ROOT / "03_label_keypoints.py"),
+                  "--workdir", str(pdir(P))]], pdir(P), True)
     if step == "segment":
-        # video propagation: one labelled frame per (scene, object) is
-        # enough; the per-frame segmenter stays available from the terminal
-        return ([[PY_GPU, "04_video_segment.py", "--device", "cuda",
-                  "--out", "letters_sam2_small"]], ROOT, False)
+        if not P:
+            return "no active project"
+        # one button, two stages: propagate, then despeckle/smooth -- "clean"
+        # is not a concept the operator needs, it is what a mask should be
+        return ([[PY_GPU, str(ROOT / "04_video_segment.py"),
+                  "--workdir", str(pdir(P)), "--device", "cuda",
+                  "--out", "letters_sam2_small"],
+                 [PY_EVAL, str(ROOT / "06_clean_masks.py"),
+                  "--in", "letters_sam2_small", "--out", "letters_clean",
+                  "--keypoints", "keypoints.json", "--sigma", "3.0"]],
+                pdir(P), False)
     if step == "clean":
-        return ([[PY_EVAL, "06_clean_masks.py", "--in", "letters_sam2_small",
-                  "--out", "letters_clean", "--sigma", "3.0"]], ROOT, False)
+        if not P:
+            return "no active project"
+        return ([[PY_EVAL, str(ROOT / "06_clean_masks.py"),
+                  "--in", "letters_sam2_small", "--out", "letters_clean",
+                  "--keypoints", "keypoints.json", "--sigma", "3.0"]],
+                pdir(P), False)
     if step == "sequences":
         if not P:
             return "no active project — run 'scenes' with a video first"
-        return ([[PY_EVAL, "07_make_sequences.py", "--in", "letters_clean",
-                  "--prefix", f"{P}_"]], ROOT, False)
+        return ([[PY_EVAL, str(ROOT / "07_make_sequences.py"),
+                  "--in", "letters_clean", "--keypoints", "keypoints.json",
+                  "--prefix", f"{P}_"]], pdir(P), False)
     if step == "index":
         return ([[PY_EVAL, str(BENCH / "scripts" /
                                "build_sequence_metadata.py")]], BENCH, False)
@@ -258,12 +275,20 @@ def build_job(step: str, arg: str | None):
                      "--sequence", solve_id])
         return jobs, MAS, False
     if step == "reassemble":
-        return ([[PY_EVAL, "08_reassemble.py", "--all"],
-                 [PY_EVAL, "08_reassemble.py"] + sum(
-                     [["--sequence", d.name] for d in
-                      sorted((BENCH / "sequences").glob("*_stab"))
-                      if (BENCH / "optimized" / d.name).is_dir()], [])],
-                ROOT, False)
+        jobs = [[PY_EVAL, "08_reassemble.py", "--all"],
+                [PY_EVAL, "08_reassemble.py"] + sum(
+                    [["--sequence", d.name] for d in
+                     sorted((BENCH / "sequences").glob("*_stab"))
+                     if (BENCH / "optimized" / d.name).is_dir()], [])]
+        # library-assigned elements are cast from the library, replacing any
+        # solved reassembly: the assignment is the decision
+        if P:
+            for sid, ass in sorted(assignments(P).items()):
+                if ass.get("mode") == "library" and ass.get("library_id"):
+                    jobs.append([PY_EVAL, str(ROOT / "08_place_library.py"),
+                                 "--sequence", sid,
+                                 "--library-id", ass["library_id"]])
+        return jobs, ROOT, False
     if step == "score":
         return [[PY_GPU, "09_clip_score.py"]], ROOT, False
     if step == "compose":
@@ -281,9 +306,13 @@ def build_job(step: str, arg: str | None):
             if (BENCH / "optimized" / use).is_dir() and \
                     (ROOT / "out" / "reassembled" / use).is_dir():
                 clips += ["--clip", use]
-        if not clips:
+        libs = []
+        for sid, ass in sorted(assignments(P).items()):
+            if ass.get("mode") == "library" and ass.get("library_id"):
+                libs += ["--library", ass["library_id"]]
+        if not clips and not libs:
             return "nothing solved+reassembled for this project yet"
-        return ([[PY_EVAL, "pack.py", "--name", P, "--force"] + clips],
+        return ([[PY_EVAL, "pack.py", "--name", P, "--force"] + clips + libs],
                 ROOT, False)
     if step == "atlas":
         return ([[PY_EVAL, str(BENCH / "scripts" /
@@ -314,14 +343,26 @@ def run_jobs(step: str, jobs, cwd, log_path: Path):
         pa = JOB.pop("pending_active", None)
         if pa:
             set_active(*pa)
+        pr = JOB.pop("pending_register", None)
+        if pr:
+            proj, vname, start, fstart = pr
+            n = sum(1 for d in (pdir(proj) / "scenes").glob("scene_*")
+                    if (m := re.match(r"scene_(" + chr(92) + "d+)$", d.name))
+                    and int(m.group(1)) >= start)
+            reg = video_registry(proj)
+            reg[vname] = {"scene_start": start, "frame_start": fstart,
+                          "n_scenes": n}
+            save_registry(proj, reg)
     else:
         JOB.pop("pending_active", None)
+        JOB.pop("pending_register", None)
     JOB.update(running=False, rc=rc)
 
 
 def state() -> dict:
     P = active_project()
-    n = lambda pat, root=ROOT: len(glob.glob(str(root / pat)))
+    wd = pdir(P) if P else ROOT
+    n = lambda pat, root=None: len(glob.glob(str((root or wd) / pat)))
     kp = {}
     try:
         kp = json.loads((ROOT / "keypoints.json")
@@ -333,14 +374,22 @@ def state() -> dict:
     # need not agree, and a filter that assumes they do shows an empty table.
     seqs = []
     rt = routing()
+    ass_all = assignments(P) if P else {}
     for d in sorted((BENCH / "sequences").glob("*_scene_*")):
         sid = d.name
         run = BENCH / "optimized" / sid
+        ass = ass_all.get(sid, {})
+        mode = ass.get("mode")
+        solved = bool(list(run.glob("summary_*.json")))
         seqs.append({
             "id": sid,
             "project": sid.split("_scene_")[0],
             "lane": rt.get(sid, {}).get("lane"),
-            "solved": bool(list(run.glob("summary_*.json"))),
+            "solved": solved,
+            "assign": mode,
+            "library_id": ass.get("library_id"),
+            "resolved": (mode == "solve" and solved) or
+                        (mode == "library" and bool(ass.get("library_id"))),
             "reassembled": (ROOT / "out" / "reassembled" / sid /
                             "reassembly.json").exists(),
         })
@@ -371,9 +420,14 @@ def state() -> dict:
 KP_LOCK = threading.Lock()
 
 
+def kp_path() -> Path:
+    P = active_project() or "_none"
+    return pdir(P) / "keypoints.json"
+
+
 def kp_load() -> dict:
     try:
-        d = json.loads((ROOT / "keypoints.json").read_text(encoding="utf-8"))
+        d = json.loads(kp_path().read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         d = {}
     d.setdefault("meta", {})
@@ -386,9 +440,10 @@ def kp_save(d: dict) -> None:
     """Atomic, exactly like 03's Store: a crash mid-write must not be able
     to eat hand labour."""
     d["meta"]["updated"] = time.strftime("%Y-%m-%dT%H:%M:%S")
-    tmp = ROOT / "keypoints.json.tmp"
+    kp = kp_path()
+    tmp = kp.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(d, indent=1, sort_keys=True), encoding="utf-8")
-    os.replace(tmp, ROOT / "keypoints.json")
+    os.replace(tmp, kp)
 
 
 LIB_CACHE: list | None = None
@@ -471,6 +526,10 @@ class Handler(SimpleHTTPRequestHandler):
             fid = self.path.rsplit("/", 1)[1]
             if not NAME_RE.match(fid):
                 return self._json(400, {"error": "bad fid"})
+            P = active_project()
+            if not P:
+                return self._json(200, {"masks": []})
+            wd, pbase = pdir(P), f"projects/{P}"
             def entry(p: Path, base: str):
                 lab = p.stem[len(fid) + 1:]
                 if lab.endswith("_mask"):
@@ -478,15 +537,37 @@ class Handler(SimpleHTTPRequestHandler):
                 return {"label": lab, "file": f"{base}/{p.name}"}
             # cleaned masks win over the raw segmentation for the same label
             seg = {e["label"]: e for p in sorted(
-                       (ROOT / "letters_sam2_small" / "by_frame" / fid)
+                       (wd / "letters_sam2_small" / "by_frame" / fid)
                        .glob(f"{fid}_*_mask.png"))
-                   for e in [entry(p, f"letters_sam2_small/by_frame/{fid}")]}
-            for p in sorted((ROOT / "letters_clean")
+                   for e in [entry(p, f"{pbase}/letters_sam2_small/by_frame/{fid}")]}
+            for p in sorted((wd / "letters_clean")
                             .glob(f"{fid}_*_mask.png")):
-                e = entry(p, "letters_clean")
+                e = entry(p, f"{pbase}/letters_clean")
                 e["clean"] = True
                 seg[e["label"]] = e
             return self._json(200, {"masks": list(seg.values())})
+        if self.path == "/api/gallery":
+            P = active_project()
+            if not P:
+                return self._json(200, [])
+            wd, pbase = pdir(P), f"projects/{P}"
+            kp = kp_load()
+            scene_of = {fid: r.get("scene", "")
+                        for fid, r in kp.get("frames", {}).items()}
+            items = []
+            clean = {q.name for q in (wd / "letters_clean").glob("*_mask.png")}
+            for d in sorted((wd / "letters_sam2_small" / "by_frame").glob("f*")):
+                fid = d.name
+                for q in sorted(d.glob(f"{fid}_*_mask.png")):
+                    lab = q.stem[len(fid) + 1:-5]
+                    use_clean = q.name in clean
+                    items.append({
+                        "fid": fid, "label": lab, "clean": use_clean,
+                        "scene": scene_of.get(fid, ""),
+                        "file": (f"{pbase}/letters_clean/{q.name}" if use_clean
+                                 else f"{pbase}/letters_sam2_small/by_frame/{fid}/{q.name}"),
+                    })
+            return self._json(200, items)
         if self.path == "/api/output":
             P = active_project() or ""
             vids = [{"name": v.name, "mb": round(v.stat().st_size / 1e6, 1)}
@@ -504,19 +585,27 @@ class Handler(SimpleHTTPRequestHandler):
                         pass
                     re_dirs[d.name] = {"frames": fr,
                                        "fps": rj.get("fps", 5)}
-            return self._json(200, {"videos": vids, "reassembled": re_dirs})
+            choreo = sorted(c.name for c in
+                            (ROOT / "packages" / P / "choreo").glob("*.json"))                 if P else []
+            return self._json(200, {"videos": vids, "reassembled": re_dirs,
+                                    "package": P if choreo else None,
+                                    "choreo": choreo})
         if self.path == "/api/frames":
+            P = active_project()
+            if not P:
+                return self._json(200, [])
+            wd, pbase = pdir(P), f"projects/{P}"
             kp = kp_load()
             frames = []
-            for d in sorted((ROOT / "scenes").glob("scene_*")):
+            for d in sorted((wd / "scenes").glob("scene_*")):
                 for f in sorted(d.glob("f*.png")):
                     fid = f.stem
                     rec = kp["frames"].get(fid, {})
                     frames.append({
                         "fid": fid, "scene": d.name,
-                        "file": f"scenes/{d.name}/{f.name}",
+                        "file": f"{pbase}/scenes/{d.name}/{f.name}",
                         "labelled": bool(rec.get("objects")),
-                        "masked": (ROOT / "letters_sam2_small" / "by_frame" /
+                        "masked": (wd / "letters_sam2_small" / "by_frame" /
                                    fid).is_dir(),
                     })
             return self._json(200, frames)
@@ -548,6 +637,33 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
+        if self.path == "/api/assign":
+            try:
+                body = json.loads(self.rfile.read(
+                    int(self.headers.get("Content-Length", 0))))
+            except (ValueError, json.JSONDecodeError):
+                return self._json(400, {"error": "bad body"})
+            P = active_project()
+            sid = str(body.get("seq", ""))
+            if not P or not NAME_RE.match(sid) or                     not (BENCH / "sequences" / sid).is_dir():
+                return self._json(400, {"error": f"unknown sequence {sid!r}"})
+            mode = body.get("mode")
+            a = assignments(P)
+            if mode not in ("solve", "library", None):
+                return self._json(400, {"error": "mode: solve|library|null"})
+            if mode is None:
+                a.pop(sid, None)
+            elif mode == "library":
+                lid = str(body.get("library_id", ""))
+                if not any(json.loads(l)["id"] == lid for l in
+                           (BENCH / "metadata.jsonl").read_text(
+                               encoding="utf-8").splitlines() if l.strip()):
+                    return self._json(400, {"error": f"{lid!r} not in library"})
+                a[sid] = {"mode": "library", "library_id": lid}
+            else:
+                a[sid] = {"mode": "solve"}
+            save_assignments(P, a)
+            return self._json(200, {"ok": True})
         if self.path in ("/api/keypoints", "/api/decision"):
             try:
                 body = json.loads(self.rfile.read(
