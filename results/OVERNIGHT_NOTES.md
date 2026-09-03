@@ -682,3 +682,29 @@ cleanup kept: /api/dropframe removes a frame project-wide (scene png,
 labels, masks) with a re-segment reminder; the letters_clean concept is
 fully retired. The multi-rep-patch-loses-all-on-one-FAIL trap fired
 TWICE more; whole-file rewrite was the right call for the html.
+
+## Night 2: the working-ones-with-good-performance mandate
+
+User's blocker (no compose, empty output-play) was three stacked faults:
+07 gated frame membership on keypoints.json so video-propagated frames
+were dropped (7/17 per sequence), 08 --all still globbed the dead
+demo_* prefix, and mount had consequently never run. Fixed all three,
+rebuilt pixar sequences to 306 full-frame targets, then the overnight
+driver re-solved everything assigned solve: pixar's travelling lamps
+through the stabilization lane (01_lamp 5.21x recovery, 0.062 -> 0.281
+though fit now rides the 1.6 upper bound -- wide-bound retry at 2.4
+running; 03_lamp 0.589), the rest 0.67-0.76; family_ad re-solved whole
+per the user's instruction (0.36-0.83; 06_I weakest at 0.360 --
+edge-hugging, not stabilizable). pixar.mp4 54/54 frames, family_ad.mp4
+92. Both packaged with the upgraded exporter.
+
+Peer session umbra-bench-16 (commanded per the user) verified round 1
+(all 7 old clips clean in the robot UI, scene numerics exact) and
+caught, pre-ship, that arrangement overlaps BLEND joints per arm --
+offsets became cumulative durations in footage order with hold gaps.
+Its other findings: deploy sends frames raw (fixed by 30 Hz linear
+interpolation in pack -- worst step 68 deg -> 8.4 deg), Motion-tab
+thumbnail blank is the UI's own floor-vs-table inconsistency (left
+alone), collinear-base shadow superposition is by design here.
+Arrangements now seat library/sequence stand-ins too, so a scene
+timeline carries every element. Round-2 verification brief sent.
