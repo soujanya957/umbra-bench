@@ -545,3 +545,21 @@ byte-parity with pre-rename size, atlas shows 15 family_ad cards and zero
 demo_01. Historical solve logs keep the old name on purpose: they are
 records of runs made under it. User directive noted: prioritize CUDA
 (fh_l1) for heavy compute.
+
+## demo design studio (user's ask: a UI for every step, per-video projects)
+
+demo/studio.py + studio.html on :8478 -- pick a video (stem = project,
+naming un-fumbleable), buttons for every stage running the exact
+run_demo argument sets under the right interpreter per stage: eval env
+for cv2/scipy stages, fh_l1 (CUDA, user's standing priority) for SAM2
+segment and CLIP score, fleet-shadow for solves; ffmpeg borrowed from
+fh_l1's Library/bin (user installed it there). Per-element solve buttons
+are lane-aware (translation auto-runs the stabilizer then solves _stab;
+static solves one frame) with the full explicit night-config flag set.
+Library panel: 602 shapes, live search, thumbnails from
+targets_grounded, click-to-copy id for the labeller's reuse prompt or
+pack --library. One job at a time, live log tail. The labeller opens as
+a native window on the machine (a matplotlib tool cannot live in a web
+page, but the server can launch it). While building this the user was
+already using the folder: pixar.mp4 arrived and was white-frame-trimmed
+into pixar_01..04 with 00_trim's naming -- the flow is being used.

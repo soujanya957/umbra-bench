@@ -1,0 +1,205 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>demo design studio</title>
+<style>
+  :root{--bg:#101216;--panel:#181b21;--line:#2a2f38;--ink:#e6e9ee;--ink2:#9aa3b0;
+        --acc:#5ec8f5;--ok:#57d98f;--warn:#f5b85e;--bad:#f56e6e}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:13px/1.5 "IBM Plex Sans",system-ui,sans-serif}
+  .mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+  header{display:flex;gap:14px;align-items:baseline;padding:14px 18px;
+         border-bottom:1px solid var(--line)}
+  header h1{font-size:15px;margin:0}
+  header .proj{color:var(--acc);font-weight:600}
+  main{display:grid;grid-template-columns:1fr 380px;gap:14px;padding:14px 18px}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+          padding:12px 14px;margin-bottom:14px}
+  h2{font-size:12px;margin:0 0 10px;color:var(--ink2);text-transform:uppercase;
+     letter-spacing:.06em}
+  select,input[type=text]{background:#0c0e12;color:var(--ink);border:1px solid var(--line);
+         border-radius:5px;padding:5px 8px;font:inherit;width:100%}
+  button{background:#232833;color:var(--ink);border:1px solid var(--line);
+         border-radius:5px;padding:5px 10px;font:inherit;cursor:pointer}
+  button:hover{border-color:var(--acc)}
+  button:disabled{opacity:.4;cursor:default}
+  .steps{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+  .step{border:1px solid var(--line);border-radius:6px;padding:8px 10px;
+        display:flex;flex-direction:column;gap:5px}
+  .step .st{font-size:11px;color:var(--ink2)}
+  .step .st.ok{color:var(--ok)}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  td,th{padding:4px 8px;text-align:left;border-bottom:1px solid var(--line)}
+  th{color:var(--ink2);font-weight:500}
+  .lane-static{color:var(--ok)} .lane-translation{color:var(--warn)}
+  .lane-dynamic{color:var(--acc)}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:4px;background:#3a4150}
+  .dot.on{background:var(--ok)}
+  #lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));
+       gap:8px;max-height:420px;overflow-y:auto;margin-top:8px}
+  .cell{cursor:pointer;text-align:center}
+  .cell img{width:100%;image-rendering:pixelated;background:#fff;border-radius:4px;
+            border:1px solid var(--line)}
+  .cell:hover img{border-color:var(--acc)}
+  .cell .nm{font-size:10px;color:var(--ink2);overflow:hidden;white-space:nowrap;
+            text-overflow:ellipsis}
+  .cell.unsolved img{opacity:.45}
+  #log{background:#0a0c0f;border-radius:6px;padding:10px;height:230px;
+       overflow-y:auto;white-space:pre-wrap;font-size:11.5px;color:#b7c0cc}
+  .busy{color:var(--warn)} .toast{position:fixed;bottom:16px;right:16px;
+       background:var(--acc);color:#04222f;padding:8px 14px;border-radius:6px;
+       font-weight:600;display:none}
+</style>
+<header>
+  <h1>demo design studio</h1>
+  <div>project <span class="proj mono" id="proj">—</span></div>
+  <div id="jobline" class="mono"></div>
+</header>
+<main>
+<div>
+  <section>
+    <h2>video → project</h2>
+    <div style="display:flex;gap:8px">
+      <select id="video"></select>
+      <button onclick="run('trim', vid())">trim on white frames</button>
+      <button onclick="run('scenes', vid())">start project (scenes)</button>
+    </div>
+    <div class="st" style="margin-top:6px;color:var(--ink2)">
+      the filename stem becomes the project name — drop new footage into
+      <span class="mono">demo/</span> and refresh
+    </div>
+  </section>
+  <section>
+    <h2>footage workspace <span id="wsproj"></span></h2>
+    <div class="steps" id="steps"></div>
+  </section>
+  <section>
+    <h2>sequences — solve per element</h2>
+    <table id="seqs"><tr><th>sequence</th><th>lane</th><th>solved</th>
+      <th>reassembled</th><th></th></tr></table>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button onclick="run('route')">route</button>
+      <button onclick="run('reassemble')">reassemble all</button>
+      <button onclick="run('score')">score (CLIP)</button>
+      <button onclick="run('compose')">compose video</button>
+      <button onclick="run('pack')">pack show</button>
+      <button onclick="run('atlas')">rebuild atlas</button>
+    </div>
+    <div id="outs" class="mono" style="margin-top:8px;color:var(--ink2)"></div>
+  </section>
+  <section>
+    <h2>log</h2>
+    <div id="log" class="mono"></div>
+  </section>
+</div>
+<div>
+  <section>
+    <h2>library — click a shape to copy its id</h2>
+    <input type="text" id="q" placeholder="search 600+ shapes: candle, upper K, crab…">
+    <div id="lib"></div>
+    <div class="st" style="margin-top:6px;color:var(--ink2)">
+      paste the id into the labeller's <b>.</b> reuse prompt, or into
+      <span class="mono">pack.py --library</span>. dimmed = not solved yet.
+    </div>
+  </section>
+</div>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+const $ = s => document.querySelector(s);
+let LIB = [], S = null;
+
+const vid = () => $("#video").value;
+
+async function run(step, arg){
+  const r = await fetch("/api/run", {method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({step, arg})});
+  const j = await r.json();
+  if(j.error) toast(j.error);
+  else if(j.note) toast(j.note);
+  poll();
+}
+
+function toast(t){
+  const el = $("#toast"); el.textContent = t; el.style.display = "block";
+  setTimeout(() => el.style.display = "none", 2600);
+}
+
+function stepCard(name, label, status, ok, btnArg){
+  return `<div class="step"><b>${label}</b>
+    <span class="st ${ok ? "ok" : ""}">${status}</span>
+    <button onclick="run('${name}'${btnArg ? ",vid()" : ""})">run</button></div>`;
+}
+
+async function refresh(){
+  S = await fetch("/api/state").then(r => r.json());
+  $("#proj").textContent = S.project || "—";
+  $("#wsproj").textContent = S.project ? `(holds: ${S.project})` : "";
+  const vs = $("#video");
+  if(vs.options.length !== S.videos.length){
+    vs.innerHTML = S.videos.map(v => `<option>${v}</option>`).join("");
+  }
+  const w = S.workspace;
+  $("#steps").innerHTML =
+    stepCard("label", "2 · label", `${w.labelled} frames labelled`, w.labelled > 0)
+    + stepCard("segment", "3 · segment (GPU)", `${w.masks} masks`, w.masks > 0)
+    + stepCard("clean", "4 · clean", `${w.clean} cleaned`, w.clean > 0)
+    + stepCard("sequences", "5 · sequences", S.sequences.length + " clips", S.sequences.length > 0)
+    + stepCard("index", "6 · index track", "sequences.jsonl", true)
+    + `<div class="step"><b>1 · scenes</b>
+       <span class="st ${w.scenes ? "ok" : ""}">${w.scenes} frames</span>
+       <span class="st">run from the video row above</span></div>`;
+  $("#seqs").innerHTML = "<tr><th>sequence</th><th>lane</th><th>solved</th>"
+    + "<th>reassembled</th><th></th></tr>"
+    + S.sequences.map(q => `<tr>
+        <td class="mono">${q.id}</td>
+        <td class="lane-${q.lane || "dynamic"}">${q.lane || "?"}</td>
+        <td><span class="dot ${q.solved ? "on" : ""}"></span></td>
+        <td><span class="dot ${q.reassembled ? "on" : ""}"></span></td>
+        <td><button onclick="run('solve','${q.id}')"
+             ${q.solved ? "" : ""}>solve</button></td></tr>`).join("");
+  $("#outs").textContent = (S.outputs.video.length
+      ? "video: " + S.outputs.video.join("  ") : "no video yet")
+    + (S.outputs.package ? "   package: demo/packages/" + S.project : "");
+  const j = S.job;
+  $("#jobline").innerHTML = j.running
+    ? `<span class="busy">running: ${j.step} … ${j.elapsed}s</span>`
+    : (j.step ? `last: ${j.step} ${j.rc === 0 ? "✓" : "exit " + j.rc}` : "");
+  if(j.running || j.step){
+    $("#log").textContent = (await fetch("/api/log").then(r => r.json())).log;
+    $("#log").scrollTop = $("#log").scrollHeight;
+  }
+}
+
+let timer = null;
+function poll(){
+  clearInterval(timer);
+  timer = setInterval(async () => {
+    await refresh();
+    if(!S.job.running) clearInterval(timer);
+  }, 2000);
+}
+
+function renderLib(){
+  const q = $("#q").value.toLowerCase();
+  const hits = LIB.filter(e => !q || e.id.toLowerCase().includes(q)
+                               || e.cls.toLowerCase().includes(q)).slice(0, 96);
+  $("#lib").innerHTML = hits.map(e => `
+    <div class="cell ${e.solved ? "" : "unsolved"}" data-id="${e.id}"
+         title="${e.id}${e.solved ? "" : " (unsolved)"}">
+      <img loading="lazy" src="/thumb/${e.subset}/${e.stem}">
+      <div class="nm">${e.cls}</div>
+    </div>`).join("");
+  document.querySelectorAll(".cell").forEach(c =>
+    c.addEventListener("click", () => {
+      navigator.clipboard.writeText(c.dataset.id);
+      toast("copied: " + c.dataset.id);
+    }));
+}
+
+$("#q").addEventListener("input", renderLib);
+fetch("/api/library").then(r => r.json()).then(l => { LIB = l; renderLib(); });
+refresh();
+setInterval(refresh, 6000);
+</script>
