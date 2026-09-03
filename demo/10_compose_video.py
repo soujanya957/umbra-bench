@@ -104,10 +104,10 @@ def write_mp4(frames, path: Path, fps: float):
 def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--reassembled",
-                    default=str(Path(__file__).resolve().parent / "out" / "reassembled"))
-    ap.add_argument("--out",
-                    default=str(Path(__file__).resolve().parent / "out" / "video"))
+    ap.add_argument("--reassembled", default=None,
+                    help="default: every demo/projects/*/out/reassembled/")
+    ap.add_argument("--out", default=None,
+                    help="default: demo/projects/<project>/out/video/")
     ap.add_argument("--scene", action="append", default=[])
     ap.add_argument("--fps", type=float, default=None,
                     help="override; the default is the sequences' own rate")
@@ -115,10 +115,25 @@ def main() -> None:
                     help="skip the concatenated cut")
     a = ap.parse_args()
 
-    scenes = load_scene(Path(a.reassembled))
+    demo = Path(__file__).resolve().parent
+    if a.reassembled:
+        roots = [Path(a.reassembled)]
+    else:
+        roots = sorted((demo / "projects").glob("*/out/reassembled"))
+        legacy = demo / "out" / "reassembled"
+        if legacy.is_dir():
+            roots.append(legacy)
+    scenes = {}
+    for r in roots:
+        for k, v in load_scene(r).items():
+            scenes.setdefault(k, v)         # project dirs win over legacy
     names = a.scene or sorted(scenes)
-    out = Path(a.out)
-    out.mkdir(parents=True, exist_ok=True)
+
+    def out_for(proj):
+        d = (Path(a.out) if a.out
+             else demo / "projects" / proj / "out" / "video")
+        d.mkdir(parents=True, exist_ok=True)
+        return d
 
     film, made = {}, 0
     for sc in names:
@@ -129,7 +144,7 @@ def main() -> None:
         ids = sorted(d["frames"])
         frames = [composite(d["frames"][i], d["canvas"]) for i in ids]
         fps = a.fps or d["fps"]
-        p = out / f"{sc}.mp4"
+        p = out_for(sc.rsplit("_scene_", 1)[0]) / f"{sc}.mp4"
         ok = write_mp4(frames, p, fps)
         letters = "".join(sorted(d["letters"]))
         print(f"  {sc:<10} {len(frames):>3} frames  {letters:<7} "
@@ -142,12 +157,12 @@ def main() -> None:
     if film and not a.no_film:
         fps = a.fps or 5.0
         for proj, fr in film.items():
-            p = out / f"{proj}.mp4"
+            p = out_for(proj) / f"{proj}.mp4"
             ok = write_mp4(fr, p, fps)
             print(f"  whole cut [{proj}]: {len(fr)} frames at {fps:g}fps -> "
                   f"{p.name}" + ("" if ok else "   WRITE FAILED"))
 
-    print(f"\n{made}/{len(names)} scenes written to {out}")
+    print(f"{made}/{len(names)} scenes written (per-project out/video)")
     print("dark = cast shadow, on the source 1920x1080 canvas.")
     print("frames are aligned by source frame id, so a letter that enters")
     print("part-way through a scene enters part-way through the video.")

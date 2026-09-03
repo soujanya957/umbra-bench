@@ -277,7 +277,7 @@ def main():
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--sequence", action="append", default=[])
     ap.add_argument("--all", action="store_true", help="every solved demo_* clip")
-    ap.add_argument("--out", default=str(Path(__file__).resolve().parent / "out" / "reassembled"))
+    ap.add_argument("--out", default=None,  help="default: demo/projects/<project>/out/reassembled/")
     ap.add_argument("--fps", type=float, default=None)
     ap.add_argument("--no-sheet", action="store_true",
                     help="skip the review sheet")
@@ -311,14 +311,20 @@ def main():
     if not names:
         raise SystemExit("nothing to do: pass --sequence NAME or --all")
 
-    out_root = Path(a.out)
-    print(f"{len(names)} sequence(s) -> {out_root}\n")
+    def root_for(n):
+        if a.out:
+            return Path(a.out)
+        proj = n.split("_scene_")[0]
+        return BENCH / "demo" / "projects" / proj / "out" / "reassembled"
+    print(str(len(names)) + " sequence(s) -> "
+          + (a.out if a.out else "per-project out/") + chr(10))
     done = 0
     for n in names:
-        if reassemble(n, out_root, a.fps, not a.no_check, hold=a.hold):
+        if reassemble(n, root_for(n), a.fps, not a.no_check, hold=a.hold):
             done += 1
     print(f"\n{done}/{len(names)} reassembled")
-    if done and not a.no_sheet:
+    if done and not a.no_sheet and a.out:
+        out_root = Path(a.out)
         f = sheet([n for n in names if (out_root / n).is_dir()], out_root,
                   full_canvas=a.full_canvas)
         if f:

@@ -57,7 +57,8 @@ def main():
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--sequence", required=True, help="the element to replace")
     ap.add_argument("--donor", required=True, help="the sequence that stands in")
-    ap.add_argument("--out", default=str(ROOT / "out" / "reassembled"))
+    ap.add_argument("--out", default=None,
+                    help="default: demo/projects/<project>/out/reassembled/")
     a = ap.parse_args()
 
     seq = BENCH / "sequences" / a.sequence
@@ -70,7 +71,9 @@ def main():
 
     frames = sorted(seq.glob("f*.png"))
     na = len(frames)
-    out = Path(a.out) / a.sequence
+    proj = a.sequence.split("_scene_")[0]
+    out = (Path(a.out) if a.out else
+           ROOT / "projects" / proj / "out" / "reassembled") / a.sequence
     if out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True)

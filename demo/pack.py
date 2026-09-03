@@ -16,7 +16,7 @@ exactly the three things a show is made of:
     video/                      the composited scene mp4s, if already built
     package.json + README.md    the inventory and the units caveat
 
-Clips come from demo/out/reassembled/ (run 08_reassemble first) and their
+Clips come from each project's out/reassembled/ (run 08_reassemble first) and their
 joints from optimized/<id>/frame_*/best_q.npy. Library elements -- the point
 of the library is reuse, so a static shape that the benchmark already solved
 is pulled, never re-solved -- come from optimized/<sweep>/<subset>/<stem>/:
@@ -70,7 +70,10 @@ def write_joints(path: Path, rows: list[np.ndarray]):
 
 
 def pack_clip(sid: str, dest: Path):
-    re_dir = ROOT / "out" / "reassembled" / sid
+    proj = sid.split("_scene_")[0]
+    re_dir = ROOT / "projects" / proj / "out" / "reassembled" / sid
+    if not re_dir.is_dir():                     # pre-migration layout
+        re_dir = ROOT / "out" / "reassembled" / sid
     run = BENCH / "optimized" / sid
     if not (re_dir / "reassembly.json").exists():
         sys.exit(f"[!] {sid}: no reassembly -- run "
@@ -374,12 +377,17 @@ def main():
     if by_scene:
         print(f"  arrange  {len(by_scene)} scene timeline(s) -> choreo/arrangements/")
 
-    vids = [] if a.no_video else sorted((ROOT / "out" / "video").glob("*.mp4"))
+    if a.no_video:
+        vids = []
+    else:
+        vids = sorted(set(
+            list((ROOT / "out" / "video").glob(f"{a.name}*.mp4"))
+            + list((ROOT / "projects" / a.name / "out" / "video").glob("*.mp4"))))
     if vids:
         (pkg / "video").mkdir()
         for v in vids:
             shutil.copyfile(v, pkg / "video" / v.name)
-        print(f"  video    {len(vids)} mp4(s) from demo/out/video")
+        print(f"  video    {len(vids)} mp4(s)")
 
     (pkg / "package.json").write_text(json.dumps({
         "name": a.name, "elements": elements,

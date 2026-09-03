@@ -60,7 +60,8 @@ def main():
     ap.add_argument("--sequence", required=True)
     ap.add_argument("--library-id", required=True)
     ap.add_argument("--sweep", default="big-budget-grounded")
-    ap.add_argument("--out", default=str(ROOT / "out" / "reassembled"))
+    ap.add_argument("--out", default=None,
+                    help="default: demo/projects/<project>/out/reassembled/")
     a = ap.parse_args()
 
     seq = BENCH / "sequences" / a.sequence
@@ -71,29 +72,54 @@ def main():
     shadow = load_shadow(a.library_id, a.sweep)
     sh, sw = shadow.shape
 
-    out = Path(a.out) / a.sequence
+    proj = a.sequence.split("_scene_")[0]
+    out = (Path(a.out) if a.out else
+           ROOT / "projects" / proj / "out" / "reassembled") / a.sequence
     if out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True)
 
     frames = sorted(seq.glob("f*.png"))
-    for i, fp in enumerate(frames):
+    # Robust pinning: SIZE comes from the median authored bbox and POSITION
+    # from the per-frame centroid unless it is an outlier. A frame where the
+    # element is squashed or occluded (the lamp landing on the R leaves a
+    # displaced sliver) would otherwise rescale the whole glyph into the
+    # sliver -- one frame of the letter jumping and shrinking.
+    k = side / 512.0
+    stats = []
+    for fp in frames:
         au = np.array(Image.open(fp).convert("L")) < 128
-        page = Image.new("L", (canvas["w"], canvas["h"]), 255)
         ys, xs = np.where(au)
         if len(ys):
-            # authored bbox in the padded-crop frame, then on the full canvas
-            k = side / au.shape[0]
-            x0, y0 = xs.min() * k, ys.min() * k
-            bw, bh = (xs.max() - xs.min() + 1) * k, (ys.max() - ys.min() + 1) * k
-            s = min(bw / sw, bh / sh)
-            tw, th = max(1, int(sw * s)), max(1, int(sh * s))
-            tile = Image.fromarray(np.where(shadow, 0, 255).astype(np.uint8))
-            tile = tile.resize((tw, th), Image.NEAREST)
-            # centred in the authored box, mapped through the crop
-            px = crop["x"] + int(x0 + (bw - tw) / 2) - ox
-            py = crop["y"] + int(y0 + (bh - th) / 2) - oy
-            page.paste(tile, (px, py))
+            stats.append(((xs.max() - xs.min() + 1), (ys.max() - ys.min() + 1),
+                          xs.mean(), ys.mean()))
+        else:
+            stats.append(None)
+        k = side / au.shape[0]
+    ok = [t for t in stats if t]
+    if not ok:
+        sys.exit(f"[!] {a.sequence}: no authored content in any frame")
+    mbw = float(np.median([t[0] for t in ok])) * k
+    mbh = float(np.median([t[1] for t in ok])) * k
+    mcx = float(np.median([t[2] for t in ok])) * k
+    mcy = float(np.median([t[3] for t in ok])) * k
+    s_fit = min(mbw / sw, mbh / sh)
+    tw, th = max(1, int(sw * s_fit)), max(1, int(sh * s_fit))
+    tile = Image.fromarray(np.where(shadow, 0, 255).astype(np.uint8))
+    tile = tile.resize((tw, th), Image.NEAREST)
+    tol = 0.5 * max(mbw, mbh)
+    for i, fp in enumerate(frames):
+        page = Image.new("L", (canvas["w"], canvas["h"]), 255)
+        t = stats[i]
+        if t is not None:
+            cx, cy = t[2] * k, t[3] * k
+            if abs(cx - mcx) > tol or abs(cy - mcy) > tol:
+                cx, cy = mcx, mcy               # outlier frame: hold the pin
+        else:
+            cx, cy = mcx, mcy
+        px = crop["x"] + int(cx - tw / 2) - ox
+        py = crop["y"] + int(cy - th / 2) - oy
+        page.paste(tile, (px, py))
         page.save(out / f"f{i:02d}.png")
 
     (out / "reassembly.json").write_text(json.dumps({

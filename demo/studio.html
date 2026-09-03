@@ -370,12 +370,14 @@ function oplay(){
   if(!d) return;
   const cv = $("#ocanvas"); cv.style.display = "block";
   const g = cv.getContext("2d");
+  const stamp = Date.now();               // fresh frames after every re-mount
   let i = 0;
   const step = () => {
     const im = new Image();
     im.onload = () => { cv.width = im.naturalWidth; cv.height = im.naturalHeight;
                         g.drawImage(im, 0, 0); };
-    im.src = `/out/reassembled/${$("#oseq").value}/${d.frames[i]}`;
+    im.src = `projects/${OUT.project}/out/reassembled/` +
+             `${$("#oseq").value}/${d.frames[i]}?t=${stamp}`;
     i = (i + 1) % d.frames.length;
   };
   step();
@@ -598,7 +600,10 @@ function renderLib(){
     <div class="cell ${e.solved ? "" : "unsolved"} ${e.id === LASTLIB ? "sel" : ""}"
          data-id="${e.id}" data-kind="${e.kind || ""}"
          title="${e.id}${e.solved ? "" : " (unsolved)"}${e.kind === "seq" ? " — sequence" : ""}">
-      <img loading="lazy" src="/thumb/${e.subset}/${e.stem}">
+      <img loading="lazy" ${e.kind === "seq"
+             ? `class="seqanim" data-seq="${e.stem}" data-nf="${e.nf || 1}"
+                src="/seqanim/${e.stem}/0"`
+             : `src="/thumb/${e.subset}/${e.stem}"`}>
       <div class="nm">${e.kind === "seq" ? "▶ " : ""}${e.cls}</div>
     </div>`).join("");
   $("#lib").querySelectorAll(".cell").forEach(c =>
@@ -620,4 +625,16 @@ fetch("/api/library").then(r => r.json()).then(l => { LIB = l; renderLib(); });
 /* ---- boot ------------------------------------------------------------- */
 linit(); refresh(); orefresh();
 setInterval(refresh, 6000);
+
+/* ---- sequence motion preview: library seq thumbs play their frames ---- */
+let SEQTICK = 0;
+setInterval(() => {
+  const imgs = document.querySelectorAll("img.seqanim");
+  if(!imgs.length) return;
+  SEQTICK++;
+  imgs.forEach(im => {
+    const nf = +im.dataset.nf || 1;
+    if(nf > 1) im.src = `/seqanim/${im.dataset.seq}/${SEQTICK % nf}`;
+  });
+}, 350);
 </script>

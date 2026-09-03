@@ -72,8 +72,8 @@ def masks(d: Path):
 def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--reassembled",
-                    default=str(Path(__file__).resolve().parent / "out" / "reassembled"))
+    ap.add_argument("--reassembled", default=None,
+                    help="default: every demo/projects/*/out/reassembled/")
     ap.add_argument("--sequence", action="append", default=[])
     ap.add_argument("--source", default="optimizer",
                     help="which solve pass these shadows came from; carried "
@@ -85,10 +85,19 @@ def main() -> None:
     ap.add_argument("--batch-size", type=int, default=32)
     a = ap.parse_args()
 
-    re_root = Path(a.reassembled)
-    names = a.sequence or sorted(
-        p.name for p in re_root.iterdir()
-        if p.is_dir() and (ROOT / "sequences" / p.name).is_dir())
+    if a.reassembled:
+        roots = [Path(a.reassembled)]
+    else:
+        roots = sorted((ROOT / "demo" / "projects").glob("*/out/reassembled"))
+        legacy = ROOT / "demo" / "out" / "reassembled"
+        if legacy.is_dir():
+            roots.append(legacy)
+    where = {}
+    for r in roots:
+        for p in (r.iterdir() if r.is_dir() else []):
+            if p.is_dir() and (ROOT / "sequences" / p.name).is_dir():
+                where.setdefault(p.name, p)
+    names = a.sequence or sorted(where)
 
     imgs, meta = [], []
     for n in names:
@@ -98,7 +107,16 @@ def main() -> None:
             print(f"  {n}: {raw!r} is not a scoring class, skipped")
             continue
         ti = ALL_LABELS.index(cls)
-        for cond, src in (("reassembled", re_root / n),
+        re_dir = where.get(n) if not a.sequence or n in where else None
+        if re_dir is None:
+            for r in roots:
+                if (r / n).is_dir():
+                    re_dir = r / n
+                    break
+        if re_dir is None:
+            print(f"  {n}: no reassembly found, skipped")
+            continue
+        for cond, src in (("reassembled", re_dir),
                           ("authored", ROOT / "sequences" / n)):
             for k, f in enumerate(masks(src)):
                 imgs.append(framed(f))

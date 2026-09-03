@@ -106,6 +106,46 @@ def save_assignments(project: str, a: dict) -> None:
         json.dumps(a, indent=1, sort_keys=True), encoding="utf-8")
 
 
+def re_dir_of(sid: str) -> Path:
+    """A sequence's reassembly directory: its project's out/, else legacy."""
+    proj = sid.split("_scene_")[0]
+    d = pdir(proj) / "out" / "reassembled" / sid
+    return d if d.is_dir() else ROOT / "out" / "reassembled" / sid
+
+
+def seq_frame_paths(stem: str):
+    """(paths, invert) for a sequence's motion preview: the solve's
+    best_shadow frames when present (white-on-black, so invert), else the
+    authored frames (already dark-on-white)."""
+    run = BENCH / "optimized" / stem
+    js = sorted(run.glob("summary_*.json"))
+    if js:
+        ts = js[-1].stem[len("summary_"):]
+        sh = sorted(run.glob(f"frame_*_{ts}/best_shadow.png"))
+        if sh:
+            return sh, True
+    return sorted((BENCH / "sequences" / stem).glob("f*.png")), False
+
+
+def seq_thumb(stem: str, i: int = 0) -> bytes | None:
+    key = f"seqanim/{stem}/{i}"
+    if key in THUMBS:
+        return THUMBS[key]
+    paths, inv = seq_frame_paths(stem)
+    if not paths:
+        return None
+    from PIL import Image, ImageOps
+    import io
+    im = Image.open(paths[i % len(paths)]).convert("L").resize(
+        (96, 96), Image.NEAREST)
+    if inv:
+        im = ImageOps.invert(im)
+    b = io.BytesIO()
+    im.save(b, "PNG", optimize=True)
+    THUMBS[key] = b.getvalue()
+    return THUMBS[key]
+
+
 def active_project() -> str | None:
     try:
         return json.loads(STATE_F.read_text(encoding="utf-8"))["project"]
@@ -360,7 +400,7 @@ def build_job(step: str, arg: str | None):
             use = sid + "_stab" if (BENCH / "optimized" / (sid + "_stab")
                                     ).is_dir() else sid
             if (BENCH / "optimized" / use).is_dir() and \
-                    (ROOT / "out" / "reassembled" / use).is_dir():
+                    re_dir_of(use).is_dir():
                 clips += ["--clip", use]
         libs = []
         for sid, ass in sorted(assignments(P).items()):
@@ -448,8 +488,7 @@ def state() -> dict:
             "resolved": (mode == "solve" and solved) or
                         (mode == "library" and bool(ass.get("library_id"))) or
                         (mode == "sequence" and bool(ass.get("donor"))),
-            "reassembled": (ROOT / "out" / "reassembled" / sid /
-                            "reassembly.json").exists(),
+            "reassembled": (re_dir_of(sid) / "reassembly.json").exists(),
         })
     return {
         "project": P,
@@ -466,7 +505,7 @@ def state() -> dict:
         "sequences": seqs,
         "outputs": {
             "video": sorted(p.name for p in
-                            (ROOT / "out" / "video").glob(f"{P}*.mp4")) if P else [],
+                            (pdir(P) / "out" / "video").glob("*.mp4")) if P else [],
             "package": bool(P and (ROOT / "packages" / P).is_dir()),
         },
         "job": {k: JOB[k] for k in ("running", "step", "rc")} |
@@ -573,6 +612,8 @@ def library() -> list:
             r = json.loads(line)
             rows.append({"id": r["id"], "cls": str(r.get("class", r["id"])),
                          "subset": "sequence", "stem": r["id"], "kind": "seq",
+                         "nf": len(list((BENCH / "sequences" / r["id"])
+                                        .glob("f*.png"))),
                          "solved": bool(list((BENCH / "optimized" / r["id"])
                                              .glob("summary_*.json")))})
     except OSError:
@@ -589,25 +630,7 @@ def thumb(subset: str, stem: str) -> bytes | None:
     # what the rig can actually cast, and the best-render is that answer.
     # Unsolved rows fall back to the target (they render dimmed in the UI).
     if subset == "sequence":
-        run = BENCH / "optimized" / stem
-        js = sorted(run.glob("summary_*.json"))
-        p = None
-        if js:
-            ts = js[-1].stem[len("summary_"):]
-            sh = sorted(run.glob(f"frame_*_{ts}/best_shadow.png"))
-            p = sh[0] if sh else None
-        if p is None:
-            f0 = sorted((BENCH / "sequences" / stem).glob("f*.png"))
-            p = f0[0] if f0 else None
-        if p is None:
-            return None
-        from PIL import Image
-        import io
-        im = Image.open(p).convert("L").resize((96, 96), Image.NEAREST)
-        b = io.BytesIO()
-        im.save(b, "PNG", optimize=True)
-        THUMBS[key] = b.getvalue()
-        return THUMBS[key]
+        return seq_thumb(stem, 0)
     p = (BENCH / "optimized" / "big-budget-grounded" / subset / stem /
          f"{stem}_best.png")
     if not p.exists():
@@ -708,11 +731,12 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if self.path == "/api/output":
             P = active_project() or ""
+            po = (pdir(P) / "out") if P else None
             vids = [{"name": v.name, "mb": round(v.stat().st_size / 1e6, 1)}
-                    for v in sorted((ROOT / "out" / "video").glob("*.mp4"))
-                    if v.name.startswith(P)]
+                    for v in sorted((po / "video").glob("*.mp4"))] if po else []
             re_dirs = {}
-            for d in sorted((ROOT / "out" / "reassembled").glob(f"{P}_*")):
+            for d in (sorted((po / "reassembled").glob(f"{P}_*"))
+                      if po else []):
                 fr = sorted(f.name for f in d.glob("f*.png"))
                 if fr:
                     rj = {}
@@ -726,6 +750,7 @@ class Handler(SimpleHTTPRequestHandler):
             choreo = sorted(c.name for c in
                             (ROOT / "packages" / P / "choreo").glob("*.json"))                 if P else []
             return self._json(200, {"videos": vids, "reassembled": re_dirs,
+                                    "project": P,
                                     "package": P if choreo else None,
                                     "choreo": choreo})
         if self.path == "/api/frames":
@@ -751,6 +776,21 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(200, kp_load())
         if self.path == "/api/library":
             return self._json(200, library())
+        if self.path.startswith("/seqanim/"):
+            parts = self.path[len("/seqanim/"):].split("/")
+            data = None
+            if (len(parts) == 2 and NAME_RE.match(parts[0])
+                    and parts[1].isdigit()):
+                data = seq_thumb(parts[0], int(parts[1]))
+            if data is None:
+                self.send_response(404); self.end_headers(); return
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Cache-Control", "max-age=600")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if self.path.startswith("/thumb/"):
             parts = self.path[len("/thumb/"):].split("/")
             data = thumb(*parts) if len(parts) == 2 and all(
