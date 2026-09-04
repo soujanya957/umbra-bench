@@ -29,7 +29,10 @@ from pathlib import Path
 
 import numpy as np
 
-LIGHT = {"cutoff": 40, "exponent": 10, "diffuse": 0.9, "fill": 0.08}
+# exponent 16: a neighbour rig ~1.3 m aside sits ~33 deg off this lamp's
+# axis -- cos^16 puts it at ~6% intensity, so its secondary "ghost" shadow
+# of this trio fades out, while the on-axis pool still spans a letter
+LIGHT = {"cutoff": 40, "exponent": 16, "diffuse": 0.9, "fill": 0.08}
 
 BENCH = Path(__file__).resolve().parent.parent
 FSA = BENCH.parent / "fleet-shadow-art"

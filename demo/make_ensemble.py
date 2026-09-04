@@ -148,6 +148,13 @@ def main():
         if a.scene and scene != a.scene:
             continue
         scenes.setdefault(scene, []).append(sid)
+    # one trio per ELEMENT: a _stab variant on the assignment board is the
+    # same element as its parent (clip_for already resolves the parent to
+    # the stab solve) -- both present meant two trios on one spot, twin
+    # arms and twin shadows (family scene_06 grew L and L_stab rigs)
+    for scene, sids in scenes.items():
+        scenes[scene] = [x for x in sids
+                         if not (x.endswith("_stab") and x[:-5] in sids)]
 
     out_dir = Path(a.out)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -155,12 +162,20 @@ def main():
     for scene, sids in sorted(scenes.items()):
         entries, id_sets = [], []
         for sid in sids:
+            # geometry and timing ALWAYS come from the parent footage: a
+            # _stab sid's sequence is stabilised -- travel removed, content
+            # centred -- so placing from it would erase the very motion the
+            # ensemble exists to restore
+            ass_sid = sid
+            if sid.endswith("_stab") and (BENCH / "sequences" / sid[:-5]
+                                          / "source.json").exists():
+                sid = sid[:-5]
             seq = BENCH / "sequences" / sid
             if not (seq / "source.json").is_dir() and not (seq / "source.json").exists():
                 print(f"  {sid}: no authored sequence, skipped")
                 continue
             src = json.loads((seq / "source.json").read_text(encoding="utf-8"))
-            clip = clip_for(sid, ass_all[sid])
+            clip = clip_for(sid, ass_all[ass_sid])
             if clip is None:
                 print(f"  {sid}: nothing assigned/solved to play, skipped")
                 continue
