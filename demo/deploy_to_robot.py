@@ -33,20 +33,38 @@ async def deploy_clip(name: str, arms: str, hz: int, ramp_s: float,
     import websockets
     clip = json.loads((CHOREO / f"{name}.json").read_text(encoding="utf-8"))
     fleet_ids = [a.split("|")[0] for a in arms.split(",") if a]
-    # clip robot ids map positionally onto the fleet, ordered by base.x —
-    # the same remap the Play page does on load
-    robots = sorted(clip["robots"], key=lambda r: r["base"]["x"])
+    # The Play page's remap, reproduced exactly (mapClipRobots): pass 1 is an
+    # EXACT id match, pass 2 assigns remaining clip lanes IN CLIP-ARRAY ORDER
+    # onto free fleet arms in roster order. (An earlier base.x sort here could
+    # swap lanes between physical arms whenever clip ids and stage order
+    # disagreed -- clip_01A.json does.)
+    lanes = [r for r in clip["robots"] if r.get("frames")]
+    free = [f for f in fleet_ids if f not in {r["id"] for r in lanes}]
+    mapping, unmapped = [], []
+    for r in lanes:
+        if r["id"] in fleet_ids:
+            mapping.append((r["id"], r))
+        elif free:
+            mapping.append((free.pop(0), r))
+        else:
+            unmapped.append(r["id"])
+    if unmapped:
+        print(f"  {name}: NO ARM for clip lane(s) {', '.join(unmapped)} -- "
+              f"the fleet has {len(fleet_ids)} arm(s), the clip needs "
+              f"{len(lanes)}. Refusing a partial performance; add the "
+              "missing arms to --arms or deploy a smaller clip.")
+        return False
     payload = [{"id": fid, "start_frame": r.get("start_frame", 0),
-                "frames": r["frames"]}
-               for fid, r in zip(fleet_ids, robots) if r.get("frames")]
+                "frames": r["frames"]} for fid, r in mapping]
     if not payload:
-        print(f"  {name}: no frames for the given arms, skipped")
+        print(f"  {name}: clip carries no frames, skipped")
         return True
+    use_hz = hz if hz is not None else int(clip.get("hz", 30))
     url = (f"{backend}/ws/deploy?arms={urllib.parse.quote(arms)}"
-           f"&hz={int(clip.get('hz', hz))}")
+           f"&hz={use_hz}")
     n = clip.get("n_frames", "?")
-    print(f"\n=== {name}  ({len(payload)} arms, {n} frames "
-          f"@ {clip.get('hz', hz)} Hz, ramp {ramp_s}s) ===")
+    print(chr(10) + f"=== {name}  ({len(payload)} arms, {n} frames "
+          f"@ {use_hz} Hz, ramp {ramp_s}s) ===")
     async with websockets.connect(url, max_size=64 * 1024 * 1024) as ws:
         while True:
             try:
@@ -83,6 +101,19 @@ async def deploy_clip(name: str, arms: str, hz: int, ramp_s: float,
 
 
 async def main_async(a) -> int:
+    ids = []
+    for entry in a.arms.split(","):
+        parts = entry.split("|")
+        if len(parts) != 4 or not all(pt.strip() for pt in parts):
+            print(f"[!] bad --arms entry {entry!r}: need ID|PORT|MODEL|CONN")
+            return 1
+        ids.append(parts[0])
+    dups = {i2 for i2 in ids if ids.count(i2) > 1}
+    if dups:
+        print(f"[!] duplicated fleet id(s) in --arms: {', '.join(sorted(dups))}"
+              " -- one lane would silently never play and its serial port "
+              "would stay claimed; fix the list.")
+        return 1
     for i, name in enumerate(a.clip):
         if not (CHOREO / f"{name}.json").exists():
             print(f"[!] {name}: not in {CHOREO}")
@@ -105,7 +136,9 @@ def main():
                     help="ID|PORT|MODEL|CONN,... e.g. SR101|COM3|so-101|serial")
     ap.add_argument("--clip", action="append", required=True,
                     help="choreography name; repeat for a sequence of clips")
-    ap.add_argument("--hz", type=int, default=30)
+    ap.add_argument("--hz", type=int, default=None,
+                    help="override the clip's own hz (default: play as "
+                         "authored -- every packed clip is 30)")
     ap.add_argument("--ramp", type=float, default=2.0)
     ap.add_argument("--backend", default="ws://127.0.0.1:8001")
     a = ap.parse_args()

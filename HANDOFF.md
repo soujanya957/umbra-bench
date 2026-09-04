@@ -365,3 +365,37 @@ index; hash-identity is diagnostic only beside a recorded reason; a check
 that passes for a reason unrelated to what it checks is the night's
 recurring bug shape, in both directions; and when you fix a decision site,
 making it log is part of the fix.
+
+## Demo studio on another machine (handoff audit, 2026-09-03)
+
+The studio spawns everything from four conda envs resolved as
+`~/miniconda3/envs/<name>/python.exe` — the names are load-bearing:
+
+| env | used for |
+|---|---|
+| `umbra-bench` | studio server + CPU pipeline steps |
+| `fh_l1` | SAM2 video segmentation (CUDA torch) |
+| `fleet-shadow` | solver, MuJoCo ensemble viewer, robot deploy |
+| `lerobot` | only its `Library/bin/ffmpeg` (ffprobe there is broken by design — the OpenCV fallback handles it) |
+
+An anaconda3 install or different env names = every studio button fails at
+spawn. Segmentation also needs a SAM2 checkpoint: set the `SAM2_CKPT`
+environment variable to your `sam2.1_hiera_small.pt` (the default path
+points into the owner's animal_inspired_BC checkout).
+
+Robot-side data lives in the fleet-shadow-art repo (`choreographies/`,
+`arrangements/`, `ensembles/` — tracked since ff9d7c7). After re-packing in
+the studio, copy `demo/packages/<project>/choreo/*` over — the package
+README prints the exact paths; nothing syncs automatically.
+
+Known caveats for operators:
+- The studio's "deploy to robot" plays a scene's clips SEQUENTIALLY (own
+  ramp per clip, ~3.5 s longer per seam); the Play page's Deploy of a
+  compiled arrangement is the crossfaded, music-timed version.
+- Solves whose fit shows `touches_edge` were measured through a cropped
+  1.2 m render window; the ensemble generator prints a warning per clip —
+  those shadows will look wider on the real/simulated wall than in solve
+  previews.
+- Atlas from a fresh clone needs `results/` payloads rebuilt first:
+  `scripts/_build_browser_payload.py`, `_build_teleop_payload.py`, then
+  the studio atlas button.

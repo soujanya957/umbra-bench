@@ -41,8 +41,11 @@ _spec = importlib.util.spec_from_file_location("sam_seg", ROOT / "04_sam_segment
 _seg = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_seg)
 
-SAM2_CKPT = ("C:/Users/hexia/Documents/GitHub/animal_inspired_BC/thirdparty/"
-             "sam2/checkpoints/sam2.1_hiera_small.pt")
+# other machines: point the SAM2_CKPT environment variable at your copy
+SAM2_CKPT = __import__("os").environ.get(
+    "SAM2_CKPT",
+    "C:/Users/hexia/Documents/GitHub/animal_inspired_BC/thirdparty/"
+    "sam2/checkpoints/sam2.1_hiera_small.pt")
 SAM2_CFG = "configs/sam2.1/sam2.1_hiera_s.yaml"
 
 
@@ -78,6 +81,12 @@ def seeds_for(kp: dict, scene: str):
 def run_sam2(device: str):
     import torch
     from sam2.build_sam import build_sam2_video_predictor
+    import os as _os
+    if not _os.path.exists(SAM2_CKPT):
+        raise SystemExit(
+            f"SAM2 checkpoint not found: {SAM2_CKPT}" + chr(10) +
+            "Download sam2.1_hiera_small.pt (facebook/sam2 releases) and "
+            "point the SAM2_CKPT environment variable at it.")
     pred = build_sam2_video_predictor(SAM2_CFG, SAM2_CKPT, device=device)
     return pred, torch
 

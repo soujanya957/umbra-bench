@@ -205,12 +205,32 @@ def main() -> None:
         print("denominator. Their MRR ratios near 1.0 say shadow and target are equally")
         print("unreadable here, not that the shadow is good.")
 
+    # MERGE, don't truncate: this CSV is shared by every project and every
+    # scoring pass ("--source ... so two passes can sit side by side" was a
+    # lie under mode 'w' -- a one-clip rescore erased the whole table).
+    # Rows are keyed (sequence_id, input, source, frame_idx): re-scored keys
+    # replace their old rows, everything else survives.
+    import os as _os
+    keyf = ("sequence_id", "input", "source", "frame_idx")
+    key = lambda r: tuple(str(r.get(k, "")) for k in keyf)
+    fresh = {key(r) for r in rows}
+    kept = []
+    if _os.path.exists(a.out):
+        with open(a.out, newline="", encoding="utf-8") as f:
+            for r in csv.DictReader(f):
+                if key(r) not in fresh:
+                    kept.append(r)
+    fields = list(rows[0].keys())
+    for r in kept:
+        for k in r:
+            if k not in fields:
+                fields.append(k)
     with open(a.out, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        w = csv.DictWriter(f, fieldnames=fields, restval="")
         w.writeheader()
-        w.writerows(rows)
-    print(f"\nwrote {a.out}  ({len(rows)} rows: per frame, plus one aggregate "
-          f"per clip and condition with frame_idx blank)")
+        w.writerows(kept + rows)
+    print(f"wrote {a.out}  ({len(rows)} fresh rows merged over "
+          f"{len(kept)} kept rows from other clips/passes)")
 
 
 if __name__ == "__main__":

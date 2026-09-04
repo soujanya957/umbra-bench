@@ -87,7 +87,18 @@ def main():
             for l in open(BENCH / "sequences.jsonl", encoding="utf-8")}
     ids = list(a.sequence)
     if a.from_routing:
-        routing = json.loads((ROOT / "out" / "motion_routing.json")
+        rp = ROOT / "out" / "motion_routing.json"
+        try:
+            st = json.loads((ROOT / "out" / "studio_state.json")
+                            .read_text(encoding="utf-8"))
+            pr = (ROOT / "projects" / st.get("project", "")
+                  / "motion_routing.json")
+            if pr.is_file():
+                rp = pr          # the active project's routing, not the
+                                 # stale shared file (per-project migration)
+        except (OSError, json.JSONDecodeError):
+            pass
+        routing = json.loads(rp
                              .read_text(encoding="utf-8"))["routing"]
         ids += [k for k, v in routing.items() if v["lane"] == "static"]
     ids = sorted(set(ids))

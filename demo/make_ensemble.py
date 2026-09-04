@@ -51,61 +51,89 @@ OUT = FSA / "ensembles"
 # mirrors pack.py's CHOREO_SCENE / the UI's stageProjection constants
 SCENE = {"lightX": -1.0, "lightY": 0, "lightH": 0.85, "screenX": 2.4}
 SCREEN_W_FILM = 1.3 * 1.7          # metres spanned by the full canvas width
-CANVAS_PX = 1920
 Z_MID = 0.2                        # trio arms sit at depth 0/0.2/0.4
 MAGNIFICATION = (SCENE["screenX"] - SCENE["lightX"]) / (Z_MID - SCENE["lightX"])
+# The solver's render window is NOT the UI wall: renderer.py frames its
+# shadow camera to a 0.6 m half-extent wall, so a best_shadow fraction is a
+# fraction of 1.2 m (audit: treating it as 2.21 m made every measured width
+# and offset 1.84x too large). Rigs differ too: clip solves ran the default
+# arm_gap 0.15 rig, the letter library the 0.2 rig.
+SOLVER_SPAN = 1.2
+MAG_CLIP_RIG = 3.3 / 1.15
+MAG_LIB_RIG = 3.4 / 1.2
 
 
-def shadow_geometry(clip: str) -> tuple[float, float]:
-    """(centre_off_m, width_m) of the clip's cast shadow on the UI wall when
-    its trio stands at lateral 0 — measured from the solve's own best render
-    (the UI maps the solver frame onto SCREEN_W_FILM metres of wall, so a
-    content fraction IS a wall fraction). This is the 'reverse' half of the
-    placement: where the shadow already sits, so the trio can be moved by
-    exactly (where it must sit − where it sits)."""
-    import glob as _glob
-    p = None
-    white = True
+def shadow_geometry(clip: str):
+    """(off_arm_per_frame, width_arm, note) — the solve's own cast, measured
+    AT THE ARM PLANE (silhouette metres), so any ensemble magnification can
+    re-project it. Per-frame offsets are the fix for travel double-counting:
+    a raw sequence solve keeps the footage's motion in its joints, so its
+    blob WALKS across the solver frame — subtracting only frame 0's offset
+    replayed that walk on top of the rig glide. A _stab solve's offsets are
+    ~constant, so the same code handles both."""
+    def measure(path, white):
+        g = np.array(Image.open(path).convert("L"))
+        m = g > 128
+        if not white and m.mean() > 0.5:
+            m = ~m
+        ys, xs = np.where(m)
+        if not len(xs):
+            return None
+        W = m.shape[1]
+        return ((xs.mean() / W) - 0.5, (xs.max() - xs.min() + 1) / W)
+
     run = BENCH / "optimized" / clip
     js = sorted(run.glob("summary_*.json"))
-    if js:                                  # a sequence solve: first frame
+    if js:                                  # a sequence solve
         ts = js[-1].stem[len("summary_"):]
-        sh = sorted(run.glob(f"frame_*_{ts}/best_shadow.png"))
-        p = sh[0] if sh else None
-    if p is None:                           # a library id: the benchmark best
-        rows = {json.loads(l)["id"]: json.loads(l)
-                for l in open(BENCH / "metadata.jsonl", encoding="utf-8")}
-        if clip in rows:
-            rec = rows[clip]
-            p = (BENCH / "optimized" / "big-budget-grounded" / rec["subset"]
-                 / Path(rec["target"]).stem
-                 / (Path(rec["target"]).stem + "_best.png"))
-            white = False                   # polarity = minority side
-    if p is None or not p.exists():
-        return 0.0, 0.9                     # unknown: centred, generic width
-    g = np.array(Image.open(p).convert("L"))
-    m = g > 128
-    if not white and m.mean() > 0.5:
-        m = ~m
-    ys, xs = np.where(m)
-    if not len(xs):
-        return 0.0, 0.9
-    W = m.shape[1]
-    off = (xs.mean() / W - 0.5) * SCREEN_W_FILM
-    width = (xs.max() - xs.min() + 1) / W * SCREEN_W_FILM
-    return float(off), float(width)
+        note = None
+        try:
+            tf = (json.loads(js[-1].read_text(encoding="utf-8"))
+                  .get("target_fit")) or {}
+            if tf.get("touches_edge") or (tf.get("clip_frac") or 0) > 0.02:
+                note = (f"{clip}: solve content touches the 1.2 m render "
+                        "edge -- measured width underestimates the real "
+                        "cast, cropped limbs will reappear on the wall")
+        except (OSError, json.JSONDecodeError):
+            pass
+        ms = [measure(p2, True)
+              for p2 in sorted(run.glob(f"frame_*_{ts}/best_shadow.png"))]
+        ms = [m for m in ms if m]
+        if ms:
+            mag = MAG_CLIP_RIG
+            offs = [f * SOLVER_SPAN / mag for f, w in ms]
+            width = float(np.median([w for f, w in ms])) * SOLVER_SPAN / mag
+            return offs, width, note
+    rows = {json.loads(l)["id"]: json.loads(l)
+            for l in open(BENCH / "metadata.jsonl", encoding="utf-8")}
+    if clip in rows:                        # a library id
+        rec = rows[clip]
+        p2 = (BENCH / "optimized" / "big-budget-grounded" / rec["subset"]
+              / Path(rec["target"]).stem
+              / (Path(rec["target"]).stem + "_best.png"))
+        if p2.exists():
+            m = measure(p2, False)
+            if m:
+                mag = MAG_LIB_RIG
+                return ([m[0] * SOLVER_SPAN / mag],
+                        m[1] * SOLVER_SPAN / mag, None)
+    return [0.0], 0.32, None                # unknown: centred, generic arm
 
 
-def canvas_centroids(sid: str) -> tuple[list[float], float]:
-    """Per-frame authored centroid x (canvas px) and median bbox width px."""
+def canvas_centroids(sid: str):
+    """Per-frame authored centroid x/y (canvas px), median bbox width px,
+    and THIS sequence's canvas width -- pixar footage is 1280 wide, icra
+    1640, family 1920; a hard-coded 1920 shoved every pixar trio 1.67 m
+    off centre and inflated its screen share (the audit's finding #2)."""
     seq = BENCH / "sequences" / sid
     src = json.loads((seq / "source.json").read_text(encoding="utf-8"))
     crop = src["crop"]
+    cw = float((src.get("canvas") or {}).get("w") or 1920)
     side = crop["pad_side"]
     ox = (side - crop["w"]) // 2
     oy = (side - crop["h"]) // 2
     cxs, cys, widths = [], [], []
-    last, lasty = CANVAS_PX / 2, 540.0
+    last, lasty = cw / 2, 540.0
     for fp in sorted(seq.glob("f*.png")):
         au = np.array(Image.open(fp).convert("L")) < 128
         ys, xs = np.where(au)
@@ -116,7 +144,7 @@ def canvas_centroids(sid: str) -> tuple[list[float], float]:
             widths.append((xs.max() - xs.min() + 1) * k)
         cxs.append(last)
         cys.append(lasty)
-    return cxs, cys, float(np.median(widths)) if widths else 100.0
+    return cxs, cys, (float(np.median(widths)) if widths else 100.0), cw
 
 
 def clip_for(sid: str, ass: dict) -> str | None:
@@ -196,23 +224,25 @@ def main():
         M_COMFORT = 2.0                  # the median group sits here
         geo = {}
         for sid, clip, ids, step, src in id_sets:
-            off_ref, w_ref = shadow_geometry(clip)
-            cxs, cys, wpx = canvas_centroids(sid)
-            geo[sid] = (off_ref, w_ref, wpx, cxs, cys)
-        # widen the shared screen until the MEDIAN element's film share equals
-        # its shadow at the comfort magnification; relative size differences
-        # between elements then live in per-group depth (their own throw)
+            offs, w_arm, note = shadow_geometry(clip)
+            if note:
+                print(f"  [!] {note}")
+            cxs, cys, wpx, cw = canvas_centroids(sid)
+            geo[sid] = (offs, w_arm, wpx, cxs, cys, cw)
+        # widen the shared screen until the MEDIAN element's film share
+        # equals its shadow at the comfort magnification; relative size
+        # differences between elements then live in per-group depth
         w_v = float(np.clip(np.median(
-            [w_ref * (M_COMFORT / MAGNIFICATION) * CANVAS_PX / max(wpx, 1.0)
-             for off_ref, w_ref, wpx, cxs, cys in geo.values()]),
+            [w_arm * M_COMFORT * cw / max(wpx, 1.0)
+             for offs, w_arm, wpx, cxs, cys, cw in geo.values()]),
             SCREEN_W_FILM, 10.0))
         for sid, clip, ids, step, src in id_sets:
-            off_ref, w_ref, wpx, cxs, cys = geo[sid]
+            offs, w_arm, wpx, cxs, cys, cw = geo[sid]
             # airborne moments: translating the rigid rig (arms + lamp)
             # up by h raises the shadow by exactly h, so lift is the
             # authored centroid's rise above its own resting baseline,
             # at the SAME metres-per-pixel as the lateral mapping
-            mpp = w_v / CANVAS_PX
+            mpp = w_v / cw
             # 90th percentile, not max: one squashed frame (the lamp
             # flattening the I) must not hoist every other frame into
             # the air as false "lift"
@@ -220,8 +250,8 @@ def main():
             lift = [max(0.0, (base_y - cy) * mpp) for cy in cys]
             if max(lift, default=0.0) < 0.04:
                 lift = [0.0] * len(cys)     # centroid jitter, not a jump
-            want_w = wpx / CANVAS_PX * w_v
-            m_i = float(np.clip(MAGNIFICATION * want_w / max(w_ref, 1e-6),
+            want_w = wpx / cw * w_v
+            m_i = float(np.clip(want_w / max(w_arm, 1e-6),
                                 1.7, 6.0))   # floor 1.7: closer than
                                               # ~0.8 m to the wall reads as
                                               # arms standing IN their shadow
@@ -234,9 +264,9 @@ def main():
                 "n_frames": len(ids),
                 "mag": round(m_i, 3),
                 "depth_m": round(depth, 3),
-                "lat_path_m": [round(((cx / CANVAS_PX) - 0.5) * w_v
-                                     - off_ref * m_i / MAGNIFICATION, 4)
-                               for cx in cxs],
+                "lat_path_m": [round(((cx / cw) - 0.5) * w_v
+                                     - offs[min(k, len(offs) - 1)] * m_i, 4)
+                               for k, cx in enumerate(cxs)],
                 "lift_path_m": [round(v, 4) for v in lift],
                 "light": {"ddepth": -round(A_RIG, 3), "h": 0.30},
             })
