@@ -97,6 +97,11 @@ def main():
     p.add_argument("--no-attributes", action="store_true")
     p.add_argument("--full", action="store_true",
                    help="ignore the incremental cache; rebuild every record")
+    p.add_argument("--only", default=None,
+                   help="sid prefix (e.g. pixar_scene_): touch ONLY matching "
+                        "sequences; every other record passes through "
+                        "verbatim, so one project's rebuild -- even with "
+                        "--full -- cannot rewrite another's rows")
     a = p.parse_args()
 
     root = os.path.join(a.bench, a.seq_dir)
@@ -113,7 +118,7 @@ def main():
     # recomputes just that sequence.
     prev = {}
     out_path = os.path.join(a.bench, a.out)
-    if not a.full and os.path.exists(out_path):
+    if os.path.exists(out_path):
         with open(out_path, encoding="utf-8") as f:
             for line in f:
                 if line.strip():
@@ -134,9 +139,14 @@ def main():
         d = os.path.join(root, sid)
         if not os.path.isdir(d):
             continue
+        if a.only and not sid.startswith(a.only):
+            if sid in prev:                 # out of scope: pass through
+                records.append(prev[sid])
+                reused += 1
+            continue
         fp = fingerprint(d)
         old_rec = prev.get(sid)
-        if old_rec is not None and old_rec.get("_fp") == fp:
+        if old_rec is not None and not a.full and old_rec.get("_fp") == fp:
             records.append(old_rec)
             reused += 1
             continue

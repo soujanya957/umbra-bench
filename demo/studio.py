@@ -355,7 +355,8 @@ def build_job(step: str, arg: str | None):
                  [PY_EVAL, str(ROOT / "07_make_sequences.py"),
                   "--in", "letters_sam2_small", "--keypoints", "keypoints.json",
                   "--prefix", f"{P}_"],
-                 [PY_EVAL, str(BENCH / "scripts" / "build_sequence_metadata.py")]],
+                 [PY_EVAL, str(BENCH / "scripts" / "build_sequence_metadata.py"),
+                  "--only", f"{P}_scene_"]],
                 pdir(P), False)
     if step == "clean":
         if not P:
@@ -371,11 +372,15 @@ def build_job(step: str, arg: str | None):
         return ([[PY_EVAL, str(ROOT / "07_make_sequences.py"),
                   "--in", "letters_sam2_small", "--keypoints", "keypoints.json",
                   "--prefix", f"{P}_"],
-                 [PY_EVAL, str(BENCH / "scripts" / "build_sequence_metadata.py")]],
+                 [PY_EVAL, str(BENCH / "scripts" / "build_sequence_metadata.py"),
+                  "--only", f"{P}_scene_"]],
                 pdir(P), False)
     if step == "index":
+        if not P:
+            return "no active project"
         return ([[PY_EVAL, str(BENCH / "scripts" /
-                               "build_sequence_metadata.py")]], BENCH, False)
+                               "build_sequence_metadata.py"),
+                  "--only", f"{P}_scene_"]], BENCH, False)
     if step == "route":
         P = active_project()
         if not P:
