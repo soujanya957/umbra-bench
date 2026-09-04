@@ -98,6 +98,12 @@ def fig_base():
 
 
 # ---------------------------------------------------------------- figure 2
+def glyph_label(gid):
+    """letters_upper_L_dejavusans-bold -> L"""
+    core = gid.rsplit("_", 1)[0]
+    return core.replace("letters_upper_", "").replace("letters_lower_", "").replace("digits_", "")
+
+
 def fig_nsweep():
     path = os.path.join(ROOT, "optimized", "nsweep-letters-digits", "nsweep_summary.csv")
     if not os.path.exists(path):
@@ -114,6 +120,7 @@ def fig_nsweep():
     for ax, bud in zip(axes, budgets):
         sub = [r for r in rows if r["budget"] == bud]
         ns = sorted({int(r["n_robots"]) for r in sub})
+        ends = []
         for g in glyphs:
             ys = []
             for n in ns:
@@ -122,8 +129,16 @@ def fig_nsweep():
                 ys.append(st.mean(v) if v else float("nan"))
             ax.plot(ns, ys, color=colours[g], lw=2, marker="o", ms=5,
                     zorder=3, clip_on=False)
-            ax.annotate(g.split("_")[-2] if g.count("_") > 1 else g,
-                        (ns[-1], ys[-1]), xytext=(4, 0),
+            ends.append([ys[-1], g])
+        # Nudge direct labels apart so near-equal endpoints stay legible.
+        ends.sort()
+        span = 0.5  # matches the y-range set below
+        min_gap = span * 0.045
+        for i in range(1, len(ends)):
+            if ends[i][0] - ends[i - 1][0] < min_gap:
+                ends[i][0] = ends[i - 1][0] + min_gap
+        for y_lab, g in ends:
+            ax.annotate(glyph_label(g), (ns[-1], y_lab), xytext=(5, 0),
                         textcoords="offset points", va="center",
                         fontsize=7.5, color=colours[g])
         mean_ys = [st.mean([num(r["best_iou"]) for r in sub
