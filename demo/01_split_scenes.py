@@ -477,9 +477,38 @@ def main() -> None:
                     print(f"  found {len(runs)} separator run(s), "
                           f"{dropped} frame(s) dropped")
                 else:
+                    # Say WHICH gate failed. A separator is two conditions --
+                    # bright on average AND no dark pixel -- and reporting
+                    # only the first made a video whose separators measure
+                    # YAVG 232 / YMIN 143 print "brightest averages 232,
+                    # needs >= 225", which reads as if it passed. It then
+                    # fell through to content detection, found no cuts, and
+                    # produced ONE scene for a three-scene cut.
                     brightest = max(a for a, _ in stats)
-                    print(f"  none found (brightest frame averages "
-                          f"{brightest:.0f}/255, needs >= {args.white_yavg:.0f})")
+                    lit = [m for a, m in stats if a >= args.white_yavg]
+                    if not lit:
+                        print(f"  none found: no frame reaches YAVG "
+                              f"{args.white_yavg:.0f} (brightest "
+                              f"{brightest:.0f}/255)")
+                    else:
+                        best = max(lit)
+                        print(f"  none found: {len(lit)} frame(s) ARE bright "
+                              f"enough (YAVG >= {args.white_yavg:.0f}, "
+                              f"brightest {brightest:.0f}) -- but their "
+                              f"darkest pixel is {best:.0f}, under "
+                              f"--white-ymin {args.white_ymin:.0f}")
+                        # A vignette, a letterbox edge or a limited-range
+                        # encode all pull YMIN down on a card that is white
+                        # to the eye. Only suggest a floor that actually
+                        # resolves scenes, so the number can be trusted.
+                        sug = math.floor(best) - 5
+                        probe_runs = white_runs(stats, args.white_yavg, sug)
+                        if probe_runs:
+                            n_seg = len(segments_from_white(len(stats),
+                                                            probe_runs))
+                            print(f"        --white-ymin {sug:g} accepts them:"
+                                  f" {len(probe_runs)} separator run(s) -> "
+                                  f"{n_seg} scene(s)")
                     if args.mode == "white":
                         sys.exit("No white separators. Re-export with them, "
                                  "or use --mode scene.")
