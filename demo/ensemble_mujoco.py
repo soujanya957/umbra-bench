@@ -194,6 +194,10 @@ def main():
     ap.add_argument("--speed", type=float, default=1.0)
     ap.add_argument("--snapshot", default=None,
                     help="render frame at --at seconds to a PNG and exit")
+    ap.add_argument("--record", default=None,
+                    help="render the whole film timeline offscreen to this "
+                         "mp4 (30 fps) and exit -- the screen recording, "
+                         "without a screen")
     ap.add_argument("--at", type=float, default=1.0)
     ap.add_argument("--cam", default=None,
                     help="az,el,dist,lx,ly,lz override")
@@ -270,6 +274,22 @@ def main():
             cam.azimuth, cam.elevation, cam.distance = v[0], v[1], v[2]
             if len(v) == 6:
                 cam.lookat = v[3:6]
+
+    if a.record:
+        import cv2
+        ren = mujoco.Renderer(model, height=720, width=1280)
+        cam = mujoco.MjvCamera()
+        default_cam(cam)
+        vw = cv2.VideoWriter(a.record, cv2.VideoWriter_fourcc(*"mp4v"),
+                             30, (1280, 720))
+        n = int(total * 30) + 30            # a second of held ending
+        for k in range(n):
+            pose_at(min(k / 30.0, total - 1e-3))
+            ren.update_scene(data, camera=cam)
+            vw.write(cv2.cvtColor(ren.render(), cv2.COLOR_RGB2BGR))
+        vw.release()
+        print(f"recorded {n} frames ({n / 30:.1f}s) -> {a.record}")
+        return
 
     if a.snapshot:
         pose_at(min(a.at, total - 1e-3))
