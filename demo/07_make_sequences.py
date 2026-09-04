@@ -217,7 +217,11 @@ def main() -> None:
                 # first-to-last transition that is never performed.
                 "loop": False, "n_frames": len(frame_ids), "size": a.size,
                 "fps": fps, "source_fps": a.src_fps, "sample_every": a.sample,
-                "scene": kp[frame_ids[0]]["scene"],
+                # scenes/ tree first: a video-propagated frame (seed not on
+                # the scene's first frame -- backward propagation) has no
+                # keypoint record, and kp[...] KeyError'd exactly there
+                "scene": (scene_of.get(frame_ids[0])
+                          or kp.get(frame_ids[0], {}).get("scene")),
                 "project": prefix.rstrip("_"),
                 "letter": name.split("_")[-1],
                 "frame_ids": frame_ids,
