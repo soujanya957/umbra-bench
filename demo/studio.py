@@ -262,7 +262,9 @@ def mount_jobs(P):
             [PY_EVAL, str(ROOT / "08_reassemble.py")] + sum(
                 [["--sequence", d.name] for d in
                  sorted((BENCH / "sequences").glob("*_stab"))
-                 if (BENCH / "optimized" / d.name).is_dir()], [])]
+                 if (BENCH / "optimized" / d.name).is_dir()
+                 and "crop" in (d / "source.json").read_text(
+                     encoding="utf-8")], [])]
     if P:
         for sid, ass in sorted(assignments(P).items()):
             if ass.get("mode") == "library" and ass.get("library_id"):

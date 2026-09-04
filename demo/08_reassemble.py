@@ -106,6 +106,10 @@ def reassemble(name: str, out_root: Path, fps: float | None, check: bool,
 
     fit = summ.get("target_fit")
     inv = invert(fit) if fit else None
+    if "crop" not in src:
+        print(f"  {name}: generated sequence (no crop) -- nothing to place "
+              "back on a canvas, skipped")
+        return False
     crop, canvas = src["crop"], src["canvas"]
     side = crop["pad_side"]
     ox, oy = (side - crop["w"]) // 2, (side - crop["h"]) // 2
