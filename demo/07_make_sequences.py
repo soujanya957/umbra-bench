@@ -192,6 +192,13 @@ def main() -> None:
             continue
 
         d = (out / a.seq_dir / name) if a.seq_dir else (out / name)
+        if d.is_dir():
+            # a REBUILD must not inherit the previous build's frames: stale
+            # f*.png beyond the new count desynchronise every consumer that
+            # globs the dir against frame_ids (family M carried 30 files
+            # over 14 ids after a re-label)
+            for old in d.glob("f*.png"):
+                old.unlink()
         d.mkdir(parents=True, exist_ok=True)
         tiles, frame_ids = [], []
         for idx, (fid, p) in enumerate(items):

@@ -100,7 +100,11 @@ def reassemble(name: str, out_root: Path, fps: float | None, check: bool,
     # is solved ONCE and held -- one best_shadow replicated across the clip's
     # frame ids, so the composite still gets a frame per source frame.
     held = False
-    if hold and len(shots) == 1 and len(src.get("frame_ids") or []) > 1:
+    # AUTOMATIC now, not opt-in: a 1-frame solve of a multi-frame sequence
+    # is always the static lane's held pose. Without this the composite and
+    # the overlay showed the element for ONE film frame and then dropped it
+    # (the old icra snake vanished exactly like that).
+    if len(shots) == 1 and len(src.get("frame_ids") or []) > 1:
         shots = shots * len(src["frame_ids"])
         held = True
 
