@@ -226,13 +226,22 @@ def routing() -> dict:
     # per-project since the projects went their own ways; the shared file
     # stays as a fallback for pre-migration workspaces
     P = active_project()
+    rt = {}
     for f in ([pdir(P) / "motion_routing.json"] if P else []) + [
             ROOT / "out" / "motion_routing.json"]:
         try:
-            return json.loads(f.read_text(encoding="utf-8"))["routing"]
+            rt = json.loads(f.read_text(encoding="utf-8"))["routing"]
+            break
         except (OSError, KeyError, json.JSONDecodeError):
             continue
-    return {}
+    # the router PROPOSES, the owner DISPOSES: a lane stored on the
+    # assignment board overrides the computed one and survives re-routes
+    if P:
+        for sid, ass in assignments(P).items():
+            if ass.get("lane"):
+                rt.setdefault(sid, {})["lane"] = ass["lane"]
+                rt[sid]["lane_override"] = True
+    return rt
 
 
 def solve_jobs(sid: str) -> list:
@@ -752,6 +761,7 @@ def state() -> dict:
             "id": sid,
             "project": sid.split("_scene_")[0],
             "lane": rt.get(sid, {}).get("lane"),
+            "lane_override": bool(rt.get(sid, {}).get("lane_override")),
             "solved": solved,
             "assign": mode,
             "library_id": ass.get("library_id"),
@@ -1119,6 +1129,27 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(200, {"ok": True, "removed": removed,
                                     "note": "re-run 3 to rebuild sequences "
                                             "without this frame"})
+        if self.path == "/api/lane":
+            try:
+                body = json.loads(self.rfile.read(
+                    int(self.headers.get("Content-Length", 0))))
+            except (ValueError, json.JSONDecodeError):
+                return self._json(400, {"error": "bad body"})
+            P = active_project()
+            sid = str(body.get("seq", ""))
+            lane = body.get("lane")
+            if not P or not NAME_RE.match(sid):
+                return self._json(400, {"error": f"bad sequence {sid!r}"})
+            if lane not in ("static", "translation", "dynamic", None):
+                return self._json(400, {"error":
+                                        "lane: static|translation|dynamic|null"})
+            a = assignments(P)
+            if lane is None:
+                a.get(sid, {}).pop("lane", None)
+            else:
+                a.setdefault(sid, {})["lane"] = lane
+            save_assignments(P, a)
+            return self._json(200, {"ok": True, "lane": lane})
         if self.path == "/api/assign":
             try:
                 body = json.loads(self.rfile.read(

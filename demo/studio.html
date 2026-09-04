@@ -280,7 +280,9 @@ async function refresh(){
     + rows.map(q => `<tr>
         <td class="mono" title="${q.id}">${showAll ? q.id :
             q.id.replace((S.project || "") + "_", "")}</td>
-        <td class="lane-${q.lane || "dynamic"}">${q.lane || "?"}</td>
+        <td class="lane-${q.lane || "dynamic"}" style="cursor:pointer"
+            title="click to override the lane (auto - static - translation - dynamic); * = your override, survives re-route"
+            onclick="cycleLane('${q.id}', '${q.lane || ""}', ${q.lane_override ? 1 : 0})">${q.lane || "?"}${q.lane_override ? "*" : ""}</td>
         <td class="mono" style="color:${q.resolved ? "var(--ok)" : "var(--warn)"}">${
           q.assign === "library" ? "lib: " + (q.library_id || "?")
           : q.assign === "sequence" ? "seq: " + (q.donor || "?")
@@ -649,6 +651,23 @@ async function deployRobot(){
   const j = await r.json();
   if(j.error) toast(j.error);
   else toast('deploy console opened — closing that window = E-STOP');
+}
+
+async function cycleLane(sid, cur, overridden){
+  const order = ["static", "translation", "dynamic"];
+  let next;
+  if(!overridden) next = order[(order.indexOf(cur) + 1) % 3];
+  else {
+    const i = order.indexOf(cur);
+    next = (i === 2) ? null : order[i + 1];   // past dynamic -> back to auto
+  }
+  const r = await fetch("/api/lane", {method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({seq: sid, lane: next})});
+  const j = await r.json();
+  if(j.error) toast(j.error);
+  else toast(next ? `lane -> ${next} (override)` : "lane -> auto (router decides)");
+  refresh();
 }
 
 /* ---- sequence motion preview: library seq thumbs play their frames ---- */
