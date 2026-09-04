@@ -83,6 +83,8 @@ def main():
     ap.add_argument("--min-gain", type=float, default=1.10,
                     help="union-bbox shrink factor from stabilising that "
                          "earns the translation lane")
+    ap.add_argument("--out", default=None,
+                    help="routing json path (default demo/out/motion_routing.json)")
     a = ap.parse_args()
 
     recs = [json.loads(l) for l in
@@ -129,7 +131,8 @@ def main():
         print(f"{r['id']:<24}{which:<13}{step:>9.3f}"
               f"{(f'{gain:.2f}x' if gain else '-'):>10}   {cmd[:64]}")
 
-    out = ROOT / "out" / "motion_routing.json"
+    out = Path(a.out) if getattr(a, "out", None) else (
+        ROOT / "out" / "motion_routing.json")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({"static_iou": a.static_iou, "min_gain": a.min_gain,
                                "routing": routing}, indent=1), encoding="utf-8")

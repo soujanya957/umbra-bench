@@ -95,6 +95,8 @@ def main():
     p.add_argument("--seq-dir", default="sequences")
     p.add_argument("--out", default="sequences.jsonl")
     p.add_argument("--no-attributes", action="store_true")
+    p.add_argument("--full", action="store_true",
+                   help="ignore the incremental cache; rebuild every record")
     a = p.parse_args()
 
     root = os.path.join(a.bench, a.seq_dir)
@@ -104,10 +106,39 @@ def main():
         print("[!] shape_attributes unavailable (needs cv2/scipy/skimage); "
               "frame_attributes will be null -- re-run in the eval env to fill them")
 
+    # Incremental by default: a sequence whose files have not changed keeps
+    # its existing record verbatim (the frame loads + per-frame shape
+    # attributes are what makes a full rebuild slow). The fingerprint is the
+    # file list with sizes and mtimes, so any touched frame or source.json
+    # recomputes just that sequence.
+    prev = {}
+    out_path = os.path.join(a.bench, a.out)
+    if not a.full and os.path.exists(out_path):
+        with open(out_path, encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    r = json.loads(line)
+                    prev[r["id"]] = r
+
+    def fingerprint(d):
+        parts = []
+        for f in sorted(os.listdir(d)):
+            if f.endswith(".png") or f == "source.json":
+                st = os.stat(os.path.join(d, f))
+                parts.append(f"{f}:{st.st_size}:{st.st_mtime_ns}")
+        return "|".join(parts)
+
+    reused = 0
     records = []
     for sid in sorted(os.listdir(root)):
         d = os.path.join(root, sid)
         if not os.path.isdir(d):
+            continue
+        fp = fingerprint(d)
+        old_rec = prev.get(sid)
+        if old_rec is not None and old_rec.get("_fp") == fp:
+            records.append(old_rec)
+            reused += 1
             continue
         # A sequence may declare what it is. The wrap test is a good heuristic
         # for generated loops and a bad one for a film cut, which moves slowly
@@ -162,6 +193,7 @@ def main():
             },
             "rig": {"light": None, "screen_distance_m": None, "camera": None,
                     "n_arms": 5 if sid.endswith("_n5") else (3 if sid.endswith("_n3") else None)},
+            "_fp": fp,
         }
         records.append(rec)
 
@@ -171,7 +203,8 @@ def main():
             f.write(json.dumps(r) + "\n")
 
     nf = sum(r["n_frames"] for r in records)
-    print(f"[metadata] {len(records)} sequences, {nf} frames -> {out}\n")
+    print(f"[metadata] {len(records)} sequences "
+          f"({reused} unchanged, reused), {nf} frames -> {out}")
     print(f"  {'id':<18}{'frames':>7}{'size':>10}{'loop':>7}{'mean step IoU':>15}")
     for r in records:
         m = r["target_motion"]

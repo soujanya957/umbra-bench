@@ -223,11 +223,16 @@ def seq_frames(sid: str) -> list[str]:
 
 
 def routing() -> dict:
-    try:
-        return json.loads((ROOT / "out" / "motion_routing.json")
-                          .read_text(encoding="utf-8"))["routing"]
-    except (OSError, KeyError, json.JSONDecodeError):
-        return {}
+    # per-project since the projects went their own ways; the shared file
+    # stays as a fallback for pre-migration workspaces
+    P = active_project()
+    for f in ([pdir(P) / "motion_routing.json"] if P else []) + [
+            ROOT / "out" / "motion_routing.json"]:
+        try:
+            return json.loads(f.read_text(encoding="utf-8"))["routing"]
+        except (OSError, KeyError, json.JSONDecodeError):
+            continue
+    return {}
 
 
 def solve_jobs(sid: str) -> list:
@@ -372,7 +377,12 @@ def build_job(step: str, arg: str | None):
         return ([[PY_EVAL, str(BENCH / "scripts" /
                                "build_sequence_metadata.py")]], BENCH, False)
     if step == "route":
-        return [[PY_EVAL, "route_motion.py"]], ROOT, False
+        P = active_project()
+        if not P:
+            return "no active project"
+        return ([[PY_EVAL, "route_motion.py",
+                  "--out", str(pdir(P) / "motion_routing.json")]],
+                ROOT, False)
     if step == "solve":
         sid = arg or ""
         if not NAME_RE.match(sid) or not (BENCH / "sequences" / sid).is_dir():
@@ -754,7 +764,9 @@ def state() -> dict:
             "labelled": len(kp),
             "masks": n("letters_sam2_small/by_frame/*/*_mask.png"),
             "clean": n("letters_clean/*_mask.png"),
-            "routed": (ROOT / "out" / "motion_routing.json").exists(),
+            "routed": ((pdir(P) / "motion_routing.json").exists() or
+                       (ROOT / "out" / "motion_routing.json").exists())
+                      if P else False,
         },
         "sequences": seqs,
         "outputs": {
