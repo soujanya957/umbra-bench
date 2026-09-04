@@ -11,6 +11,7 @@ the dataset loadable at every stage.
 umbra-bench/
 ├── metadata.jsonl              # one JSON object per sample (the index)
 ├── CITATIONS.md                # BibTeX + credits for third-party sources
+├── METRICS.md                  # every attribute + metric: definition and purpose
 ├── targets/                    # canonical binary masks, committed (LFS)
 │   ├── digits/                 # generated  — e.g. 7_dejavusans-bold.png
 │   ├── letters_upper/          # generated  — A_dejavuserif.png  (separate dir from
@@ -33,7 +34,10 @@ umbra-bench/
 │   ├── make_targets_glyphs.py  # digits + upper/lower letters (deterministic)
 │   ├── curate_mpeg7.py         # external/MPEG7 → targets/animals
 │   ├── curate_hasper.py        # external/HaSPeR → targets/hand_shadow (exemplars only)
-│   ├── shape_attributes.py     # attribute computation (shared)
+│   ├── shape_attributes.py     # attribute computation (shared, targets + shadows)
+│   ├── metrics.py              # target↔shadow metrics: boundary, topology, thin-structure
+│   ├── semantic_metrics.py     # recognizability: CLIP retrieval, VLM naming, human study
+│   ├── compute_metrics.py      # driver: a sweep or shadows/ → results/metrics_*.csv
 │   └── build_metadata.py       # scan targets/ + shadows/ → metadata.jsonl
 └── results/                    # computed metrics (IoU etc.) — derived, gitignored
 ```
@@ -64,16 +68,18 @@ later HF release is just `datasets.load_dataset` away.
   "target": "targets/digits/7_dejavusans-bold.png",
   "target_source": "generated:dejavusans-bold",
   "attributes": {
-    "n_components": 1,
-    "n_holes": 0,
-    "solidity": 0.62,
-    "convexity_defect_depth_rel": 0.18,
-    "min_stroke_width_rel": 0.055,
-    "median_stroke_width_rel": 0.11,
-    "compactness": 3.4,
-    "aspect_ratio": 0.63,
-    "area_frac": 0.14,
-    "closed_region": true
+    "area_frac": 0.14, "aspect_ratio": 0.63, "solidity": 0.62,
+    "compactness": 3.4, "convexity_defect_depth_rel": 0.18,
+    "min_stroke_width_rel": 0.055, "median_stroke_width_rel": 0.11,
+    "stroke_width_ratio": 0.41, "thin_mass_frac": 0.52, "elongation": 14.2,
+    "skel_len_rel": 1.31, "neck_width_rel": 0.049, "closed_region": true,
+    "n_components": 1, "n_holes": 0, "n_holes_signif": 0, "euler_number": 1,
+    "hole_area_frac": 0.0, "hole_area_frac_max": 0.0,
+    "n_limbs": 3, "n_junctions": 1, "n_concave_extrema": 4,
+    "sym_h": 0.41, "sym_v": 0.55, "contour_hf_energy": 0.12,
+    "ph_h0_total": 0.011, "ph_n_parts_robust": 0,
+    "ph_holes_total_size": 0.0, "ph_hole_max_size": 0.0, "ph_n_holes_robust": 0,
+    "ph_n_pockets_robust": 2, "ph_pocket_max_mouth": 0.031, "ph_entropy": 0.53
   },
   "shadows": {
     "hand":      {"path": null, "captured_at": null, "operator": null, "notes": null},
@@ -93,20 +99,55 @@ auto-fills `path` when the file appears on disk.
 
 ## Attribute definitions
 
-All computed on the binary target mask; `_rel` = normalized by bounding-box diagonal.
+33 attributes in four groups, all computed on the binary target mask by
+`shape_attributes.py`. `_rel` = normalised by the image diagonal, so every length
+is resolution-independent.
 
-- `n_components` — connected components of the shape
-- `n_holes` — enclosed background regions (topology: 0 for C/7, 1 for A/0/6, 2 for 8)
-- `solidity` — area / convex-hull area (1.0 = convex; low = concave, e.g. star)
-- `convexity_defect_depth_rel` — deepest concavity
-- `min_stroke_width_rel`, `median_stroke_width_rel` — 2× distance-transform ridge value;
-  min is taken at the 5th percentile of skeleton values for noise robustness.
-  Expected to be the strongest IoU predictor (arm/prop thickness floor).
-- `compactness` — perimeter² / (4π · area), 1.0 = disk
-- `aspect_ratio` — min/max side of the min-area bounding rect
-- `area_frac` — shape area / image area (scale proxy)
-- `closed_region` — heuristic: median stroke width > 25% of the mask's inscribed
-  radius (blob-like) vs stroke-like (letters/digits are strokes)
+**Full definitions, ranges, and what each attribute is diagnostically for:
+[METRICS.md](METRICS.md), Part A.** Summarised here:
+
+*Scale & geometry* — `area_frac` (scale proxy), `aspect_ratio` (min/max side of the
+min-area rect), `solidity` (area / convex-hull area), `compactness`
+(perimeter²/4π·area, 1.0 = disc), `convexity_defect_depth_rel` (deepest concavity).
+
+*Thinness* — the dominant difficulty axis. `min_`/`median_stroke_width_rel` (2x the
+5th-percentile / median distance-transform value on the skeleton),
+`stroke_width_ratio` (p10/p90 width uniformity), `thin_mass_frac` (share of area
+thinner than 3% of the diagonal — the strongest single IoU predictor),
+`elongation` (skeleton length / median width), `skel_len_rel`, `neck_width_rel`
+(narrowest bridge whose removal splits the shape; `null` if none — the
+topology-fragility number), `closed_region` (blob-like vs stroke-like).
+
+*Topology* — `n_components`, `n_holes` (raw), `n_holes_signif` (holes >=0.5% of shape
+area), `euler_number` (chi = beta0 - beta1), `hole_area_frac`, `hole_area_frac_max`,
+plus persistent-homology summaries of the signed-distance filtration:
+`ph_n_holes_robust` / `ph_hole_max_size` / `ph_holes_total_size` (real holes, graded
+by size), `ph_n_pockets_robust` / `ph_pocket_max_mouth` (concavities that only close
+under dilation), `ph_h0_total` / `ph_n_parts_robust` (near-separable parts),
+`ph_entropy` (structural complexity).
+
+*Structure* — `n_limbs` (skeleton endpoints after pruning branches shorter than 8%
+of the diagonal: horse -> 6, fork -> 5, `0` -> 0), `n_junctions` (branch points by
+Rutovitz crossing number), `n_concave_extrema` (perceptual part count via the
+curvature minima rule), `sym_h` / `sym_v` (self-IoU under reflection),
+`contour_hf_energy` (Fourier-descriptor energy above harmonic 8).
+
+**Raw vs thresholded counts.** Curated third-party silhouettes carry binarization
+litter: the MPEG-7 `horse` target has 18 raw holes, the largest covering 0.06% of
+its area. Raw `n_holes` / `n_components` are reported from the unmodified mask,
+while every skeleton-derived and persistence attribute is computed after filling
+sub-threshold holes and dropping sub-threshold components. The gap between the raw
+and `*_signif` counts is a per-target data-quality signal, so both are kept.
+
+**Persistent homology** requires `gudhi` (`pip install gudhi`). Without it those
+seven fields come back `null` and everything else still computes. Metric-side
+persistence distances additionally need `POT`.
+
+**Attributes on shadows.** `compute_attributes()` takes any binary mask, so it runs
+on `shadows/<id>/*.png` too. `attribute_delta(target, shadow)` returns `d_<name>`
+for every field — the cheapest interpretable error metric in the benchmark. These
+are written to `results/`, never into `metadata.jsonl`, which holds target
+attributes only.
 
 ## Workflow
 
@@ -114,4 +155,7 @@ All computed on the binary target mask; `_rel` = normalized by bounding-box diag
 2. `python scripts/build_metadata.py` → creates/updates `metadata.jsonl`
 3. Capture shadows into `shadows/<id>/{hand,teleop,optimizer}.png`
 4. Re-run `build_metadata.py` — paths get linked, capture metadata preserved
-5. Metric computation reads `metadata.jsonl`, writes to `results/` (never into the dataset)
+5. Metric computation reads `metadata.jsonl`, writes to `results/` (never into the dataset):
+   `python scripts/compute_metrics.py --shadows` -> `results/metrics_shadows.csv`,
+   one row per (sample, source) with target attributes, shadow attributes, their
+   deltas, and every pairwise metric. See [METRICS.md](METRICS.md).
