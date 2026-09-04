@@ -246,10 +246,12 @@ def solve_jobs(sid: str) -> list:
         jobs.append(("SOLVE_LATER", solve_id))
     else:
         solve_id = sid
-        fr = seq_frames(sid)
-        if lane == "static":
-            fr = fr[:1]
-        jobs.append(night_solve_cmd(fr, solve_id))
+        # the static lane used to solve frame 0 only (hold did the rest) --
+        # a silent downgrade the owner vetoed: SOLVE solves every frame you
+        # see, whatever the lane says. The temporal warm start makes the
+        # near-identical frames of a static clip cheap anyway; the lane
+        # still matters for translation (stab) routing above.
+        jobs.append(night_solve_cmd(seq_frames(sid), solve_id))
     jobs.append([PY_EVAL, str(BENCH / "scripts" / "sequence_metrics.py"),
                  "--run", str(BENCH / "optimized" / solve_id),
                  "--sequence", solve_id])
