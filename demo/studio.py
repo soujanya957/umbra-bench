@@ -288,8 +288,11 @@ def env_for(py: str) -> dict:
     # picks an offscreen one and the window never appears.
     if Path(py).name == "mjpython":
         e["MUJOCO_GL"] = os.environ.get("MUJOCO_GL", "glfw")
-    e["PATH"] = os.pathsep.join(str(x) for x in pre if x.is_dir()) \
-        + os.pathsep + e.get("PATH", "")
+    # Guard the empty prepend: "" + os.pathsep + PATH leaves a LEADING
+    # EMPTY entry, and an empty PATH element means the current directory --
+    # every subprocess would then search its cwd for binaries first.
+    head = os.pathsep.join(str(x) for x in pre if x.is_dir())
+    e["PATH"] = (head + os.pathsep + e["PATH"]) if head else e.get("PATH", "")
     return e
 
 
@@ -380,15 +383,28 @@ def spawn_console(cmd, cwd) -> str:
                          creationflags=subprocess.CREATE_NEW_CONSOLE)
         return "window opened on this machine"
     if sys.platform == "darwin":
+        # Terminal's `do script` silently truncates its argument at 1024
+        # BYTES. An inlined activation env blows past that on the first
+        # variable -- a conda PATH is a kilobyte by itself -- and the window
+        # opens sitting at a prompt with half an `export PATH='...` typed
+        # into it and no job running at all. So write the env and the command
+        # to a script and hand Terminal only its path.
         keep = ("PATH", "CONDA_PREFIX", "CONDA_DEFAULT_ENV",
                 "PYTHONIOENCODING", "PYTHONUTF8", "MUJOCO_GL")
-        line = "cd " + shlex.quote(str(cwd)) + "; " + "".join(
-            f"export {k}={shlex.quote(env[k])}; " for k in keep if k in env
-        ) + " ".join(shlex.quote(str(c)) for c in cmd)
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        sh = LOG_DIR / f"console_{time.strftime('%H%M%S')}.sh"
+        body = ["#!/bin/bash"]
+        body += [f"export {k}={shlex.quote(env[k])}" for k in keep if k in env]
+        body.append("cd " + shlex.quote(str(cwd)))
+        # exec, so the window's shell IS the job: closing the window kills it
+        # directly, which is what makes closing it an E-STOP.
+        body.append("exec " + " ".join(shlex.quote(str(c)) for c in cmd))
+        sh.write_text("\n".join(body) + "\n", encoding="utf-8")
+        sh.chmod(0o755)
         subprocess.Popen([
             "osascript",
             "-e", "tell application " + json.dumps("Terminal")
-                  + " to do script " + json.dumps(line),
+                  + " to do script " + json.dumps(str(sh)),
             "-e", "tell application " + json.dumps("Terminal") + " to activate",
         ])
         return "Terminal window opened on this machine"
