@@ -744,9 +744,11 @@ def state() -> dict:
         })
     return {
         "project": P,
-        "videos": sorted(str(p.relative_to(ROOT)).replace(os.sep, "/")
-                         for pat in ("*.mp4", "clips/*/*.mp4")
-                         for p in ROOT.glob(pat)),
+        "videos": sorted({str(p.relative_to(ROOT)).replace(os.sep, "/")
+                          for pat in ("*.mp4", "*.mov", "*.avi", "*.mkv",
+                                      "*.webm", "clips/*/*.mp4",
+                                      "clips/*/*.mov")
+                          for p in ROOT.glob(pat)}),
         "workspace": {
             "scenes": n("scenes/*/*.png"),
             "labelled": len(kp),
