@@ -159,6 +159,50 @@ def main() -> int:
                      "now: " + ", ".join(sorted(live))) if live
                     else "no USB serial devices visible at all")
 
+    head("what is deployable right now")
+    import re as _re
+    B = ROOT.parent
+    solved_lib = 0
+    try:
+        for line in (B / "metadata.jsonl").read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            if (B / "optimized" / "big-budget-grounded" / r["subset"]
+                    / Path(r["target"]).stem / "results.json").exists():
+                solved_lib += 1
+    except OSError as e:
+        say(WARN, "could not read metadata.jsonl", str(e))
+    say(OK if solved_lib else WARN,
+        f"{solved_lib} library shape(s) solved -- one click each",
+        "pick one in the rail, then 'deploy this'. Its choreography is "
+        "written on demand; nothing else has to run first.")
+
+    seqs = sorted(d.name for d in (B / "sequences").glob("*_scene_*"))
+    solved = [s for s in seqs
+              if list((B / "optimized" / s).glob("summary_*.json"))]
+    ready = []
+    for sid in solved:
+        proj = sid.split("_scene_")[0]
+        if ((ROOT / "projects" / proj / "out" / "reassembled" / sid
+             / "reassembly.json").exists()
+                or (ROOT / "out" / "reassembled" / sid
+                    / "reassembly.json").exists()):
+            ready.append(sid)
+    print(f"  sequences: {len(seqs)} cut, {len(solved)} solved, "
+          f"{len(ready)} reassembled")
+    if ready:
+        say(OK, f"{len(ready)} sequence(s) deployable",
+            ", ".join(ready[:6]) + (" ..." if len(ready) > 6 else ""))
+    elif solved:
+        say(WARN, "no sequence is deployable yet",
+            f"{len(solved)} are solved but none is REASSEMBLED, and a clip's "
+            "choreography is built from reassembly.json. Run the studio's "
+            "'re-mount' button (demo/08_reassemble.py --all) once -- library "
+            "shapes deploy without it, sequences do not.")
+    else:
+        say(WARN, "no solved sequences", "solve a scene first (studio step 6)")
+
     head("deploy server")
     hostport = ("127.0.0.1", 8001)
     s = socket.socket()
