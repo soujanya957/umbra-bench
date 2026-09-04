@@ -148,12 +148,20 @@ def main() -> None:
         for f in d.glob("f*.png"):
             scene_of[f.stem] = d.name
     seqs = defaultdict(list)
+    dropped = []
     for p in masks:
         m = re.match(r"(f\d+)_(.+)_mask\.png$", p.name)
         if not m:
             continue
         fid, letter = m.group(1), m.group(2)
-        sc = scene_of.get(fid) or kp.get(fid, {}).get("scene")
+        sc = scene_of.get(fid)
+        if sc is None:
+            # a mask whose frame is NOT in the current scenes tree is a
+            # leftover from an earlier split -- letting the keypoints
+            # fallback adopt it built sequences LONGER than their scene
+            # (family scene_03: 27 ids over 25 frames). Zombies stay out.
+            dropped.append(fid)
+            continue
         if not sc or f"{fid}_{letter}" in set(a.exclude or []):
             continue
         seqs[f"{prefix}{sc}_{letter}"].append((fid, p))
