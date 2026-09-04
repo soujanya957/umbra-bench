@@ -17,6 +17,7 @@ import argparse
 import importlib.util
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -50,10 +51,15 @@ def solve_pose(library_id: str, sweep: str) -> np.ndarray:
 def main():
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--library-id", action="append", required=True)
+    ap.add_argument("--library-id", action="append", default=[])
+    ap.add_argument("--sequence", action="append", default=[],
+                    help="a SOLVED + reassembled sequence id; exports its "
+                         "whole motion, not a single pose")
     ap.add_argument("--sweep", default="big-budget-grounded")
     ap.add_argument("--dest", default=str(DEFAULT_DEST))
     a = ap.parse_args()
+    if not a.library_id and not a.sequence:
+        sys.exit("[!] nothing to export: pass --library-id and/or --sequence")
 
     dest = Path(a.dest)
     dest.mkdir(parents=True, exist_ok=True)
@@ -61,7 +67,18 @@ def main():
         q = solve_pose(lid, a.sweep)
         pack.write_choreo(dest, lid, 5.0, [q])
         print(f"  {lid} -> {dest / (lid + '.json')}")
-    print(f"{len(a.library_id)} clip(s); refresh Play's library to deploy")
+    for sid in a.sequence:
+        # pack_clip writes a package element (frames/, joints.csv, meta.json)
+        # and leaves the pose track on itself; only the choreography is wanted
+        # here, so give it a scratch dir and keep the qs.
+        with tempfile.TemporaryDirectory() as td:
+            pack.pack_clip(sid, Path(td) / sid)
+            pack.write_choreo(dest, sid, pack.pack_clip.last_fps or 5.0,
+                              pack.pack_clip.last_qs)
+        print(f"  {sid} -> {dest / (sid + '.json')}  "
+              f"({len(pack.pack_clip.last_qs)} poses)")
+    n = len(a.library_id) + len(a.sequence)
+    print(f"{n} clip(s); refresh Play's library to deploy")
 
 
 if __name__ == "__main__":

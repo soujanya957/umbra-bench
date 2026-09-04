@@ -33,6 +33,7 @@ import argparse
 import csv
 import re
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -167,8 +168,21 @@ def interp_frames(qs, src_hz: float):
 
 
 _JOINT_LIMITS = "unset"
-DEPLOY_MODEL_XML = (Path.home() / "Documents/GitHub/fleet-shadow-art"
-                    / "Shadow_robot_ui/assets/SO101_urdf/so101_new_calib.xml")
+# The UI checkout sits NEXT TO this repo (everything else here resolves it
+# that way: pack's choreo hand-off, deploy_to_robot, studio's MAS). A path
+# under ~/Documents/GitHub was true on one machine only, and on any other the
+# joint-limit audit silently skipped itself. Keep that machine working via
+# the fallback list, and let DEPLOY_MODEL_XML env-var override both.
+_UI_XML = "Shadow_robot_ui/assets/SO101_urdf/so101_new_calib.xml"
+DEPLOY_MODEL_XML = next(
+    (p for p in (
+        Path(os.environ["DEPLOY_MODEL_XML"])
+        if os.environ.get("DEPLOY_MODEL_XML") else None,
+        BENCH.parent / "fleet-shadow-art" / _UI_XML,
+        Path.home() / "Documents/GitHub/fleet-shadow-art" / _UI_XML,
+        Path.home() / "GitHub/fleet-shadow-art" / _UI_XML,
+    ) if p is not None and p.exists()),
+    BENCH.parent / "fleet-shadow-art" / _UI_XML)
 
 
 def joint_limits():

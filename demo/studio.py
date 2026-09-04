@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """studio.py — the demo production line as buttons.
 
-    ~/miniconda3/envs/umbra-bench/python.exe demo/studio.py
+    <umbra-bench env>/python demo/studio.py     (python.exe on Windows)
     -> http://localhost:8478/
 
 One page per THE pipeline every demo video walks: pick a video (its filename
@@ -31,6 +31,7 @@ import glob
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import threading
@@ -42,12 +43,92 @@ ROOT = Path(__file__).resolve().parent
 BENCH = ROOT.parent
 HOME = Path.home()
 
-PY_EVAL = str(HOME / "miniconda3/envs/umbra-bench/python.exe")
-PY_GPU = str(HOME / "miniconda3/envs/fh_l1/python.exe")
-PY_FLEET = str(HOME / "miniconda3/envs/fleet-shadow/python.exe")
-# The ffmpeg BINARY lives in the lerobot env; fh_l1 carries only the
-# ffmpeg-python wrapper, which finds the binary through PATH.
-FFMPEG_DIR = str(HOME / "miniconda3/envs/lerobot/Library/bin")
+# ---------------------------------------------------------------- interpreters
+# The three lanes above are conda ENV NAMES, not paths. Windows keeps an env's
+# interpreter at <root>/envs/<name>/python.exe, POSIX at <root>/envs/<name>/
+# bin/python -- a path hardcoded for one of them cannot exist on the other,
+# which is exactly how a macOS run died inside subprocess with
+# "No such file or directory: .../umbra-bench/python.exe". So resolve at
+# runtime, and when an env is simply absent (the Mac has one env, not four)
+# fall back to the interpreter running studio.py: a shared env may lack a
+# dependency and say so, a nonexistent path can only crash.
+#
+# demo/studio_env.json pins any of them explicitly and wins over discovery:
+#     {"eval": "/opt/anaconda3/envs/umbra-bench/bin/python",
+#      "gpu": "...", "fleet": "...", "ffmpeg_dir": "..."}
+
+try:
+    _OVERRIDE = json.loads((ROOT / "studio_env.json").read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError):
+    _OVERRIDE = {}
+
+
+def conda_roots() -> list:
+    """Every conda installation this machine plausibly has, best guess first."""
+    cands = []
+    p = Path(sys.prefix)                        # studio.py's own env, if any
+    cands.append(p.parent.parent if p.parent.name == "envs" else p)
+    exe = os.environ.get("CONDA_EXE")           # conda's own answer, if set
+    if exe:
+        cands.append(Path(exe).resolve().parent.parent)
+    cands += [HOME / n for n in ("miniconda3", "anaconda3", "miniforge3",
+                                 "mambaforge", "opt/anaconda3")]
+    cands += [Path("/opt/anaconda3"), Path("/opt/miniconda3"),
+              Path("/opt/homebrew/Caskroom/miniconda/base"),
+              Path("/usr/local/anaconda3")]
+    seen, out = set(), []
+    for r in cands:
+        if str(r) not in seen and r.is_dir():
+            seen.add(str(r))
+            out.append(r)
+    return out
+
+
+def env_python(name: str):
+    """<conda-root>/envs/<name>/{python.exe | bin/python}; None if no root has it."""
+    tails = ("python.exe",) if os.name == "nt" else ("bin/python3", "bin/python")
+    for root in conda_roots():
+        for tail in tails:
+            p = root / "envs" / name / tail
+            if p.exists():
+                return str(p)
+    return None
+
+
+def lane_python(key: str, env_name: str) -> str:
+    over = _OVERRIDE.get(key)
+    if over:
+        return str(Path(over).expanduser())
+    return env_python(env_name) or sys.executable
+
+
+PY_EVAL = lane_python("eval", "umbra-bench")
+PY_GPU = lane_python("gpu", "fh_l1")
+PY_FLEET = lane_python("fleet", "fleet-shadow")
+
+
+def ffmpeg_dir() -> str:
+    """The ffmpeg BINARY lives in the lerobot env; fh_l1 carries only the
+    ffmpeg-python wrapper, which finds the binary through PATH. Windows keeps
+    it in Library/bin, conda on POSIX in bin/. Empty when there is no lerobot
+    env -- env_for() then leaves PATH alone and the system ffmpeg wins, which
+    is the right answer on a box that never had that env."""
+    over = _OVERRIDE.get("ffmpeg_dir")
+    if over:
+        return str(Path(over).expanduser())
+    py = env_python("lerobot")
+    if not py:
+        return ""
+    d = Path(py).parent
+    envroot = d.parent if d.name in ("bin", "Scripts") else d
+    exe = "ffmpeg.exe" if os.name == "nt" else "ffmpeg"
+    for cand in (envroot / "Library" / "bin", envroot / "bin"):
+        if (cand / exe).exists():
+            return str(cand)
+    return ""
+
+
+FFMPEG_DIR = ffmpeg_dir()
 MAS = str(BENCH.parent / "fleet-shadow-art" / "motion-aware-shadow")
 SAM_SMALL = ("C:/Users/hexia/Documents/GitHub/animal_inspired_BC/thirdparty/"
              "sam2/checkpoints/sam2.1_hiera_small.pt",
@@ -182,21 +263,137 @@ def set_active(project: str, video: str) -> None:
 
 
 def env_for(py: str) -> dict:
-    """Activation-equivalent environment for a conda env, from its python.exe.
+    """Activation-equivalent environment for a conda env, from its interpreter.
 
-    On Windows a bare interpreter path is not enough: torch/cv2/ffmpeg resolve
-    DLLs through the directories `conda activate` prepends. Build that PATH
+    A bare interpreter path is not enough: torch/cv2/ffmpeg resolve their
+    libraries through the directories `conda activate` prepends. Build that
     set explicitly so every subprocess behaves as if the env were activated
     -- the user's instruction, verbatim: "you need to activate fh_l1".
+
+    Windows keeps the interpreter AT the env root, POSIX one level down in
+    bin/, so the prefix is Path(py).parent on one and its parent on the other.
+    Getting that wrong sets CONDA_PREFIX to ".../bin" and CONDA_DEFAULT_ENV to
+    the literal string "bin", which any conda-aware library then believes.
     """
-    root = Path(py).parent
+    d = Path(py).parent
+    root = d.parent if d.name in ("bin", "Scripts") else d
     pre = [root, root / "Library" / "mingw-w64" / "bin",
            root / "Library" / "usr" / "bin", root / "Library" / "bin",
-           root / "Scripts", root / "bin", Path(FFMPEG_DIR)]
+           root / "Scripts", root / "bin"]
+    if FFMPEG_DIR:
+        pre.append(Path(FFMPEG_DIR))
     e = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1",
              CONDA_PREFIX=str(root), CONDA_DEFAULT_ENV=root.name)
-    e["PATH"] = os.pathsep.join(str(x) for x in pre) + os.pathsep + e.get("PATH", "")
+    # MuJoCo's passive viewer on macOS wants the glfw backend; the default
+    # picks an offscreen one and the window never appears.
+    if Path(py).name == "mjpython":
+        e["MUJOCO_GL"] = os.environ.get("MUJOCO_GL", "glfw")
+    e["PATH"] = os.pathsep.join(str(x) for x in pre if x.is_dir()) \
+        + os.pathsep + e.get("PATH", "")
     return e
+
+
+def viewer_python(py: str) -> str:
+    """The interpreter for a job that opens a MuJoCo VIEWER window.
+
+    macOS only: mujoco.viewer.launch_passive must own the main thread, which
+    on a Mac only `mjpython` can give it -- plain python there aborts with
+    "launch_passive requires that the Python script is run under mjpython".
+    Same env, sibling binary, so nothing about the dependency set changes.
+    Falls back to the plain interpreter when the env has no mjpython, so the
+    job still runs (and says what it needs) instead of vanishing.
+    """
+    if sys.platform != "darwin":
+        return py
+    cand = Path(py).with_name("mjpython")
+    return str(cand) if cand.exists() else py
+
+
+# ------------------------------------------------------------------ the fleet
+FSA = BENCH.parent / "fleet-shadow-art"
+CHOREO_DIR = FSA / "choreographies"
+FLEET_CFG_DIR = FSA / "leRobot-control" / "configs"
+FLEET_STAGE = "umbra_bench"      # this project's own stage config
+
+
+def fleet_default_arms() -> str:
+    """The default --arms string: ID|PORT|MODEL|CONN for this stage's arms.
+
+    The arm ids and stage geometry live in configs/umbra_bench.json, but its
+    ports are null -- a port is written into whichever config happened to be
+    open when the arms were last plugged in (new_lab_stage.json,
+    sword_fish_stage.json, ...). So take the ids from the stage config and
+    each id's port from the most RECENTLY SAVED config that has one: that is
+    the setup that last actually ran.
+
+    This replaces a hardcoded SR101|COM3|... default, which could only ever be
+    right on the Windows box -- a macOS port is /dev/tty.usbmodem<serial>.
+    """
+    def robots(p: Path) -> list:
+        try:
+            return json.loads(p.read_text(encoding="utf-8")).get("robots") or []
+        except (OSError, json.JSONDecodeError, AttributeError):
+            return []
+
+    stage = robots(FLEET_CFG_DIR / f"{FLEET_STAGE}.json")
+    if not stage:
+        return ""
+    ports = {}
+    for p in sorted(FLEET_CFG_DIR.glob("*.json"),
+                    key=lambda x: x.stat().st_mtime, reverse=True):
+        for r in robots(p):
+            rid, port = r.get("id"), r.get("port")
+            if rid and port and rid not in ports:
+                ports[rid] = str(port)
+    out = []
+    for r in stage:
+        rid = str(r.get("id") or "")
+        if not rid:
+            continue
+        out.append("|".join((rid, ports.get(rid, ""),
+                             str(r.get("model") or "so-101"),
+                             str(r.get("connection") or "serial"))))
+    return ",".join(out)
+
+
+def choreo_names() -> list:
+    """Every clip the robot UI can already play, by filename stem."""
+    try:
+        return sorted(p.stem for p in CHOREO_DIR.glob("*.json"))
+    except OSError:
+        return []
+
+
+def spawn_console(cmd, cwd) -> str:
+    """Run a job in its OWN window.
+
+    The deploy step's entire safety contract is that window: closing it drops
+    the websocket, and the server's contract for a dropped socket is E-STOP.
+    Windows gets CREATE_NEW_CONSOLE. On macOS a detached child would inherit
+    studio's stdio and there would be no window left to close, so ask
+    Terminal for a real one -- and it is also the only place the operator can
+    see "press Enter to close" and the per-frame progress.
+    """
+    env = env_for(str(cmd[0]))
+    if os.name == "nt":
+        subprocess.Popen(cmd, cwd=cwd, env=env,
+                         creationflags=subprocess.CREATE_NEW_CONSOLE)
+        return "window opened on this machine"
+    if sys.platform == "darwin":
+        keep = ("PATH", "CONDA_PREFIX", "CONDA_DEFAULT_ENV",
+                "PYTHONIOENCODING", "PYTHONUTF8", "MUJOCO_GL")
+        line = "cd " + shlex.quote(str(cwd)) + "; " + "".join(
+            f"export {k}={shlex.quote(env[k])}; " for k in keep if k in env
+        ) + " ".join(shlex.quote(str(c)) for c in cmd)
+        subprocess.Popen([
+            "osascript",
+            "-e", "tell application " + json.dumps("Terminal")
+                  + " to do script " + json.dumps(line),
+            "-e", "tell application " + json.dumps("Terminal") + " to activate",
+        ])
+        return "Terminal window opened on this machine"
+    subprocess.Popen(cmd, cwd=cwd, env=env, start_new_session=True)
+    return "started detached (this platform has no console to open)"
 
 
 def night_solve_cmd(targets: list[str], outdir: str) -> list[str]:
@@ -456,32 +653,77 @@ def build_job(step: str, arg: str | None):
         sc = str(arg or "")
         if not re.match(r"^scene_" + chr(92) + "d+$", sc):
             return f"pick one scene first (got {sc!r})"
-        return ([[PY_FLEET, str(ROOT / "ensemble_mujoco.py"),
+        return ([[viewer_python(PY_FLEET), str(ROOT / "ensemble_mujoco.py"),
                   "--ensemble", f"{P}_{sc}", "--loop",
                   "--regen", f"{P}:{sc}"]], ROOT, True)
     if step == "deploy_robot":
-        P = active_project()
-        if not P:
-            return "no active project"
         d = arg if isinstance(arg, dict) else {}
         arms = str(d.get("arms", "")).strip()
-        if not re.match(r"^[A-Za-z0-9|,._: \-]+$", arms):
+        # A port is a PATH on macOS (/dev/tty.usbmodem5AE60827821), not a COM
+        # name -- the slash has to be legal here or every Mac port is refused
+        # by the validator before deploy_to_robot ever sees it.
+        if not re.match(r"^[A-Za-z0-9|,._:/ \-]+$", arms):
             return "bad arms string (ID|PORT|MODEL|CONN,...)"
-        clips = []
-        if d.get("clip"):
-            clips = [str(d["clip"])]
-        elif d.get("scene"):
+        for entry in arms.split(","):
+            parts = entry.split("|")
+            if len(parts) != 4 or not all(p.strip() for p in parts):
+                return f"bad arms entry {entry!r}: need ID|PORT|MODEL|CONN"
+
+        def want(key) -> list:
+            v = d.get(key)
+            if not v:
+                return []
+            return [str(x) for x in v] if isinstance(v, list) else [str(v)]
+
+        clips, missing = [], []
+        # A library shape or a solved sequence deploys on its own -- no
+        # package, no arrangement. Its choreography is written on demand, so
+        # "pick it in the rail, send it to the arms" is one click and not a
+        # pack build. (Named clips are taken as-is: they already exist.)
+        for lid in want("library"):
+            if not NAME_RE.match(lid):
+                return f"bad library id {lid!r}"
+            if not (CHOREO_DIR / f"{lid}.json").exists():
+                missing.append(lid)
+            clips.append(lid)
+        for name in want("clip") + want("clips"):
+            if not NAME_RE.match(name):
+                return f"bad clip name {name!r}"
+            if not (CHOREO_DIR / f"{name}.json").exists():
+                return (f"{name}: no choreography in {CHOREO_DIR.name}/ -- "
+                        "export it (library -> robot) or run 8 pack first")
+            clips.append(name)
+        if not clips and d.get("scene"):
+            P = active_project()
+            if not P:
+                return "no active project"
             sc = str(d["scene"])
             if not re.match(r"^scene_" + chr(92) + "d+$", sc):
                 return f"pick one scene first (got {sc!r})"
-            arr = (BENCH.parent / "fleet-shadow-art" / "arrangements"
-                   / f"{P}_{sc}.json")
+            arr = FSA / "arrangements" / f"{P}_{sc}.json"
             if not arr.exists():
                 return f"no arrangement for {P}_{sc} -- run 8 pack first"
             clips = [seg["name"] for seg in
                      json.loads(arr.read_text(encoding="utf-8"))["segs"]]
         if not clips:
             return "nothing to deploy"
+        if missing:
+            # write the missing choreographies HERE rather than queueing a
+            # second job: deploy runs detached in its own window, so a
+            # chained export could not report its own failure to this page.
+            args = []
+            for m in missing:
+                # a sequence exports its whole motion, a library row one pose
+                args += [("--sequence" if (BENCH / "sequences" / m).is_dir()
+                          else "--library-id"), m]
+            r = subprocess.run(
+                [PY_EVAL, str(ROOT / "export_library_clip.py")] + args,
+                cwd=ROOT, env=env_for(PY_EVAL), capture_output=True,
+                text=True, encoding="utf-8", errors="replace")
+            if r.returncode:
+                tail = (r.stdout + r.stderr).strip().splitlines()
+                why = (": " + tail[-1][:200]) if tail else ""
+                return f"export failed for {', '.join(missing)}{why}"
         with KP_LOCK:
             st = state_load()
             st["deploy_arms"] = arms
@@ -494,8 +736,10 @@ def build_job(step: str, arg: str | None):
         lid = str(arg or "")
         if not NAME_RE.match(lid):
             return f"bad library id {lid!r}"
+        flag = "--sequence" if (BENCH / "sequences" / lid).is_dir() \
+            else "--library-id"
         return ([[PY_EVAL, str(ROOT / "export_library_clip.py"),
-                  "--library-id", lid]], ROOT, False)
+                  flag, lid]], ROOT, False)
     if step == "score":
         return [[PY_GPU, "09_clip_score.py"]], ROOT, False
     if step == "compose":
@@ -793,7 +1037,9 @@ def state() -> dict:
                             (pdir(P) / "out" / "video").glob("*.mp4")) if P else [],
             "package": bool(P and (ROOT / "packages" / P).is_dir()),
         },
-        "deploy_arms": state_load().get("deploy_arms", ""),
+        "deploy_arms": (state_load().get("deploy_arms")
+                        or fleet_default_arms()),
+        "choreo": choreo_names(),
         "job": {k: JOB[k] for k in ("running", "step", "rc")} |
                {"elapsed": round(time.time() - JOB["t0"]) if JOB["t0"] and
                 JOB["running"] else None},
@@ -1230,11 +1476,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(400, {"error": built})
         jobs, cwd, detach = built
         if detach:
-            subprocess.Popen(jobs[0], cwd=cwd, env=env_for(str(jobs[0][0])),
-                             creationflags=subprocess.CREATE_NEW_CONSOLE
-                             if os.name == "nt" else 0)
             return self._json(200, {"ok": True,
-                                    "note": "window opened on this machine"})
+                                    "note": spawn_console(jobs[0], cwd)})
         with LOCK:
             if JOB["running"]:
                 return self._json(409, {"error": f"busy: {JOB['step']}"})

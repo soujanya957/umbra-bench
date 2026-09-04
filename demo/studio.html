@@ -158,9 +158,14 @@
     <h2>4 · sequences → assign each element
       <label style="float:right;font-weight:400;text-transform:none">
         <input type="checkbox" id="seqall" onchange="refresh()"> all projects</label></h2>
-    <button id="librobot" style="display:none;margin-bottom:6px"
-      title="write this shadow's single-pose choreography straight into the robot UI's library (fleet-shadow choreographies/)"
-      onclick="run('export_lib', LASTLIB)">&rarr; robot</button>
+    <span id="librobot" style="display:none">
+      <button style="margin-bottom:6px"
+        title="write this shadow's choreography into the robot UI's library (fleet-shadow choreographies/) — a library shape exports its pose, a solved sequence its whole motion"
+        onclick="run('export_lib', LASTLIB)">&rarr; robot</button>
+      <button style="margin-bottom:6px"
+        title="stream JUST this shape/sequence to the physical fleet now — its choreography is written first if it is missing. Opens a console window; closing it = E-STOP."
+        onclick="deployLib()">&#8674; deploy this</button>
+    </span>
     <div id="seldisp" class="mono" style="color:var(--warn);margin-bottom:6px">
       no library shape selected — click one in the rail, then a row's <b>lib</b></div>
     <table id="seqs"></table>
@@ -623,7 +628,7 @@ function renderLib(){
       document.querySelectorAll("#lib .cell.sel").forEach(x =>
         x.classList.remove("sel"));
       c.classList.add("sel");
-      $("#librobot").style.display = (c.dataset.kind === "seq") ? "none" : "";
+      $("#librobot").style.display = "";
       $("#seldisp").textContent = "selected: " + LASTLIB +
         "   (each lib button assigns this)";
       navigator.clipboard.writeText(c.dataset.id);
@@ -637,20 +642,42 @@ fetch("/api/library").then(r => r.json()).then(l => { LIB = l; renderLib(); });
 linit(); refresh(); orefresh();
 setInterval(refresh, 6000);
 
-async function deployRobot(){
-  if(SCENE === 'all'){ toast('pick one scene in the SCENE bar first'); return; }
-  const dflt = (S && S.deploy_arms) ||
-    'SR101|COM3|so-101|serial,SR102|COM4|so-101|serial,SR103|COM5|so-101|serial';
-  const arms = prompt(
-    'fleet ports  (ID|PORT|MODEL|CONN, comma-separated — remembered for next time)',
-    dflt);
+/* The default fleet string comes from the server: the arm ids in
+   leRobot-control/configs/umbra_bench.json, each port from the most recently
+   saved config that has one. A port is /dev/tty.usbmodem<serial> on macOS and
+   COM<n> on Windows, so there is no useful literal to fall back to. */
+function askArms(){
+  const dflt = (S && S.deploy_arms) || '';
+  if(!dflt) toast('no ports in the fleet configs — type them in');
+  return prompt('fleet ports  (ID|PORT|MODEL|CONN, comma-separated — ' +
+                'remembered for next time)', dflt);
+}
+
+async function deploy(arg, what){
+  const arms = askArms();
   if(!arms) return;
   const r = await fetch('/api/run', {method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({step: 'deploy_robot', arg: {scene: SCENE, arms}})});
+    body: JSON.stringify({step: 'deploy_robot',
+                          arg: Object.assign({arms}, arg)})});
   const j = await r.json();
   if(j.error) toast(j.error);
-  else toast('deploy console opened — closing that window = E-STOP');
+  else toast((j.note || 'deploy console opened') +
+             ' — closing that window = E-STOP  [' + what + ']');
+}
+
+async function deployRobot(){
+  if(SCENE === 'all'){ toast('pick one scene in the SCENE bar first'); return; }
+  deploy({scene: SCENE}, SCENE);
+}
+
+/* One library shape or one solved sequence, straight to the arms: no
+   package, no arrangement. The server writes the choreography first when it
+   is not in choreographies/ yet. */
+async function deployLib(){
+  if(!LASTLIB){ toast('click a shape or sequence in the library rail first');
+                return; }
+  deploy({library: LASTLIB}, LASTLIB);
 }
 
 async function cycleLane(sid, cur, overridden){
