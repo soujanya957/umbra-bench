@@ -595,6 +595,8 @@ table.gref td.note{color:var(--muted); font-size:11px}
     <span class="hint" id="stripHint">Star a card to add it. Drag frames to reorder.</span>
     <button class="act" id="copyIds">copy ids</button>
     <button class="act" id="copyJson">copy json</button>
+    <button class="act" id="copyDeploy"
+      title="Copy the command that writes these shadows into the robot UI's Play library (fleet-shadow-art/choreographies/). Run it from the umbra-bench repo root; refresh Play to deploy them.">copy export cmd</button>
     <button class="act" id="clearPicks">clear</button>
   </div>
   <div class="reel" id="reel"><div class="empty">No frames yet — star the shots you want, in order.</div></div>
@@ -1368,6 +1370,37 @@ $("#copyJson").addEventListener("click", (e) => copy(JSON.stringify({
     return { id, subset: s && s.subset, target: s && ("targets/" + s.subset + "/" + id.replace(s.subset + "_", "") + ".png"), iou: en && en.iou };
   })
 }, null, 2), e.target));
+/* Starred shadows -> the robot. The atlas is one self-contained file with no
+   backend, and it stays that way: rather than calling an exporter it cannot
+   reach, it hands you the exact command. export_library_clip.py writes into
+   fleet-shadow-art/choreographies/, which IS the robot UI's Play library
+   (render_server serves it at GET /choreographies), so a starred target is
+   deployable from the UI on the next refresh -- no package build.
+
+   The card keys are short ("big"/"small"); the exporter takes the SWEEP
+   DIRECTORY name, so translate rather than pasting a --sweep that names no
+   directory on disk. Only a solved target has a pose to send, so unsolved
+   picks are named and dropped instead of poisoning the whole command. */
+const SWEEP_DIR = { big: "big-budget-grounded", small: "small-budget-grounded" };
+$("#copyDeploy").addEventListener("click", (e) => {
+  const dir = (DATA.sweep_dirs || {})[st.sweep] || SWEEP_DIR[st.sweep] || st.sweep;
+  const solved = [], unsolved = [];
+  st.picks.forEach(id => {
+    const s = byId.get(id), en = s && sw(s);
+    (en && en.iou != null ? solved : unsolved).push(id);
+  });
+  const head = ["# run from the umbra-bench repo root, then refresh Play"];
+  if(unsolved.length) head.push("# skipped, no solve in " + dir + ": " + unsolved.join(", "));
+  if(!solved.length){
+    copy(head.concat("# nothing to export").join("\n") + "\n", e.target);
+    return;
+  }
+  const args = solved.map(id => "    --library-id " + id);
+  if(dir !== "big-budget-grounded") args.push("    --sweep " + dir);
+  const body = ["python demo/export_library_clip.py \\"]
+    .concat(args.map((a, k) => a + (k < args.length - 1 ? " \\" : "")));
+  copy(head.concat(body).join("\n") + "\n", e.target);
+});
 $("#clearPicks").addEventListener("click", () => { st.picks = []; store.set("picks", st.picks);
   document.querySelectorAll(".card.picked").forEach(c => c.classList.remove("picked")); renderReel(); });
 
