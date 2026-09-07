@@ -30,7 +30,9 @@ the package carries everything that is knowable without the lab.
 from __future__ import annotations
 
 import argparse
+import ast
 import csv
+import math
 import re
 import json
 import os
@@ -70,30 +72,84 @@ def write_joints(path: Path, rows: list[np.ndarray]):
             w.writerow([i] + [f"{v:.6f}" for v in np.asarray(q).ravel()])
 
 
-def pack_clip(sid: str, dest: Path):
+DEFAULT_CLIP_FPS = 5.0
+
+
+def reassembly_of(sid: str):
+    """(dir, reassembly.json) for a reassembled clip, or (None, None)."""
     proj = sid.split("_scene_")[0]
-    re_dir = ROOT / "projects" / proj / "out" / "reassembled" / sid
-    if not re_dir.is_dir():                     # pre-migration layout
-        re_dir = ROOT / "out" / "reassembled" / sid
+    for d in (ROOT / "projects" / proj / "out" / "reassembled" / sid,
+              ROOT / "out" / "reassembled" / sid):     # pre-migration layout
+        if (d / "reassembly.json").exists():
+            return d, json.loads((d / "reassembly.json")
+                                 .read_text(encoding="utf-8"))
+    return None, None
+
+
+def seq_row(sid: str) -> dict | None:
+    """The sequences.jsonl record for `sid`, the index the track is built on."""
+    p = BENCH / "sequences.jsonl"
+    if not p.exists():
+        return None
+    for line in p.read_text(encoding="utf-8").splitlines():
+        if line.strip() and json.loads(line).get("id") == sid:
+            return json.loads(line)
+    return None
+
+
+def clip_poses(sid: str, fps: float | None = None):
+    """The pose track for a solved sequence -- what a DEPLOY needs, no more.
+
+    Reassembly is a VIDEO step: 08_reassemble.py inverts the clip fit to put
+    the shadow back where the ad drew it on the 1920x1080 canvas. On hardware
+    the rig casts at the FITTED position and that inverse never happens
+    (README section C), so requiring reassembly.json before a choreography
+    could be written blocked every clip that has no footage behind it -- all
+    13 generated motions, each one fully solved, none with a canvas to be put
+    back on. The poses come from the solve and the frame count from
+    sequences.jsonl; reassembly.json is read only where it exists, for the fps
+    the footage was sampled at and the held-static replication.
+
+    Returns (qs, fps, info).
+    """
     run = BENCH / "optimized" / sid
-    if not (re_dir / "reassembly.json").exists():
-        sys.exit(f"[!] {sid}: no reassembly -- run "
-                 f"'python demo/08_reassemble.py --sequence {sid}' first")
     ts = latest_ts(run)
     if ts is None:
-        sys.exit(f"[!] {sid}: no solve in optimized/{sid}")
-    r = json.loads((re_dir / "reassembly.json").read_text(encoding="utf-8"))
-    (dest / "frames").mkdir(parents=True)
-    for p in sorted(re_dir.glob("f*.png")):
-        shutil.copyfile(p, dest / "frames" / p.name)
+        sys.exit(f"[!] {sid}: no solve in optimized/{sid} -- solve the clip "
+                 f"first (demo/README.md, 'Routing, then solving')")
     qs = [np.load(p) for p in sorted(run.glob(f"frame_*_{ts}/best_q.npy"))]
     if not qs:
         sys.exit(f"[!] {sid}: no best_q.npy under optimized/{sid}")
+    re_dir, r = reassembly_of(sid)
+    row = seq_row(sid)
+    n_frames = int((r or {}).get("n_frames")
+                   or (row or {}).get("n_frames") or len(qs))
     # A held clip repeats one pose; a solved clip must match frame for frame.
-    if r.get("held_static") and len(qs) == 1:
-        qs = qs * r["n_frames"]
-    if len(qs) != r["n_frames"]:
-        sys.exit(f"[!] {sid}: {len(qs)} poses for {r['n_frames']} frames")
+    # Only a DECLARED hold replicates -- inferring one from a single pose
+    # would turn a half-finished solve into a clip that looks complete.
+    if (r or {}).get("held_static") and len(qs) == 1:
+        qs = qs * n_frames
+    if len(qs) != n_frames:
+        sys.exit(f"[!] {sid}: {len(qs)} poses for {n_frames} frames")
+    if fps is None:
+        fps = (r or {}).get("fps") or DEFAULT_CLIP_FPS
+    return qs, float(fps), {
+        "n_frames": n_frames, "ts": ts, "run": run, "re_dir": re_dir,
+        "reassembled": r is not None, "reassembly": r,
+        "held_static": bool((r or {}).get("held_static")),
+        "loop": bool(((row or {}).get("target_motion") or {}).get("loop")),
+    }
+
+
+def pack_clip(sid: str, dest: Path):
+    qs, _fps, info = clip_poses(sid)
+    re_dir, r, run = info["re_dir"], info["reassembly"], info["run"]
+    if re_dir is None:
+        sys.exit(f"[!] {sid}: no reassembly -- run "
+                 f"'python demo/08_reassemble.py --sequence {sid}' first")
+    (dest / "frames").mkdir(parents=True)
+    for p in sorted(re_dir.glob("f*.png")):
+        shutil.copyfile(p, dest / "frames" / p.name)
     write_joints(dest / "joints.csv", qs)
     pack_clip.last_qs, pack_clip.last_fps = qs, None
     summ = json.loads(sorted(run.glob("summary_*.json"))[-1]
@@ -210,7 +266,76 @@ def joint_limits():
     return _JOINT_LIMITS
 
 
-def write_choreo(dest: Path, name: str, hz: float, qs: list[np.ndarray]):
+FLEET_SHADOW_ART = next(
+    (Path(c) for c in (
+        os.environ.get("FLEET_SHADOW_ART"),
+        str(BENCH.parent / "fleet-shadow-art"),
+        os.path.expanduser("~/dev/fleet-shadow-art"),
+        os.path.expanduser("~/Documents/GitHub/fleet-shadow-art"),
+     ) if c and os.path.isdir(os.path.join(c, "motion-aware-shadow"))),
+    BENCH.parent / "fleet-shadow-art")
+
+
+def large_q_jump_deg() -> float | None:
+    """`motion_planner.LARGE_Q_JUMP` in degrees, READ from the other repo.
+
+    The planner's own bound, never a copy kept here -- the same rule
+    scripts/sequence_metrics.py follows, and for the same reason: a threshold
+    duplicated in two repos is a threshold that will disagree with itself.
+    That module cannot simply be imported for it (it pulls scipy, which the
+    deploy env has no reason to carry), so the ~20 lines are repeated and the
+    NUMBER is not. motion_planner imports mujoco at module level, so a failed
+    import falls back to reading the constant out of the source with `ast`.
+    Returns None when the checkout is absent: the check is then skipped and
+    said to be skipped, never silently passed.
+    """
+    ms = str(FLEET_SHADOW_ART / "motion-aware-shadow")
+    try:
+        sys.path.insert(0, ms)
+        from motion_planner import LARGE_Q_JUMP        # type: ignore
+        return math.degrees(float(LARGE_Q_JUMP))
+    except Exception:
+        pass
+    finally:
+        if ms in sys.path:
+            sys.path.remove(ms)
+    try:
+        tree = ast.parse(Path(ms, "motion_planner.py").read_text(encoding="utf-8"))
+        for node in tree.body:
+            if isinstance(node, ast.Assign):
+                for t in node.targets:
+                    if isinstance(t, ast.Name) and t.id == "LARGE_Q_JUMP":
+                        return math.degrees(float(ast.literal_eval(node.value)))
+    except (OSError, SyntaxError, ValueError):
+        pass
+    return None
+
+
+def transition_check(qs: list[np.ndarray]) -> dict:
+    """Per-joint travel between consecutive SOLVER keyframes, against the
+    planner's bound.
+
+    On the keyframes, not on the 30 Hz envelope: interpolation divides a
+    291 deg swing into 48 deg steps and makes an unperformable clip look
+    smooth. It is the keyframe-to-keyframe demand the arms cannot meet --
+    SEQUENCES.md section 0, where a clip averaging 0.6679 per-frame IoU needed
+    291 deg from one joint between two individually-good frames.
+
+    Interior transitions only. The envelope holds the first and last pose for
+    a second at each end and never performs a wrap, so a looping clip's
+    last-to-first step is not something this file asks anyone to execute.
+    """
+    thr = large_q_jump_deg()
+    if len(qs) < 2:
+        return {"thr_deg": thr, "dq_max_deg": [], "over": []}
+    Q = np.degrees(np.stack([np.asarray(q, dtype=float).ravel() for q in qs]))
+    dq = np.abs(np.diff(Q, axis=0)).max(axis=1)
+    over = [] if thr is None else [i for i, d in enumerate(dq) if d > thr]
+    return {"thr_deg": thr, "dq_max_deg": [float(d) for d in dq], "over": over}
+
+
+def write_choreo(dest: Path, name: str, hz: float, qs: list[np.ndarray],
+                 force: bool = False):
     """The unified clip envelope Shadow_robot_ui consumes, one file per element.
 
     Dropping this into fleet-shadow-art/choreographies/ is the whole deploy
@@ -218,7 +343,36 @@ def write_choreo(dest: Path, name: str, hz: float, qs: list[np.ndarray]):
     block, and streams robots[].frames to the arms as-is -- solver radians,
     uncalibrated (the driver applies per-arm visual offsets at send time).
     Name and filename stem must match and may only use [A-Za-z0-9_-].
+
+    Every choreography this repo writes goes through here, so the feasibility
+    gate goes here too: a clip whose keyframes demand more per-joint travel
+    than the planner's LARGE_Q_JUMP is not written unless `force` is set. It is
+    a physical bound, not a smoothness preference, and the clip that motivates
+    it -- star_spin, 4 of 4 transitions over it, one at 291 deg -- reads as a
+    perfectly good result by every per-frame number on the card.
     """
+    chk = transition_check(qs)
+    if chk["over"] and not force:
+        thr, dq = chk["thr_deg"], chk["dq_max_deg"]
+        steps = ", ".join(f"f{i:02d}->f{i + 1:02d} {dq[i]:.1f}deg"
+                          for i in chk["over"])
+        sys.exit(
+            f"[!] {name}: {len(chk['over'])}/{len(dq)} transitions exceed the "
+            f"planner's {thr:.1f}deg per-joint bound -- NOT written.\n"
+            f"    {steps}\n"
+            f"    The arms cannot perform this clip; per-frame IoU cannot see "
+            f"it (SEQUENCES.md section 0).\n"
+            f"    Re-solve with a temporal barrier "
+            f"(run_sequence.py --reachability-penalty 100), or pass --force to "
+            f"export it anyway for a Play preview, where nothing moves.")
+    if chk["over"]:
+        thr = chk["thr_deg"]
+        print(f"    {name}: [!] FORCED -- {len(chk['over'])}/"
+              f"{len(chk['dq_max_deg'])} transitions over the {thr:.1f}deg "
+              f"bound; preview only, do not run on hardware")
+    elif chk["thr_deg"] is None:
+        print(f"    {name}: [!] feasibility unchecked -- no fleet-shadow-art "
+              f"checkout at {FLEET_SHADOW_ART} (skipped, not passed)")
     src_hz = hz
     qs = interp_frames(qs, src_hz)
     # a single-pose clip needs a BODY between the crossfade holds: without

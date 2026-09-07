@@ -6,6 +6,7 @@
     python demo/export_library_clip.py --class bird        # export them all
     python demo/export_library_clip.py --library-id letters_upper_K_dejavusans-bold
     python demo/export_library_clip.py --sequence ICRA_scene_01_bird
+    python demo/export_library_clip.py --sequence star_spin --force
 
 Writes into fleet-shadow-art/choreographies/, which is exactly what the robot
 UI serves as its Play library (render_server's GET /choreographies), so an
@@ -25,7 +26,6 @@ import argparse
 import importlib.util
 import json
 import sys
-import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -91,8 +91,9 @@ def main():
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--library-id", action="append", default=[])
     ap.add_argument("--sequence", action="append", default=[],
-                    help="a SOLVED + reassembled sequence id; exports its "
-                         "whole motion, not a single pose")
+                    help="a SOLVED sequence id; exports its whole motion, "
+                         "not a single pose. Reassembly is not required -- "
+                         "that is the video path")
     ap.add_argument("--class", dest="cls", action="append", default=[],
                     metavar="NAME",
                     help="export EVERY solved target of this class "
@@ -101,6 +102,14 @@ def main():
                     help="print matching solved library ids and exit; "
                          "no QUERY lists every class")
     ap.add_argument("--sweep", default="big-budget-grounded")
+    ap.add_argument("--fps", type=float, default=None,
+                    help="source keyframe rate for --sequence clips "
+                         "(default: the footage fps where one was recorded, "
+                         f"else {pack.DEFAULT_CLIP_FPS:g})")
+    ap.add_argument("--force", action="store_true",
+                    help="write a clip whose keyframes exceed the planner's "
+                         "per-joint bound. Preview only -- the arms cannot "
+                         "perform it")
     ap.add_argument("--dest", default=str(DEFAULT_DEST))
     a = ap.parse_args()
 
@@ -143,15 +152,16 @@ def main():
         pack.write_choreo(dest, lid, 5.0, [q])
         print(f"  {lid} -> {dest / (lid + '.json')}")
     for sid in a.sequence:
-        # pack_clip writes a package element (frames/, joints.csv, meta.json)
-        # and leaves the pose track on itself; only the choreography is wanted
-        # here, so give it a scratch dir and keep the qs.
-        with tempfile.TemporaryDirectory() as td:
-            pack.pack_clip(sid, Path(td) / sid)
-            pack.write_choreo(dest, sid, pack.pack_clip.last_fps or 5.0,
-                              pack.pack_clip.last_qs)
+        # The choreography wants the pose track and nothing else. Going
+        # through pack_clip for it also demanded a reassembly -- a VIDEO
+        # artifact, since on hardware the rig casts at the fitted position and
+        # the fit inverse never happens -- which blocked all 13 generated
+        # clips, every one of them solved. clip_poses reads the solve.
+        qs, fps, info = pack.clip_poses(sid, a.fps)
+        pack.write_choreo(dest, sid, fps, qs, force=a.force)
+        note = "" if info["reassembled"] else "  [no reassembly: deploy-only]"
         print(f"  {sid} -> {dest / (sid + '.json')}  "
-              f"({len(pack.pack_clip.last_qs)} poses)")
+              f"({len(qs)} poses @ {fps:g} fps){note}")
     n = len(a.library_id) + len(a.sequence)
     print(f"{n} clip(s); refresh Play's library to deploy")
 
