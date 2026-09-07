@@ -756,6 +756,18 @@ def build_job(step: str, arg: str | None):
             else "--library-id"
         return ([[PY_EVAL, str(ROOT / "export_library_clip.py"),
                   flag, lid]], ROOT, False)
+    if step == "seq_video":
+        # One clip, playable, with no project behind it. compose (7) is a
+        # PROJECT film -- reassembled elements aligned by source frame id on
+        # the 1920x1080 canvas -- so a generated motion, having no footage,
+        # had no way to be watched at all.
+        sid = str(arg or "")
+        if not NAME_RE.match(sid) or not (BENCH / "sequences" / sid).is_dir():
+            return f"unknown sequence {sid!r}"
+        if not (BENCH / "optimized" / sid).is_dir():
+            return f"{sid}: no solve yet -- solve it first (6)"
+        return ([[PY_EVAL, str(ROOT / "seq_video.py"), "--sequence", sid,
+                  "--slow", "3", "--loop", "2"]], ROOT, False)
     if step == "score":
         return [[PY_GPU, "09_clip_score.py"]], ROOT, False
     if step == "compose":
@@ -1338,6 +1350,25 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
+            return
+        if self.path.startswith("/seqvideo/"):
+            # served rather than linked: the page is same-origin, and a
+            # file:// link to demo/out/ would not play from it
+            rel = self.path[len("/seqvideo/"):].split("?")[0]
+            root = (ROOT / "out" / "seqvideo").resolve()
+            p = (root / rel).resolve()
+            if (p.suffix in (".gif", ".mp4") and root in p.parents
+                    and p.is_file()):
+                data = p.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/gif"
+                                 if p.suffix == ".gif" else "video/mp4")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            else:
+                self.send_response(404); self.end_headers()
             return
         if self.path.startswith("/thumb/"):
             parts = self.path[len("/thumb/"):].split("/")

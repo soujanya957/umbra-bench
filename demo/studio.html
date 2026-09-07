@@ -165,7 +165,14 @@
       <button style="margin-bottom:6px"
         title="stream JUST this shape/sequence to the physical fleet now — its choreography is written first if it is missing. Opens a console window; closing it = E-STOP."
         onclick="deployLib()">&#8674; deploy this</button>
+      <button style="margin-bottom:6px" id="vidbtn"
+        title="render THIS clip on its own — target | shadow | overlay, per-frame IoU, at 1/3 speed — and play it here. 7 · compose is the project film and needs footage; this needs only a solve."
+        onclick="seqVideo()">&#9654; video</button>
     </span>
+    <div id="seqvid" style="display:none;margin:6px 0 8px">
+      <img id="seqvidimg" alt="" style="max-width:100%;border:1px solid var(--line);border-radius:6px;background:#fff">
+      <div class="hint" id="seqvidcap"></div>
+    </div>
     <div id="seldisp" class="mono" style="color:var(--warn);margin-bottom:6px">
       no library shape selected — click one in the rail, then a row's <b>lib</b></div>
     <table id="seqs"></table>
@@ -241,6 +248,7 @@ function poll(){
       await linit(fid);
       if(TAB === "sheet") grefresh();
       orefresh();
+      vidshow();
     }
   }, 2000);
 }
@@ -674,6 +682,38 @@ async function deployRobot(){
 /* One library shape or one solved sequence, straight to the arms: no
    package, no arrangement. The server writes the choreography first when it
    is not in choreographies/ yet. */
+/* One clip as a film. compose (7) is the PROJECT film -- reassembled
+   elements aligned by source frame id -- so a generated motion, which has no
+   footage behind it, was previously unwatchable outside a 96px rail thumb.
+   The page shows the .gif because mp4v (the codec 10_compose_video settled
+   on) does not decode in a <video> tag; the .mp4 is written beside it. */
+let VIDWANT = null;
+function seqVideo(){
+  if(!LASTLIB){ toast('click a shape or sequence in the library rail first');
+    return; }
+  if(LASTKIND !== 'seq'){
+    toast(LASTLIB + ' is a static shape — it has one pose, not a motion');
+    return; }
+  VIDWANT = LASTLIB;
+  $('#seqvidcap').textContent = 'rendering ' + LASTLIB + '…';
+  $('#seqvid').style.display = '';
+  $('#seqvidimg').removeAttribute('src');
+  run('seq_video', LASTLIB);
+}
+function vidshow(){
+  if(!VIDWANT) return;
+  const sid = VIDWANT, url = '/seqvideo/' + sid + '_compare.gif?t=' + Date.now();
+  const im = $('#seqvidimg');
+  im.onload = () => {
+    $('#seqvidcap').innerHTML = sid + ' — target | shadow | overlay, 1/3 speed, '
+      + '2x. <a href="/seqvideo/' + sid + '_compare.mp4" download>mp4</a> '
+      + 'and the gif are in demo/out/seqvideo/.';
+  };
+  im.onerror = () => { $('#seqvidcap').textContent =
+    sid + ': no film written — check the log above.'; };
+  im.src = url;
+}
+
 async function deployLib(){
   if(!LASTLIB){ toast('click a shape or sequence in the library rail first');
                 return; }

@@ -469,6 +469,10 @@ run_demo.py               the driver — start here
 09_clip_score.py          retrieval rank: does the shadow read as the letter
 10_compose_video.py       the AUTOMATIC union composite (manual assembly is the
                           expected path; this is the one-command version)
+seq_video.py              ONE clip as a film, mp4 + gif, no project needed --
+                          the solver's own target|shadow|overlay plates in
+                          order, or the bare shadow. 10_compose is a project
+                          film and needs footage; a generated motion has none
 route_motion.py           the static/translation/dynamic router
 out/                      reassembled frames, routing, scores, video (the
                           reassembled/ and solve_logs/ trees are regenerable
@@ -509,6 +513,30 @@ same URL updates it in place.
 Fresh-checkout caveat: `results/` is gitignored and the atlas also needs
 `browser_payload.json` and `teleop_payload.json`, which are NOT committed —
 a new machine runs the five-command chain in atlas/README.md once first.
+
+### A2. One clip, on its own — `seq_video.py`
+
+A generated motion has no footage behind it, so it appears in no project film
+and `10_compose_video.py` will never show it. To watch one:
+
+```bash
+python demo/seq_video.py --sequence star_spin            # + --slow 3 --loop 2
+python demo/seq_video.py --all --mode shadow
+```
+
+`--mode compare` (the default) strings the solver's own per-frame
+`final_comparison.png` into a film: target, shadow, overlay, that frame's IoU
+in the caption. The target it draws is the FITTED one the solver was given,
+which is why this file is used rather than pairing `sequences/<id>/f*.png`
+against the shadow here -- on a `--fit-target` clip that pairing reads as
+mis-registered and none of it is solver error (atlas/README.md documents the
+same trap for the static cards). `--mode shadow` is the cast shape alone.
+
+Both an `.mp4` (mp4v, as 10_compose_video.py settled on -- QuickTime and VLC)
+and a `.gif` land in `demo/out/seqvideo/`; the gif exists because mp4v does
+not decode in a browser `<video>`, and studio's **> video** button shows it
+inline. `--slow` and `--loop` change the playback only: a clip's own 5 fps is
+real time and hard to read.
 
 ### B. The demo video — the atlas does not produce this
 
@@ -562,6 +590,15 @@ fit floor 0.85 and must NOT get a loop bake.
 > joints stay uncalibrated solver radians. Ports are an operator setting in
 > the Robot console. Still the user's call: WHICH configs/ stage matches the
 > rig on the day.
+
+Any solved clip exports to the Play library on its own, with no package
+build and no reassembly -- `python demo/export_library_clip.py --sequence
+<id>`, or **-> robot** in studio with the clip selected in the library rail.
+Reassembly is a video step and the fit inverse it applies does not exist
+physically, so requiring it here only blocked the 13 generated motions from
+ever reaching the arms. A clip whose keyframes exceed
+`motion_planner.LARGE_Q_JUMP` is refused rather than written (`wiper`, today);
+`--force` writes it for a Play preview, where nothing moves.
 
 The solved clips are already in the robot pipeline's native currency: every
 `optimized/<clip>/frame_NN_<ts>/shadow_result.json` is a SCHEMA.md
