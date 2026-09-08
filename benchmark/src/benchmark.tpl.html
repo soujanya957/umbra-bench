@@ -1,4 +1,4 @@
-<title>Umbra Bench Atlas</title>
+<title>Umbra Bench</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
@@ -194,6 +194,26 @@ table.dtab thead th{color:var(--muted); font-weight:500; font-size:10px; letter-
 .m span{font-family:"IBM Plex Mono",monospace; font-size:9px; letter-spacing:.04em; color:var(--muted)}
 .ro .lbl{text-transform:none; letter-spacing:.03em; font-size:11px; color:var(--ink-2)}
 .m b{font-family:"IBM Plex Mono",monospace; font-size:11.5px; font-weight:500; font-variant-numeric:tabular-nums; color:var(--ink-2)}
+/* The one panel cell that is a control. The caret is the only affordance that
+   survives at 9px, so it carries the whole "this opens" signal. */
+.mclip{cursor:pointer; border-radius:4px; margin:-2px -4px; padding:2px 4px}
+.mclip:hover{background:var(--panel)}
+.mclip:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+.mclip .cx{font-style:normal; display:inline-block; transition:transform .12s}
+.mclip.open .cx{transform:rotate(180deg)}
+.clipex{grid-column:1/-1; margin-top:6px; padding-top:6px; border-top:1px solid var(--line-2)}
+.clipl{list-style:none; margin:0 0 4px; padding:0; display:flex; flex-direction:column; gap:3px}
+.clipl li{display:grid; grid-template-columns:12px 1fr 46px 34px; align-items:center; gap:5px;
+  font-size:10.5px; color:var(--ink-2)}
+.clipl .cn{font-family:"IBM Plex Mono",monospace; font-size:9px; color:var(--muted)}
+.clipl .cl{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.clipl .cb{height:4px; border-radius:2px; background:var(--line-2); overflow:hidden}
+.clipl .cb i{display:block; height:100%; background:var(--s3)}
+.clipl .cs{font-family:"IBM Plex Mono",monospace; font-size:9.5px;
+  font-variant-numeric:tabular-nums; color:var(--muted); text-align:right}
+/* The true class, wherever it landed -- the row a reader is looking for. */
+.clipl li.hit .cl{font-weight:700; color:var(--ink)}
+.clipl li.hit .cb i{background:var(--s1)}
 
 /* ── filmstrip ─────────────────────────────────────────────────────────── */
 /* ── benchmark view ─────────────────────────────────────────────────────── */
@@ -272,7 +292,7 @@ table.strat td.warn{color:#c2410c; font-weight:600}
   border:1px solid var(--line-2); overflow-x:auto; font-family:"IBM Plex Mono",monospace;
   font-size:11.5px; line-height:1.65; color:var(--ink-2); white-space:pre}
 
-/* ── the hand-cast reference set, where it surfaces in the atlas ─────────── */
+/* ── the hand-cast reference set, where it surfaces in the dashboard ─────────── */
 /* .plate>* sizes the image slots; the badge is not one of them. */
 .telflag{position:absolute; left:6px; bottom:6px; z-index:2; width:auto!important;
   aspect-ratio:auto!important;
@@ -407,11 +427,19 @@ button.act:hover{border-color:var(--accent); color:var(--accent-ink)}
    only when /api/ping reports a Shadow_robot_ui to export into. Served as a plain
    static file these cards render identically, minus one button. */
 .libline{display:flex; align-items:center; gap:8px; margin-top:8px}
-.libbtn{font:inherit; font-size:11px; padding:3px 9px; border-radius:6px; cursor:pointer;
+/* .libcopy is deliberately NOT a .libbtn: applyStudioState() hides every .libbtn
+   when no studio is answering, and the copy button is the one that must survive
+   that -- handing over the command is precisely what a page opened from disk,
+   with no backend to call, can still do. */
+.libbtn,.libcopy{font:inherit; font-size:11px; padding:3px 9px; border-radius:6px; cursor:pointer;
   border:1px solid var(--line); background:var(--panel); color:inherit}
-.libbtn:hover:not(:disabled){border-color:currentColor}
+.libbtn:hover:not(:disabled),.libcopy:hover{border-color:currentColor}
 .libbtn:disabled{opacity:.55; cursor:default}
 .libmsg{font-size:11px; opacity:.75}
+.seqpick{display:inline-flex; align-items:center; gap:4px; font-size:11px;
+  color:var(--ink-2); cursor:pointer; user-select:none}
+.seqpick input{margin:0; cursor:pointer}
+#seqHiddenNote b{font-weight:600}
 .libhint{opacity:.8}
 .seqcard{border:1px solid var(--line); border-radius:9px; background:var(--panel);
   box-shadow:var(--shadow); overflow:hidden; display:flex; flex-direction:column}
@@ -476,22 +504,22 @@ table.gref td.note{color:var(--muted); font-size:11px}
 <div class="app">
   <aside class="rail">
     <div class="brand">
-      <h1>Umbra Bench Atlas</h1>
+      <h1>Umbra Bench</h1>
       <p id="brandline">the four-metric panel. Star frames to build a sequence.</p>
     </div>
 
     <div class="grp">
       <div class="lbl">View</div>
       <div class="seg" id="segPage">
-        <button data-v="atlas" aria-pressed="true">atlas</button>
-        <button data-v="bench" aria-pressed="false">benchmark</button>
+        <button data-v="results" aria-pressed="true">results</button>
+        <button data-v="bench" aria-pressed="false">analysis</button>
         <button data-v="sequences" aria-pressed="false">sequences</button>
         <button data-v="teleop" aria-pressed="false">teleop</button>
         <button data-v="guide" aria-pressed="false">guide</button>
       </div>
     </div>
 
-    <div class="grp" data-only="atlas">
+    <div class="grp" data-only="results">
       <div class="lbl">Sweep</div>
       <div class="seg" id="segSweep">
         <button data-v="big" aria-pressed="true">big&nbsp;budget</button>
@@ -499,7 +527,7 @@ table.gref td.note{color:var(--muted); font-size:11px}
       </div>
     </div>
 
-    <div class="grp" data-only="atlas">
+    <div class="grp" data-only="results">
       <div class="lbl">Plate</div>
       <div class="seg" id="segView">
         <button data-v="overlay" aria-pressed="true" title="shadow against the target the optimizer was actually given — after --fit-target scaled and shifted it">overlay</button>
@@ -515,19 +543,19 @@ table.gref td.note{color:var(--muted); font-size:11px}
       </div>
     </div>
 
-    <div class="grp" data-only="atlas">
+    <div class="grp" data-only="results">
       <div class="lbl">Subset</div>
       <div class="chips" id="subsets"></div>
       <button class="chip" id="allSub" style="align-self:flex-start">reset all</button>
     </div>
 
-    <div class="grp" data-only="atlas">
+    <div class="grp" data-only="results">
       <div class="lbl">Reference set</div>
       <label class="telrow"><input type="checkbox" id="telOnly">
         <span>hand-cast only <b id="telN">0</b></span></label>
     </div>
 
-    <div class="grp" data-only="atlas">
+    <div class="grp" data-only="results">
       <div class="lbl">Sort</div>
       <select class="field mono" id="sort">
         <option value="iou-desc">IoU ↑ — most area agreement</option>
@@ -557,7 +585,7 @@ table.gref td.note{color:var(--muted); font-size:11px}
       </select>
     </div>
 
-    <div class="grp" data-only="atlas">
+    <div class="grp" data-only="results">
       <div class="lbl">Search</div>
       <input class="field mono" id="q" type="search" placeholder="id or class…" autocomplete="off">
     </div>
@@ -577,7 +605,7 @@ table.gref td.note{color:var(--muted); font-size:11px}
   <section class="rescue" id="seqView" hidden></section>
   <section class="bench" id="guideView" hidden></section>
 
-  <main class="main" id="atlasView">
+  <main class="main" id="resultsView">
     <header class="top">
       <div class="count">
         <b id="nShown">0</b>
@@ -618,7 +646,7 @@ table.gref td.note{color:var(--muted); font-size:11px}
 <script>
 (() => {
 "use strict";
-/* The payload slots are literal placeholders until build_atlas.py fills them, and
+/* The payload slots are literal placeholders until build_benchmark.py fills them, and
    this file is a valid-looking .html sitting next to the built one. Opened by
    mistake it used to fail as `Unexpected token '_'` in the console and a blank
    page -- true, unreadable, and not actionable. Say what the file is instead. */
@@ -632,11 +660,11 @@ function payload(id){
       + '<h1 style="margin:0 0 10px;font-size:19px">This is the template, not the page</h1>'
       + '<p style="margin:0 0 14px;color:#4a4a55">The data is spliced in at build time, so this'
       + ' file has placeholders where the benchmark should be. Build it, then open'
-      + ' <code>atlas/atlas.html</code>:</p>'
+      + ' <code>benchmark/benchmark.html</code>:</p>'
       + '<pre style="margin:0;padding:12px 14px;background:#f6f7f9;border:1px solid #e8eaee;'
       + 'border-radius:7px;font:12.5px ui-monospace,monospace;overflow-x:auto">'
-      + 'python3 atlas/build_atlas.py</pre></div></body>';
-    throw new Error("atlas: template opened directly — run atlas/build_atlas.py and open atlas/atlas.html");
+      + 'python3 benchmark/build_benchmark.py</pre></div></body>';
+    throw new Error("dashboard: template opened directly — run benchmark/build_benchmark.py and open benchmark/benchmark.html");
   }
   return JSON.parse(t);
 }
@@ -652,9 +680,9 @@ const store = {
 /* Saved state outlives the code that wrote it. A browser still holding
    page:"rescue" from before that view was removed would have every view hidden
    and no button pressed -- a blank page with no way back except clearing storage.
-   Anything not on this list falls back to the atlas. */
-const PAGES = ["atlas", "bench", "sequences", "teleop", "guide"];
-/* The teleop set is read here, ahead of the atlas, because the atlas uses it:
+   Anything not on this list falls back to the dashboard. */
+const PAGES = ["results", "bench", "sequences", "teleop", "guide"];
+/* The teleop set is read here, ahead of the dashboard, because the dashboard uses it:
    a target somebody has actually cast by hand is a different kind of row, and
    the grid says so rather than making you switch views to find out. */
 const TELEOP = payload("teleop");
@@ -665,7 +693,7 @@ for(const ts of (TELEOP.sets || [TELEOP]))
     if(it.sample_id && !TELBY.has(it.sample_id)) TELBY.set(it.sample_id, it);
 
 const st = {
-  page:  (p => PAGES.includes(p) ? p : "atlas")(store.get("page", "atlas")),
+  page:  (p => PAGES.includes(p) ? p : "results")(store.get("page", "results")),
   telOnly: store.get("telOnly", false),
   sweep: store.get("sweep","big"),
   view:  store.get("view", "overlay"),
@@ -890,7 +918,7 @@ function disagreement(rows){
 
 /* ── overlay compositing ─────────────────────────────────────────────────
    Masks are 1-bit, dark = shape. Colours match make_phrase_gif.py so the
-   atlas reads the same way as the contact sheets and the paper figures.   */
+   dashboard reads the same way as the contact sheets and the paper figures.   */
 const imgCache = new Map();
 function loadMask(b64){
   if(imgCache.has(b64)) return imgCache.get(b64);
@@ -999,8 +1027,11 @@ function card(s){
   el.addEventListener("click", () => openDetail(s.id));
   p.append(star);
 
-  const cell = (p) => '<div class="m"' + (p.tip ? ' title="' + p.tip(s, e) + '"' : "") +
+  const cell = (p) => '<div class="m' + (p.k === "clip_rr" ? " mclip" : "") + '"' +
+    (p.k === "clip_rr" ? ' role="button" tabindex="0"' : "") +
+    (p.tip ? ' title="' + p.tip(s, e) + '"' : "") +
     '><span>' + p.name + (p.dir > 0 ? " ↑" : " ↓") +
+    (p.k === "clip_rr" ? ' <i class="cx">▾</i>' : "") +
     '</span><b>' + num(e && e[p.k], p.dp) + '</b></div>';
   const meta = document.createElement("div");
   meta.className = "meta";
@@ -1008,8 +1039,60 @@ function card(s){
     '<div class="idline"><span class="sid" title="' + s.id + '">' + s.id + '</span>' +
     '<span class="iou" title="IoU — how much area agrees">' + (v == null ? "—" : v.toFixed(3)) + '</span></div>' +
     '<div class="mrow">' + PANEL.slice(1).map(cell).join("") + '</div>';
+
+  /* The CLIP cell expands in place. The rank alone says the shadow failed; the
+     top 5 say what it failed *as*, and that is the part a reader can act on.
+     Inline rather than in the detail sheet because the question is almost always
+     comparative -- "do these all collapse onto the same wrong letter?" -- and a
+     modal per card is exactly the wrong shape for that. The card's own click
+     opens the detail sheet, so this one stops propagating. */
+  const cl = meta.querySelector(".mclip");
+  if(cl){
+    const box = document.createElement("div");
+    box.className = "clipex"; box.hidden = true;
+    meta.append(box);
+    const toggle = (ev) => {
+      ev.stopPropagation();
+      if(box.hidden){ box.innerHTML = clipConfusion(s, e); box.hidden = false; }
+      else box.hidden = true;
+      cl.classList.toggle("open", !box.hidden);
+    };
+    cl.addEventListener("click", toggle);
+    cl.addEventListener("keydown", (ev) => {
+      if(ev.key === "Enter" || ev.key === " "){ ev.preventDefault(); toggle(ev); }
+    });
+  }
   el.append(p, meta);
   return el;
+}
+
+/* Top-5 confusions, true class marked. parseGuess splits on "|" and tolerates a
+   shorter list, so a payload built before the scorer was widened to five still
+   renders -- it shows the three it has rather than nothing at all. The bars are
+   scaled to the top guess, not to 1.0: these are raw cosines, they sit in a
+   narrow band well below 1, and drawing them against a full-width 1.0 makes
+   every candidate look equally weak and hides the gap that is the whole point. */
+function clipConfusion(s, e){
+  const g = parseGuess(e && e.clip_preds);
+  if(!g.length)
+    return '<div class="note">No CLIP guesses in this payload. Run '
+         + '<span class="mono">scripts/clip_eval_dataset.py</span>, then rebuild '
+         + 'the payload and this page.</div>';
+  const truth = s.clip_true ?? s.cls;
+  const top = Math.max.apply(null, g.map(x => x.sim ?? 0)) || 1;
+  const hit = g.some(x => x.label === truth);
+  return '<ol class="clipl">' + g.map((x, i) =>
+      '<li' + (x.label === truth ? ' class="hit"' : "") + '>'
+    + '<span class="cn">' + (i + 1) + '</span>'
+    + '<span class="cl">' + x.label + '</span>'
+    + '<span class="cb"><i style="width:'
+    + Math.max(2, Math.round(100 * (x.sim ?? 0) / top)) + '%"></i></span>'
+    + '<span class="cs">' + (x.sim == null ? "—" : x.sim.toFixed(3)) + '</span></li>'
+    ).join("") + '</ol><div class="note">'
+    + (truth ? 'True class <b>' + truth + '</b> — '
+             + (hit ? 'inside the top 5.' : '<b>not</b> in the top 5.') + ' ' : "")
+    + 'Bars are raw cosine similarity scaled to the top guess, not confidence: '
+    + 'they do not sum to 1.</div>';
 }
 
 /* ── expanded card ───────────────────────────────────────────────────────── */
@@ -1093,11 +1176,11 @@ function openDetail(id){
     </tbody></table>
 
     <h4>Recognizability — CLIP, ranked in ${s.clip_n || "?"} classes of this subset</h4>
-    <table class="dtab"><thead><tr><th></th><th>rank</th><th>1/rank</th><th>what CLIP read it as</th></tr></thead><tbody>
+    <table class="dtab"><thead><tr><th></th><th>rank</th><th>1/rank</th><th>what CLIP read it as (top 5)</th></tr></thead><tbody>
       <tr><td>target (ceiling)</td><td>${s.clip_t_rank ?? "—"}</td><td>${f(s.clip_t_rr)}</td>
-          <td style="text-align:left">${guessRow(s.clip_t_top3, s.clip_true)}</td></tr>
+          <td style="text-align:left">${guessRow(s.clip_t_preds, s.clip_true)}</td></tr>
       <tr><td>shadow</td><td>${(e&&e.clip_rank) ?? "—"}</td><td>${f(e&&e.clip_rr)}</td>
-          <td style="text-align:left">${guessRow(e&&e.clip_top3, s.clip_true)}</td></tr>
+          <td style="text-align:left">${guessRow(e&&e.clip_preds, s.clip_true)}</td></tr>
     </tbody></table>
     <div class="note">True class <b>${s.clip_true ?? s.cls ?? "?"}</b>, chance
       ${s.clip_n ? (1/s.clip_n).toFixed(3) : "—"}. Ratio shadow/target
@@ -1380,7 +1463,7 @@ $("#copyJson").addEventListener("click", (e) => copy(JSON.stringify({
     return { id, subset: s && s.subset, target: s && ("targets/" + s.subset + "/" + id.replace(s.subset + "_", "") + ".png"), iou: en && en.iou };
   })
 }, null, 2), e.target));
-/* Starred shadows -> the robot. The atlas is one self-contained file with no
+/* Starred shadows -> the robot. The dashboard is one self-contained file with no
    backend, and it stays that way: rather than calling an exporter it cannot
    reach, it hands you the exact command. export_library_clip.py writes into
    fleet-shadow-art/choreographies/, which IS the robot UI's Play library
@@ -1415,7 +1498,7 @@ $("#clearPicks").addEventListener("click", () => { st.picks = []; store.set("pic
   document.querySelectorAll(".card.picked").forEach(c => c.classList.remove("picked")); renderReel(); });
 
 /* ── benchmark view ──────────────────────────────────────────────────────────
-   Everything here is computed from the same payload the atlas uses, on the
+   Everything here is computed from the same payload the dashboard uses, on the
    big-budget sweep, so the figures cannot drift from the cards.              */
 const SRC = { digits:"glyph", letters_upper:"glyph", letters_lower:"glyph",
   animals:"nameable", objects:"nameable", vehicles:"nameable", figures:"nameable",
@@ -1562,12 +1645,12 @@ function figB2(){
     land at IoU ≈ 0.60, but the butterfly's holes are gone — <b>pw_h1 differs by 1.008</b> while IoU differs
     by 0.004. <b>Bottom:</b> a spoon and a cup both at IoU ≈ 0.75, same subset, but the cup's outline is more
     than twice as badly placed (<b>NSD 0.741 vs 0.312</b>). Across all 546 the panel members share little:
-    the largest pairwise |ρ| is 0.51, and IoU↔pw_h1 is 0.10. Overlay colours as in the atlas.`;
+    the largest pairwise |ρ| is 0.51, and IoU↔pw_h1 is 0.10. Overlay colours as in the dashboard.`;
   wrap.append(cap); return wrap;
 }
 
 /* The reference set as a stratum, in the same shape as the table above it: the
-   question a reader has here is not what a capture looks like -- the atlas shows
+   question a reader has here is not what a capture looks like -- the dashboard shows
    that -- but which strata a human actually covered, and whether that coverage is
    thin enough to make a claim about it unsafe. */
 function telBlock(){
@@ -1680,7 +1763,7 @@ function clipBlock(){
     list; top-1 is how often the true class comes first, MRR is the mean of 1/rank, which gives partial
     credit for coming close. <b>The two ratio columns disagree on purpose.</b> Ratio top-1 is the strict
     reading — how often the shadow wins outright, relative to the target. Ratio MRR is the graded one, and
-    it is the aggregate of the per-item CLIP figure on the atlas cards. <code>hand_shadow</code> is the
+    it is the aggregate of the per-item CLIP figure on the dashboard cards. <code>hand_shadow</code> is the
     case that needs both: <b>0.000</b> by top-1, because no shadow ever ranks first, against <b>0.407</b>
     by MRR, because they land around 4th of 9 and simply never win.
     <b><code>abstract</code> is the null control</b> — its targets score 0.086 against 0.059 chance, so the
@@ -1982,7 +2065,7 @@ function ttally(){
 window.__teleop = { get TEL(){ return TEL; }, get tpts(){ return tpts; }, TELSETS, ffData, wallLevel, geodesic, segment, tdec };
 
 /* The teleop view is the pipeline, not a second copy of the dataset. The captures
-   themselves surface in the atlas, on the cards of the targets they were posed
+   themselves surface in the dashboard, on the cards of the targets they were posed
    for; what belongs here is how to collect and process a new one, with the
    interactive segmenter sitting inside the step that needs it. */
 const STEPS = [
@@ -2012,13 +2095,13 @@ python scripts/teleop_pipeline.py --teleop-root Teleops/source/teleop_set2 \
   --images 'Teleops/source/teleop_set2/raw/teleop_upper[pg]_01.png'`],
   ["4", "Fix by hand, from this page", `The cards below segment ON the flat-fielded
     frame (illumination divided out, CLAHE — the shadow sits only 30–60 grey levels
-    under the wall, so both steps are needed). Serve the atlas through
+    under the wall, so both steps are needed). Serve the dashboard through
     <code>scripts/teleop_studio.py</code> and the loop closes without a terminal:
     <b>save to folder</b> merges your points into the set's <code>points.json</code>,
     <b>re-segment marked</b> runs SAM2 on exactly those captures and rebuilds this
     page. On a plain static server the same points export via <b>copy points</b>.`,
     `~/miniconda3/envs/umbra-bench/python.exe scripts/teleop_studio.py
-# then open http://localhost:8479/atlas.html`],
+# then open http://localhost:8479/benchmark.html`],
   ["5", "Link", `A capture is not a target — it is a shadow somebody produced <i>for</i> one.
     It fills <code>shadows.teleop</code> on that target's row and the row gains the tag
     <code>SO101_fleet_teleop</code>, so both halves share one <code>sample_id</code>.
@@ -2030,7 +2113,7 @@ python scripts/link_teleop.py --manifest Teleops/source/teleop_set1/masks/manife
   ["6", "Rebuild", `The payload is read from the mask manifest, so anything the steps above
     changed reaches the dashboard here and nowhere else.`,
     `python scripts/_build_teleop_payload.py     # bakes every set under Teleops/source/
-python atlas/build_atlas.py
+python benchmark/build_benchmark.py
 # (the studio's re-segment button runs both for you)`],
 ];
 
@@ -2044,7 +2127,7 @@ function renderTeleop(){
     <p style="margin:0 0 14px;font-size:13px;line-height:1.6;color:var(--ink-2);max-width:74ch">
       The pipeline from camera to a row in the benchmark. The captures themselves are not
       a separate dataset — each one attaches to the target it was posed for and shows up on
-      that target's card in the atlas, under the <b>human</b> plate. This page is what to run
+      that target's card in the dashboard, under the <b>human</b> plate. This page is what to run
       to add more. Full prose in <code>Teleops/README.md</code>.</p>
     ${TELSETS.length > 1 ? `<div style="display:flex;gap:6px;margin:0 0 10px">${TELSETS.map((x, i) =>
       `<button class="chip" aria-pressed="${i === telIdx}" data-si="${i}">${x.name}<span class="ct">${x.n}</span></button>`).join("")}</div>` : ""}
@@ -2155,9 +2238,22 @@ const seqAnims = [];
 let seqTicker = null;
 let seqPlate = "target";                 // target | shadow | overlay | trip
 const seqFams = new Set(["generated", "demo"]);
+/* Hidden clips are a VIEW filter and nothing else: no file is touched, and the
+   payload still carries every sequence. The sequences track has no evaluation
+   riding on it yet, so culling the ones not worth looking at is a reading
+   convenience -- but a card that vanishes with no way back is the failure the
+   subset chips already taught us (see "Saved state" in the README), so the
+   count and a "show all" are always on screen while anything is hidden.
+
+   Reconciled against the payload on load for the same reason `st.page` is: an
+   id hidden before a rebuild that no longer exists would otherwise sit in
+   localStorage forever, inflating the count against nothing. */
+let seqHidden = new Set(store.get("seqHidden", [])
+  .filter(id => SEQ.sequences.some(q => q.id === id)));
+const seqSel = new Set();                // multi-select, this session only
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/* The three plates are the atlas card's, animated in lockstep: every pane of a
+/* The three plates are the dashboard card's, animated in lockstep: every pane of a
    card draws the SAME frame index, so target, shadow and overlay stay aligned
    through the clip. Overlay classification matches paintOverlay exactly, but
    composites at SEQ.px on its own scratch canvas rather than borrowing the
@@ -2308,6 +2404,49 @@ async function seqLibClick(e){
   }finally{ b.disabled = false; b.textContent = label; }
 }
 
+/* The command, not the call -- the same bargain the results view strikes with
+   `copy export cmd`, one view over. The live button above it needs the studio
+   answering on /api; this page is normally read as a file off disk, where there
+   is no backend to reach, so the honest move is to hand over the exact command.
+   It is therefore never hidden by applyStudioState.
+
+   --force is NOT inferred. export_library_clip.py exports via pack.clip_poses,
+   which reads the LATEST timestamped run under optimized/<id>; the payload's
+   solve sources (optimizer, optimizer_static, optimizer_v0, ...) do not map onto
+   "latest", so deciding --force from any one source's dq_infeasible_frac would
+   be a guess that silently writes an unperformable clip -- or omits the flag the
+   export needs and fails. The infeasible sources are named instead, and the
+   reader decides. */
+function seqExportCmd(q){
+  const head = ["# run from the umbra-bench repo root, then refresh Play"];
+  if(!q.solved.length)
+    return head.concat([`# ${q.id}: no solve yet — nothing to export.`,
+      "# solve the clip first (demo/README.md, “Routing, then solving”)"]).join("\n") + "\n";
+  const bad = q.solved.filter(s => ((q.solves[s] || {}).headline || {}).dq_infeasible_frac > 0)
+                      .map(s => `${s} ${q.solves[s].headline.dq_infeasible_frac}`);
+  if(bad.length)
+    head.push(`# exceeds the planner's per-joint bound (${bad.join(", ")}).`,
+      "# if the export refuses, add --force — preview only, the arms cannot perform it");
+  return head.concat(["python demo/export_library_clip.py \\",
+                      "    --sequence " + q.id]).join("\n") + "\n";
+}
+
+/* Family and hidden are one decision per card, so they resolve in one place --
+   two independent `el.hidden =` writers would race and whichever ran last would
+   win, un-hiding clips the other had just filtered out. */
+function seqApplyFilters(){
+  for(const a of seqAnims)
+    a.el.hidden = !seqFams.has(a.family) || seqHidden.has(a.id);
+  const n = seqHidden.size, note = $("#seqHiddenNote");
+  if(note){
+    note.hidden = !n;
+    note.firstElementChild && (note.firstElementChild.textContent =
+      `${n} clip${n === 1 ? "" : "s"} hidden`);
+  }
+  const btn = $("#seqHideSel");
+  if(btn){ btn.disabled = !seqSel.size; btn.textContent = `hide selected (${seqSel.size})`; }
+}
+
 function seqCard(q){
   const card = document.createElement("div"); card.className = "seqcard";
   const period = Math.max(1000 / (q.fps || 6), 200);
@@ -2341,7 +2480,13 @@ function seqCard(q){
       </div>
       ${seqSpark(q.motion, q.loop)}
       <div class="libline"><button class="libbtn" hidden data-sid="${q.id}"
-        title="Write this clip onto the UI's Targets shelf (Shadow_robot_ui/library/models.json) as a frame sequence">&rarr; shape library</button><span class="libmsg"></span></div>
+        title="Write this clip onto the UI's Targets shelf (Shadow_robot_ui/library/models.json) as a frame sequence">&rarr; shape library</button><button
+        class="libcopy" data-sid="${q.id}"
+        title="Copy the command that writes this whole clip into the robot UI's Play library (fleet-shadow-art/choreographies/). Run it from the umbra-bench repo root; refresh Play to deploy.">copy export cmd</button><button
+        class="libcopy seqhide" data-sid="${q.id}"
+        title="Hide this clip from the sequences view. Nothing on disk is touched — the count above stays visible and 'show all' brings it back.">hide</button><label
+        class="seqpick" title="Select for a batch hide"><input type="checkbox" data-sid="${q.id}"${
+        seqSel.has(q.id) ? " checked" : ""}> sel</label><span class="libmsg"></span></div>
     </div>`;
   for(const src of q.solved){
     const so = q.solves[src], h = so.headline;
@@ -2437,7 +2582,7 @@ function seqCard(q){
   // Shadow frames come from the first solved source that recorded them; today
   // that is at most one, and a per-source switch can wait for a second capture.
   // When the run solved a fitted target, every plate draws the SHOWN frames
-  // (wf) — the static atlas's rule: against the authored frames the card reads
+  // (wf) — the static dashboard's rule: against the authored frames the card reads
   // as mis-registered, and none of that is solver error.
   const withSf = q.solved.map(s => q.solves[s]).find(so => so.sf);
   const a = {
@@ -2446,7 +2591,7 @@ function seqCard(q){
     cvO: card.querySelector(".cv-o"), lbl: card.querySelector(".fidx"),
     triplbl: card.querySelector(".seq-lbl"),
     f: (withSf && withSf.wf) ? withSf.wf : q.f,
-    sf: withSf ? withSf.sf : null, family: q.family,
+    sf: withSf ? withSf.sf : null, family: q.family, id: q.id,
     n: q.f.length, loop: q.loop, period, i: 0, tick: 0,
     next: performance.now() + period,
   };
@@ -2469,12 +2614,15 @@ function renderSequences(){
     and cannot be performed</b> — one transition needs a 291° single-joint swing. So every solve here shows its
     mean frame IoU only next to <span class="mono">dq_infeasible_frac</span>, and previews only wrap around when
     the sequence actually loops. The guide view explains each number.</p>
-    <p class="libhint intro" hidden>These clips can be pushed straight onto the UI&rsquo;s Targets shelf, but only
-    when this page is served by the studio rather than opened from disk. Run
+    <p class="libhint intro" hidden><b>copy export cmd</b> on any card copies the command that writes
+    that whole clip into the robot UI&rsquo;s Play library
+    (<span class="mono">fleet-shadow-art/choreographies/</span>); run it from the repo root and
+    refresh Play. Pushing a clip onto the UI&rsquo;s Targets shelf <em>in one click</em> additionally
+    needs this page served by the studio rather than opened from disk &mdash; run
     <span class="mono">python scripts/teleop_studio.py</span> and open
-    <span class="mono">localhost:8479/atlas.html</span> &mdash; each card then carries a
+    <span class="mono">localhost:8479/benchmark.html</span>, and each card also carries a
     <b>&rarr; shape library</b> button.</p>`;
-  // The same plate control as the atlas grid, animated: every pane of a card
+  // The same plate control as the dashboard grid, animated: every pane of a card
   // draws the same frame index, so the three modes stay aligned through the
   // clip. Clips without a solved shadow stay on target rather than going blank.
   const ctl = document.createElement("div"); ctl.className = "seqctl";
@@ -2489,11 +2637,28 @@ function renderSequences(){
       <button class="chip" data-f="generated" aria-pressed="true">generated</button>
       <button class="chip" data-f="demo" aria-pressed="true">demo</button>
     </div>
-    <span class="hint">shadow &amp; overlay need a solved clip — ${SEQ.n_solved} of ${SEQ.n} so far</span>`;
+    <span class="hint">shadow &amp; overlay need a solved clip — ${SEQ.n_solved} of ${SEQ.n} so far</span>
+    <button class="act" id="seqHideSel" disabled>hide selected (0)</button>
+    <span class="hint" id="seqHiddenNote" hidden><b></b> —
+      <button class="act" id="seqShowAll">show all</button></span>`;
   const grid = document.createElement("div"); grid.className = "seqgrid";
   for(const q of SEQ.sequences) grid.appendChild(seqCard(q));
   grid.addEventListener("click", seqLibClick);   // grid is rebuilt per render, so
                                                  // this cannot accumulate listeners
+  grid.addEventListener("click", (e) => {
+    const h = e.target.closest(".seqhide");
+    if(h){ seqHidden.add(h.dataset.sid); seqSel.delete(h.dataset.sid);
+           store.set("seqHidden", [...seqHidden]); seqApplyFilters(); return; }
+    // .seqhide also carries .libcopy for styling, so it must be handled first.
+    const b = e.target.closest(".libcopy"); if(!b) return;
+    const q = SEQ.sequences.find(x => x.id === b.dataset.sid); if(!q) return;
+    copy(seqExportCmd(q), b);
+  });
+  grid.addEventListener("change", (e) => {
+    const c = e.target.closest(".seqpick input"); if(!c) return;
+    c.checked ? seqSel.add(c.dataset.sid) : seqSel.delete(c.dataset.sid);
+    seqApplyFilters();
+  });
   wrap.append(head, ctl, grid);
   v.replaceChildren(wrap);
   applyStudioState();
@@ -2508,8 +2673,20 @@ function renderSequences(){
     if(seqFams.has(f) && seqFams.size > 1) seqFams.delete(f); else seqFams.add(f);
     ctl.querySelectorAll("#seqFamChips .chip").forEach(x =>
       x.setAttribute("aria-pressed", String(seqFams.has(x.dataset.f))));
-    for(const a of seqAnims) a.el.hidden = !seqFams.has(a.family);
+    seqApplyFilters();
   }));
+  ctl.querySelector("#seqHideSel").addEventListener("click", () => {
+    for(const id of seqSel) seqHidden.add(id);
+    seqSel.clear();
+    store.set("seqHidden", [...seqHidden]);
+    ctl.closest(".seqwrap").querySelectorAll(".seqpick input")
+       .forEach(c => { c.checked = false; });
+    seqApplyFilters();
+  });
+  ctl.querySelector("#seqShowAll").addEventListener("click", () => {
+    seqHidden.clear(); store.set("seqHidden", []); seqApplyFilters();
+  });
+  seqApplyFilters();
   if(!seqTicker && seqAnims.length) seqTicker = setInterval(seqTick, 50);
 }
 
@@ -2607,7 +2784,7 @@ function renderGuide(){
   const views = document.createElement("div"); views.className = "fig";
   views.innerHTML = `<h3>The views</h3>
     <ul class="guide-rules">
-      <li><b>atlas</b> — every target beside its best solved shadow. Sort by any panel metric, drag the
+      <li><b>results</b> — every target beside its best solved shadow. Sort by any panel metric, drag the
         histogram to brush a range, filter by subset chips or search, star cards into the filmstrip, click a
         card for its full report. Plates draw the target <em>the optimizer was actually given</em> (the fitted
         one) so pictures and numbers are always the same comparison. The hand-cast badge marks a human
@@ -2621,8 +2798,8 @@ function renderGuide(){
       <li><b>teleop</b> — the capture pipeline, six steps from rig to rebuild, with the interactive segmenter
         in step 4.</li>
       <li>Sidebar state persists per browser (<span class="mono">localStorage</span>, keys
-        <span class="mono">uba:*</span>); after a re-run, rebuild payloads then the atlas —
-        <span class="mono">build_atlas.py --check</span> says whether the committed page is current.</li>
+        <span class="mono">uba:*</span>); after a re-run, rebuild payloads then the dashboard —
+        <span class="mono">build_benchmark.py --check</span> says whether the committed page is current.</li>
     </ul>`;
 
   const rules = document.createElement("div"); rules.className = "fig";
@@ -2720,16 +2897,16 @@ function renderGuide(){
 }
 
 function applyPage(){
-  if(!PAGES.includes(st.page)) st.page = "atlas";
+  if(!PAGES.includes(st.page)) st.page = "results";
   store.set("page", st.page);
   const p = st.page;
   $("#benchView").hidden  = p !== "bench";
   $("#teleopView").hidden = p !== "teleop";
   $("#seqView").hidden    = p !== "sequences";
   $("#guideView").hidden  = p !== "guide";
-  $("#atlasView").hidden  = p !== "atlas";
-  document.querySelectorAll('[data-only="atlas"]').forEach(e => e.hidden = p !== "atlas");
-  document.querySelector(".strip").hidden = p !== "atlas";
+  $("#resultsView").hidden  = p !== "results";
+  document.querySelectorAll('[data-only="results"]').forEach(e => e.hidden = p !== "results");
+  document.querySelector(".strip").hidden = p !== "results";
   if(p === "bench"  && !$("#benchView").childElementCount)  renderBench();
   if(p === "teleop" && !$("#teleopView").childElementCount) renderTeleop();
   if(p === "sequences" && !$("#seqView").childElementCount) renderSequences();

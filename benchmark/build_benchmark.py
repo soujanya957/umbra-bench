@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Splice the payloads into the atlas template and write the single-file dashboard.
+"""Splice the payloads into the dashboard template and write the single-file dashboard.
 
-The atlas is one self-contained HTML file: the base64 thumbnails, the metric
+The dashboard is one self-contained HTML file: the base64 thumbnails, the metric
 tables and the teleop frames all live inside it, so it opens from a URL, a file,
 or an email attachment with nothing else installed. That only works if the file
 is *built* rather than edited -- the payloads run to megabytes and hand-editing a
 6 MB document is how a dashboard and the data it claims to show drift apart.
 
-    python atlas/build_atlas.py                 # -> atlas/atlas.html
-    python atlas/build_atlas.py --bare          # -> atlas/src/atlas.fragment.html
-    python atlas/build_atlas.py --check         # verify, write nothing
+    python benchmark/build_benchmark.py                 # -> benchmark/benchmark.html
+    python benchmark/build_benchmark.py --bare          # -> benchmark/src/benchmark.fragment.html
+    python benchmark/build_benchmark.py --check         # verify, write nothing
 
 Two shapes, and the difference is not cosmetic. The template is a *fragment* --
 no doctype, no <head> -- because the artifact host wraps it in one at publish
@@ -18,9 +18,9 @@ character set merely guessed, which is how the arrows and em-dashes in the copy
 turn into mojibake. `--bare` writes the fragment for publishing; the default
 wraps it so the committed file is a document a browser can open as it stands.
 
-Layout follows from that: `atlas/atlas.html` is the only openable file at the
+Layout follows from that: `benchmark/benchmark.html` is the only openable file at the
 root, and the two that must not be opened -- the template and the publish
-fragment -- live in `atlas/src/`. They had all three sat together, and the
+fragment -- live in `benchmark/src/`. They had all three sat together, and the
 template, being a perfectly ordinary-looking .html, got opened instead.
 
 Inputs, all produced by scripts/ and all committed:
@@ -40,9 +40,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 BENCH = os.path.dirname(HERE)
 
 SRC = os.path.join(HERE, "src")
-TPL = os.path.join(SRC, "atlas.tpl.html")
-OUT = os.path.join(HERE, "atlas.html")
-BARE = os.path.join(SRC, "atlas.fragment.html")
+TPL = os.path.join(SRC, "benchmark.tpl.html")
+OUT = os.path.join(HERE, "benchmark.html")
+BARE = os.path.join(SRC, "benchmark.fragment.html")
 
 # Mirrors what the artifact host prepends, so the file on disk and the published
 # page agree on box model, scaling and encoding rather than only appearing to.

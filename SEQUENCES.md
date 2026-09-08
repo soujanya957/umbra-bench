@@ -224,7 +224,7 @@ animation's content, and a per-frame fit re-places frames independently —
 inventing motion the animation never had, the artefact run_sequence.py's
 one-fit-per-clip rule exists to avoid. The baseline lands in the CSVs as
 `source=optimizer_static`, so it sits beside a sequence-aware `optimizer`
-solve of the same clip in every table and on the atlas card, rather than
+solve of the same clip in every table and on the dashboard card, rather than
 overwriting it. The static-sweep reader is validated: fed `spinning_star`'s
 own frames and joints through the results.json path, it reproduces the run
 reader's numbers exactly.

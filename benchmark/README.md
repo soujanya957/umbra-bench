@@ -1,32 +1,32 @@
-# atlas — the benchmark dashboard
+# benchmark — the dashboard
 
 One self-contained HTML file. Every thumbnail, metric table and teleop frame is
 embedded, so it opens from disk, a URL or an email attachment with nothing
 installed and no server running.
 
 ```
-atlas/
-  atlas.html              ← open this. the only openable file here
-  build_atlas.py
+benchmark/
+  benchmark.html              ← open this. the only openable file here
+  build_benchmark.py
   README.md
   src/
-    atlas.tpl.html        ← edit this
-    atlas.fragment.html   ← generated, for publishing only
+    benchmark.tpl.html        ← edit this
+    benchmark.fragment.html   ← generated, for publishing only
 ```
 
 ```
-python3 atlas/build_atlas.py          # -> atlas/atlas.html
-python3 atlas/build_atlas.py --bare   # -> atlas/src/atlas.fragment.html
-python3 atlas/build_atlas.py --check  # is the committed build current?
+python3 benchmark/build_benchmark.py          # -> benchmark/benchmark.html
+python3 benchmark/build_benchmark.py --bare   # -> benchmark/src/benchmark.fragment.html
+python3 benchmark/build_benchmark.py --check  # is the committed build current?
 ```
 
-**Do not edit `atlas.html`.** It is generated. Edit `src/atlas.tpl.html` (markup,
+**Do not edit `benchmark.html`.** It is generated. Edit `src/benchmark.tpl.html` (markup,
 CSS and all the view logic) and rebuild — a 6 MB document edited by hand is how a
 dashboard and the data it claims to show come apart without anyone noticing.
 
 ## Why two outputs, and why the template hides in src/
 
-`src/atlas.tpl.html` is a *fragment*: no doctype, no `<head>`. The artifact host
+`src/benchmark.tpl.html` is a *fragment*: no doctype, no `<head>`. The artifact host
 supplies those at publish time, so `--bare` hands it exactly what it expects.
 Opened straight off disk, though, that same fragment lands in quirks mode with the
 character encoding merely guessed, which turns the arrows and em-dashes in the
@@ -61,7 +61,7 @@ python scripts/compute_metrics.py --results optimized/big-budget-grounded --targ
 python scripts/make_master_table.py        # metrics_*.csv -> master_table.csv
 python scripts/_build_browser_payload.py   # + metadata.jsonl, + the target tree
 python scripts/_build_sequences_payload.py # sequences.jsonl + sequence_metrics_*.csv
-python atlas/build_atlas.py
+python benchmark/build_benchmark.py
 ```
 
 `make_master_table.py` is the step most easily missed. `compute_metrics.py` writes
@@ -106,10 +106,10 @@ is in the sort menu as **shape IoU**, with **aspect error** beside it.
 
 ## Views
 
-- **atlas** — every target with its best solved shadow, sortable by any of the
+- **results** — every target with its best solved shadow, sortable by any of the
   four panel metrics, with the distribution of whatever you sorted by across the
   top. Star frames to build a sequence.
-- **benchmark** — the subset table and the metric-vs-metric figures.
+- **analysis** — the subset table and the metric-vs-metric figures.
 - **teleop** — the *pipeline*, not a second copy of the dataset: six steps from
   rig to rebuild, each with the command to run. The interactive segmenter lives
   inside step 4, for redoing a mask that came out wrong.
@@ -181,7 +181,7 @@ is the blunt fix.
 
 ## Staleness
 
-The atlas and benchmark views show whatever sweep produced `browser_payload.json`.
-After a re-run, rebuild the payload first, then the atlas — `--check` will tell you
-whether the committed `atlas.html` is behind the template and payloads it came
+The results and analysis views show whatever sweep produced `browser_payload.json`.
+After a re-run, rebuild the payload first, then the dashboard — `--check` will tell you
+whether the committed `benchmark.html` is behind the template and payloads it came
 from.

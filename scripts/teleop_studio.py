@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Serve the atlas AND close the labeling loop from inside it.
+"""Serve the dashboard AND close the labeling loop from inside it.
 
 `python -m http.server` shows the dashboard; this shows the same dashboard and
 additionally accepts what the teleop view produces, so clicking points is no
@@ -7,7 +7,7 @@ longer half of a workflow whose other half lives in a terminal:
 
     POST /api/points/<set>   merge the exported points into <set>/points.json
     POST /api/rerun/<set>    same merge, then teleop_pipeline.py on exactly the
-                             named captures, then payload + atlas rebuild
+                             named captures, then payload + dashboard rebuild
     POST /api/library/<id>   put one sequence on the UI's Targets shelf
     GET  /api/ping           how the page discovers it is being served by the
                              studio rather than a plain static server
@@ -105,7 +105,7 @@ def run(cmd):
 
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kw):
-        super().__init__(*args, directory=os.path.join(BENCH, "atlas"), **kw)
+        super().__init__(*args, directory=os.path.join(BENCH, "benchmark"), **kw)
 
     def log_message(self, fmt, *args):
         sys.stderr.write("[studio] %s\n" % (fmt % args))
@@ -186,7 +186,7 @@ class Handler(SimpleHTTPRequestHandler):
                 log += "\n" + run([sys.executable,
                                    os.path.join(HERE, "_build_teleop_payload.py")])
                 log += "\n" + run([sys.executable,
-                                   os.path.join(BENCH, "atlas", "build_atlas.py")])
+                                   os.path.join(BENCH, "benchmark", "build_benchmark.py")])
             finally:
                 RERUN_LOCK.release()
             return self._json(200, {"ok": True, "reran": stems, "log": log})
@@ -207,7 +207,7 @@ def main():
     print(f"[studio] sequences: {len(SEQ_IDS)}"
           + (f", library -> {UI_REPO}" if UI_REPO
              else ", no Shadow_robot_ui found (library button hidden)"))
-    print(f"[studio] http://localhost:{a.port}/atlas.html")
+    print(f"[studio] http://localhost:{a.port}/benchmark.html")
     ThreadingHTTPServer(("127.0.0.1", a.port), Handler).serve_forever()
 
 

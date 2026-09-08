@@ -12,7 +12,7 @@ defaults.
     python scripts/_build_browser_payload.py --targets-dir targets \\
         --big big-budget-fitted --small small-budget-fitted  # the centred view
 
-`big` and `small` stay the payload's two sweep keys because the atlas template
+`big` and `small` stay the payload's two sweep keys because the dashboard template
 hardcodes those literals in eight places (the delta sort at 549-550, the
 benchmark view's `bm` at 1003, the pcard at 1104-1105, the default at 536). They
 are slot names, not claims about budget -- what each slot points at is the
@@ -95,7 +95,7 @@ def main() -> None:
                          "the shadow against the shape the optimizer was given, "
                          "i.e. after --fit-target has scaled and shifted it -- "
                          "the aligned comparison, and the frame every plate in "
-                         "the atlas draws. `original` is against the target as "
+                         "the dashboard draws. `original` is against the target as "
                          "authored, which folds the fit's scale and shift in as "
                          "error and is the end-to-end number; it will not line "
                          "up with the pictures.")
@@ -165,7 +165,14 @@ def main() -> None:
                 # "correctly identified" ratio for exactly what is on screen.
                 "clip_top5": int(int(r.rank) <= 5),
                 "clip_n": int(r.n_classes),
-                "clip_top3": getattr(r, "clip_top3", None),
+                # The guessed labels, for the card's expandable confusion list.
+                # `clip_top5_labels` is the current column; `clip_top3` is what
+                # the scorer wrote before it was widened to five, and is read as
+                # a fallback so an older clip_per_image.csv still renders its
+                # confusions instead of silently showing none. Note this is a
+                # label list, NOT the `clip_top5` boolean two lines up.
+                "clip_preds": (getattr(r, "clip_top5_labels", None)
+                               or getattr(r, "clip_top3", None)),
                 "clip_true": getattr(r, "true_class", None),
             }
         print(f"  clip: {len(cdf)} scored images from {a.clip_dir}")
@@ -208,7 +215,7 @@ def main() -> None:
             rec["clip_t_rank"] = ct["clip_rank"]
             rec["clip_n"] = ct["clip_n"]
             rec["clip_true"] = ct.get("clip_true")
-            rec["clip_t_top3"] = ct.get("clip_top3")
+            rec["clip_t_preds"] = ct.get("clip_preds")
         for slot, name in sweeps.items():
             sp = os.path.join(OPTIMIZED, name, d["subset"], stem, f"{stem}_best.png")
             if not os.path.exists(sp):
@@ -245,7 +252,7 @@ def main() -> None:
                 e["clip_rank"] = cs["clip_rank"]
                 e["clip_top1"] = cs["clip_top1"]
                 e["clip_top5"] = cs["clip_top5"]
-                e["clip_top3"] = cs.get("clip_top3")
+                e["clip_preds"] = cs.get("clip_preds")
                 if ct and ct["clip_rr"]:
                     e["clip_ratio"] = round(cs["clip_rr"] / ct["clip_rr"], 4)
             rec[slot] = e

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Build `results/sequences_payload.json` -- the atlas's sequences-track slot.
+"""Build `results/sequences_payload.json` -- the dashboard's sequences-track slot.
 
 Sibling of `_build_browser_payload.py`, same conventions: 1-bit PNG thumbnails
 base64'd at a shared `px`, 4-decimal rounds, compact separators. One record per
 sequence in `sequences.jsonl`, carrying three kinds of things:
 
   * the target side, which never depends on a solve: every frame as a thumbnail
-    (ordered -- the atlas animates them at the source fps), `target_motion`, and
+    (ordered -- the dashboard animates them at the source fps), `target_motion`, and
     the loop label WITH its provenance. `loop_source` matters in the UI: a
     `wrap-test` label is a heuristic and shows its evidence, a `declared` label
     is a fact from source.json and suppresses the ratio as authority --
@@ -58,6 +58,45 @@ def _enc(im: Image.Image) -> str:
     return base64.b64encode(b.getvalue()).decode("ascii")
 
 
+#: Repo-relative roots a recorded artifact path can be re-anchored on.
+SHADOW_ROOTS = ("optimized/", "demo/", "targets_grounded/", "targets/",
+                "sequences/", "Teleops/")
+
+
+def resolve_artifact(raw: str, bench: str) -> str:
+    """Find a file the CSV names by whatever absolute path its scorer saw.
+
+    The sequence CSVs are committed and read back on other machines, and the
+    grounded sweeps were scored on Windows, so `shadow` reads
+    `C:/Users/.../umbra-bench/optimized/<clip>/frame_XX_<ts>/best_shadow.png`.
+    On POSIX `os.path.isabs()` is False for a drive-lettered path, so that was
+    taken for a RELATIVE one and joined onto the bench root -- producing
+    `<bench>/C:/Users/...`, which never exists. Every frame was therefore
+    dropped, `sf` was never emitted, and the shadow and overlay plates fell
+    back to the target for every clip on every non-Windows checkout. Silently:
+    the plate still drew, it just drew the wrong thing.
+
+    Re-anchoring on the last repo root in the path fixes it for any machine,
+    since that tail is the part that is genuinely repo-relative. The literal
+    path is still tried first, so a run dir living outside the repo -- the
+    sibling-checkout case the caller documents -- keeps working.
+    """
+    p = (raw or "").replace("\\", "/").strip()
+    if not p:
+        return ""
+    if os.path.isabs(p) and os.path.exists(p):
+        return p
+    for root in SHADOW_ROOTS:
+        k = p.rfind("/" + root)
+        tail = p[k + 1:] if k >= 0 else (p if p.startswith(root) else "")
+        if tail:
+            cand = os.path.normpath(os.path.join(bench, tail))
+            if os.path.exists(cand):
+                return cand
+    cand = os.path.normpath(os.path.join(bench, p))
+    return cand if os.path.exists(cand) else ""
+
+
 def thumb(path: str, px: int) -> str:
     """Dark-ink-on-white thumbnail, whichever way the file stores it.
 
@@ -80,7 +119,7 @@ def thumb(path: str, px: int) -> str:
 def thumb_fitted(path: str, px: int, fit: dict) -> str:
     """The shown frame: the authored frame with the run's clip fit re-applied.
 
-    The static atlas draws every plate against the target the optimizer was
+    The static dashboard draws every plate against the target the optimizer was
     actually given (README, "Plates"): against the authored one, every card
     reads as mis-registered and none of it is solver error. Same rule here.
     Fit units are the run's render-size pixels; px matches for these runs.
@@ -263,11 +302,8 @@ def solve_block(by_ref: dict, frames_by_ref: dict, bench: str, px: int,
         sf, found = [None] * n_f, 0
         for r in ordered:
             i = int(r["frame_idx"])
-            p = r.get("shadow") or ""
-            if p and not os.path.isabs(p):
-                cand = os.path.normpath(os.path.join(bench, p))
-                p = cand if os.path.exists(cand) else p
-            if 0 <= i < n_f and p and os.path.exists(p):
+            p = resolve_artifact(r.get("shadow") or "", bench)
+            if 0 <= i < n_f and p:
                 sf[i] = thumb(p, px)
                 found += 1
         if found:

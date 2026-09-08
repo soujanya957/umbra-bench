@@ -19,7 +19,7 @@ what the robot casts moves the way the source moves.
 Output is a flat subset directory named `<scene>_<frame>.png`, which sorts into
 playback order. It is deliberately NOT written into `targets/`: these are frames
 of one video, not benchmark items, and mixing them in would change every count in
-METRICS.md and every per-subset table in the atlas.
+METRICS.md and every per-subset table in the dashboard.
 
 Solve it with the fit pinned, or the per-target search puts the motion back where
 it started:

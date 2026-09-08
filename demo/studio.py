@@ -207,6 +207,22 @@ def seq_frame_paths(stem: str):
     """(paths, invert) for a sequence's motion preview: the solve's
     best_shadow frames when present (white-on-black, so invert), else the
     authored frames (already dark-on-white)."""
+    # Same run the metrics were computed from, via pack.recorded_run -- the CSV
+    # is canonical. Reconstructing `optimized/<stem>` here instead is what made
+    # star_spin preview a different solve than the dashboard drew and the
+    # exporter shipped. Falls back to the conventional path when unrecorded.
+    # Imported lazily, like PIL below: this module stays importable on a lane
+    # whose env has no numpy, and pack is only needed once a clip is previewed.
+    try:
+        import pack
+        rec = pack.recorded_run(stem)
+    except Exception:
+        rec = None
+    if rec is not None:
+        run, ts = rec
+        sh = sorted(run.glob(f"frame_*_{ts}/best_shadow.png"))
+        if sh:
+            return sh, True
     run = BENCH / "optimized" / stem
     js = sorted(run.glob("summary_*.json"))
     if js:
@@ -218,12 +234,20 @@ def seq_frame_paths(stem: str):
 
 
 def seq_thumb(stem: str, i: int = 0) -> bytes | None:
-    key = f"seqanim/{stem}/{i}"
-    if key in THUMBS:
-        return THUMBS[key]
     paths, inv = seq_frame_paths(stem)
     if not paths:
         return None
+    # Keyed on the frame's mtime, not just its name. THUMBS never expires, so a
+    # re-solve used to keep serving the OLD shadow until the process was
+    # restarted -- the page looked stale in a way that read as a rendering
+    # difference against the dashboard rather than as a cache.
+    try:
+        stamp = int(os.path.getmtime(paths[i % len(paths)]))
+    except OSError:
+        stamp = 0
+    key = f"seqanim/{stem}/{i}/{stamp}"
+    if key in THUMBS:
+        return THUMBS[key]
     from PIL import Image, ImageOps
     import io
     im = Image.open(paths[i % len(paths)]).convert("L").resize(
@@ -793,10 +817,10 @@ def build_job(step: str, arg: str | None):
             return "nothing solved+reassembled for this project yet"
         return ([[PY_EVAL, "pack.py", "--name", P, "--force"] + clips + libs],
                 ROOT, False)
-    if step == "atlas":
+    if step == "benchmark":
         return ([[PY_EVAL, str(BENCH / "scripts" /
                                "_build_sequences_payload.py")],
-                 [PY_EVAL, str(BENCH / "atlas" / "build_atlas.py")]],
+                 [PY_EVAL, str(BENCH / "benchmark" / "build_benchmark.py")]],
                 BENCH, False)
     return f"unknown step {step!r}"
 
@@ -1337,7 +1361,10 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path == "/api/library":
             return self._json(200, library())
         if self.path.startswith("/seqanim/"):
-            parts = self.path[len("/seqanim/"):].split("/")
+            # Strip the ?v= cache-buster before routing, as /maskthumb and
+            # /seqvideo already do -- without this the frame index parses as
+            # "0?v=1788…", fails isdigit(), and every thumbnail 404s.
+            parts = self.path[len("/seqanim/"):].split("?")[0].split("/")
             data = None
             if (len(parts) == 2 and NAME_RE.match(parts[0])
                     and parts[1].isdigit()):

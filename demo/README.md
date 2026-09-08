@@ -217,7 +217,7 @@ python demo/route_motion.py          # writes demo/out/motion_routing.json
   clip's transitions are perfect by construction. Better still, make it a
   **named library shape**: `demo/add_to_library.py --sequence <id>` takes the
   clip's medoid frame into `targets/demo/` and the benchmark index, so the
-  atlas shows it and every later show pulls it by name with `pack.py
+  dashboard shows it and every later show pulls it by name with `pack.py
   --library`. The router also prints existing same-class library entries --
   reusing one of those (the labeller's `.` decision in step 2) costs nothing
   at all.
@@ -430,7 +430,7 @@ demo/out/video/demo_01.mp4
 cd ../../umbra-bench
 python scripts/sequence_metrics.py --run optimized/demo_01_scene_04_M --sequence demo_01_scene_04_M --tag demo_01_scene_04_M
 python scripts/_build_sequences_payload.py
-python atlas/build_atlas.py
+python benchmark/build_benchmark.py
 ```
 
 Two IoUs appear and they disagree on purpose: `summary.json`'s is against the
@@ -491,28 +491,28 @@ regenerable from it and the video.
 
 ## Deploying the demo
 
-Two deliverables, two paths. "Build the atlas" covers the first one only.
+Two deliverables, two paths. "Build the dashboard" covers the first one only.
 
-### A. The dashboard (atlas) — yes, one build and it's there
+### A. The dashboard — yes, one build and it's there
 
 Every solve's metrics CSV is committed, so on this machine the board rebuilds
 from two commands (eval env, see SETUP.md):
 
 ```bash
 python scripts/_build_sequences_payload.py
-python atlas/build_atlas.py            # -> atlas/atlas.html, open it
+python benchmark/build_benchmark.py            # -> benchmark/benchmark.html, open it
 ```
 
 That page IS the deployed dashboard: all 26 sequences with animated
 target/shadow/overlay plates, both IoU references, legibility, and the
-guide. To put it at the shared URL, publish `atlas/src/atlas.fragment.html`
-(built by `python atlas/build_atlas.py --bare`) to the existing artifact —
+guide. To put it at the shared URL, publish `benchmark/src/benchmark.fragment.html`
+(built by `python benchmark/build_benchmark.py --bare`) to the existing artifact —
 from Claude Code, `/artifacts` lists it; republishing the fragment to the
 same URL updates it in place.
 
-Fresh-checkout caveat: `results/` is gitignored and the atlas also needs
+Fresh-checkout caveat: `results/` is gitignored and the dashboard also needs
 `browser_payload.json` and `teleop_payload.json`, which are NOT committed —
-a new machine runs the five-command chain in atlas/README.md once first.
+a new machine runs the five-command chain in benchmark/README.md once first.
 
 ### A2. One clip, on its own — `seq_video.py`
 
@@ -529,7 +529,7 @@ python demo/seq_video.py --all --mode shadow
 in the caption. The target it draws is the FITTED one the solver was given,
 which is why this file is used rather than pairing `sequences/<id>/f*.png`
 against the shadow here -- on a `--fit-target` clip that pairing reads as
-mis-registered and none of it is solver error (atlas/README.md documents the
+mis-registered and none of it is solver error (benchmark/README.md documents the
 same trap for the static cards). `--mode shadow` is the cast shape alone.
 
 Both an `.mp4` (mp4v, as 10_compose_video.py settled on -- QuickTime and VLC)
@@ -538,7 +538,7 @@ not decode in a browser `<video>`, and studio's **> video** button shows it
 inline. `--slow` and `--loop` change the playback only: a clip's own 5 fps is
 real time and hard to read.
 
-### B. The demo video — the atlas does not produce this
+### B. The demo video — the dashboard does not produce this
 
 The video is its own two commands, downstream of the solves in `optimized/`.
 That directory is **not** gitignored -- most of it is committed, 15849 files of

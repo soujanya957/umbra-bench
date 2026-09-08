@@ -62,6 +62,41 @@ def latest_ts(run: Path) -> str | None:
     return js[-1].stem[len("summary_"):] if js else None
 
 
+def recorded_run(sid: str, source: str = "optimizer"):
+    """(run_dir, ts) for the solve the SCORER actually read, or None.
+
+    `results/sequence_metrics_<sid>.csv` records the shadow path each metric was
+    computed from, and that run is not always `optimized/<sid>`: star_spin's
+    numbers come from `optimized/bigstar_star_spin/` (the scale-0.85 variant).
+    Reconstructing the path by convention instead made three surfaces disagree
+    -- the dashboard drew the recorded run while the studio preview and this
+    exporter both drew `optimized/<sid>`, so the card showed one solve and the
+    deploy shipped another, with no way to see that from either.
+
+    The CSV is canonical: it is what the numbers on the card were computed
+    against, so the picture, the metrics and the deploy all describe one solve.
+    Falls back to the conventional path when no CSV row names a run, which is
+    every clip scored before this and all but one after.
+    """
+    csv_path = BENCH / "results" / f"sequence_metrics_{sid}.csv"
+    if not csv_path.exists():
+        return None
+    try:
+        with open(csv_path, encoding="utf-8") as f:
+            for r in csv.DictReader(f):
+                if r.get("source") != source:
+                    continue
+                m = re.search(r"optimized[\\/]([^\\/]+)[\\/]frame_\d+_(\d{8}_\d{6})",
+                              (r.get("shadow") or "").replace("\\", "/"))
+                if m:
+                    run = BENCH / "optimized" / m.group(1)
+                    if run.is_dir():
+                        return run, m.group(2)
+    except (OSError, csv.Error):
+        pass
+    return None
+
+
 def write_joints(path: Path, rows: list[np.ndarray]):
     n_arms = rows[0].size // 6
     with open(path, "w", newline="", encoding="utf-8") as f:
@@ -112,8 +147,12 @@ def clip_poses(sid: str, fps: float | None = None):
 
     Returns (qs, fps, info).
     """
-    run = BENCH / "optimized" / sid
-    ts = latest_ts(run)
+    rec = recorded_run(sid)
+    if rec is not None:
+        run, ts = rec
+    else:
+        run = BENCH / "optimized" / sid
+        ts = latest_ts(run)
     if ts is None:
         sys.exit(f"[!] {sid}: no solve in optimized/{sid} -- solve the clip "
                  f"first (demo/README.md, 'Routing, then solving')")

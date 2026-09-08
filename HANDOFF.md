@@ -131,7 +131,7 @@ Practical consequences:
 - new targets get `scripts/normalize_targets.py` then `scripts/ground_targets.py`
   before anything solves them, which is what the teleop subset went through;
 - `--targets-dir targets_grounded` at both solve and metrics time;
-- the atlas builds from the grounded tree and the grounded sweeps by default.
+- the dashboard builds from the grounded tree and the grounded sweeps by default.
 
 ## 4b. Result — small-budget-grounded vs small-budget-fitted, 478 shared targets
 
@@ -346,12 +346,12 @@ So feeding raw masks -- Simin's choice -- costs nothing measurable here, and the
 
 ## 7. Overnight 2026-09-02 — the sequences track went end to end
 
-Two sessions in coordination (this one: metrics + atlas; umbra-bench-9f:
+Two sessions in coordination (this one: metrics + dashboard; umbra-bench-9f:
 solving + pipeline). The full narrative, every number, the open user
 decisions (render-vs-filmed fit policy first among them) and the security
 event are in **results/OVERNIGHT_NOTES.md** — read that before this repo's
 sequence numbers get quoted anywhere. State on handoff: 26/26 sequences
-solved and on the atlas (three sources deep where A/Bs exist), the static
+solved and on the dashboard (three sources deep where A/Bs exist), the static
 baseline measured (chained beats independent on both axes at practiced
 budgets; wiper the one genuine trade), the loop-close scope characterised
 (closes small wrap overshoots free, correctly refuses global windings), and
@@ -396,6 +396,6 @@ Known caveats for operators:
   1.2 m render window; the ensemble generator prints a warning per clip —
   those shadows will look wider on the real/simulated wall than in solve
   previews.
-- Atlas from a fresh clone needs `results/` payloads rebuilt first:
+- Dashboard from a fresh clone needs `results/` payloads rebuilt first:
   `scripts/_build_browser_payload.py`, `_build_teleop_payload.py`, then
-  the studio atlas button.
+  the studio dashboard button.

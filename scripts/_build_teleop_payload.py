@@ -120,7 +120,7 @@ def build_items(man):
             e["target_status"] = "replaced_by_v2"
             e["v2_id"] = v2[sid]["id"]
             e["target_v2"] = png1(os.path.join(rc.BENCH, v2[sid]["target"]), 240)
-            # Point sample_id at the target that still exists. The atlas keys its
+            # Point sample_id at the target that still exists. The dashboard keys its
             # hand-cast badge on this field, and a retired v1 id matches no card, so
             # two real captures were silently losing their badge. link_teleop.py
             # already re-points the same two when it fills shadows.teleop; this keeps

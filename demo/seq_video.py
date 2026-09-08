@@ -19,7 +19,7 @@ Two modes, and neither of them derives anything:
            the whole reason to use this file rather than pairing the authored
            frames against the shadow here: on a --fit-target clip that pairing
            reads as mis-registered, and none of it is solver error (the same
-           trap atlas/README.md documents for the static cards).
+           trap benchmark/README.md documents for the static cards).
   shadow   `best_shadow.png` alone, inverted to the repo's dark-on-white
            convention -- what the rig casts, with no comparison question in
            the picture at all.
@@ -103,7 +103,7 @@ def frames_for(sid: str, mode: str) -> list[np.ndarray]:
             im = (im[:, :, :3] * a + 255 * (1 - a)).astype(np.uint8)
         if im.ndim == 2:
             # best_shadow is white-on-black; the repo's convention everywhere
-            # else -- targets, sequences/, the atlas plates -- is dark ink on
+            # else -- targets, sequences/, the dashboard plates -- is dark ink on
             # white, so invert rather than shipping the one odd-looking film.
             im = cv2.cvtColor(255 - im, cv2.COLOR_GRAY2BGR)
         ims.append(im)

@@ -7,7 +7,7 @@
 The static lane's end state is not "a clip solved cheaply", it is "a shape the
 library knows by name": once it sits in `targets/demo/` and `metadata.jsonl`,
 every future show pulls it with `pack.py --library <id>` instead of touching
-the footage again, and the atlas shows it like any other target.
+the footage again, and the dashboard shows it like any other target.
 
 What one import does:
 
@@ -138,7 +138,7 @@ def main():
     print("  python scripts/run_base_optimizer.py --targets-dir targets_grounded"
           " --subsets demo ...   # settings per optimized/<sweep>/BUDGET.md")
     print("  python scripts/clip_eval_dataset.py   # class list changed")
-    print("  python scripts/_build_browser_payload.py && python atlas/build_atlas.py")
+    print("  python scripts/_build_browser_payload.py && python benchmark/build_benchmark.py")
 
 
 if __name__ == "__main__":

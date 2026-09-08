@@ -321,7 +321,7 @@ keys are reported because they disagree in a way that changes the conclusion:
 No `hand_shadow` shadow ever ranks first, so `top1` says total loss; they land
 around 4th of 9, so `mrr` says the signal is there and never wins. Quote one
 without the other and the subset is misreported either way. `mrr` is also the
-aggregate counterpart of the per-item figure the atlas card shows, since the mean
+aggregate counterpart of the per-item figure the dashboard card shows, since the mean
 of `1/r` *is* MRR.
 
 **A per-item top-1 ratio does not exist** — it would be `0/1 ÷ 0/1`. Per item, use
@@ -346,7 +346,7 @@ Two extraction paths, deliberately different:
 
 ### Averaging: micro, not macro
 
-The atlas top strip means per item over whatever is on screen, so it is a **micro
+The dashboard top strip means per item over whatever is on screen, so it is a **micro
 average** and is implicitly weighted by subset size — `objects` and `animals` are
 39% of the dataset, `figures` and `hand_shadow` 1.8% each. It also pools items
 whose class lists differ in size. Micro over all 571 is 0.326 against a macro

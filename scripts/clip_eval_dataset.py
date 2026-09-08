@@ -210,8 +210,17 @@ def main() -> None:
                     # what CLIP actually guessed, for the card detail view. A
                     # rank of 8 says the shadow failed; these say what it failed
                     # *as*, which is the part a reader can act on.
-                    "clip_top3": "|".join(
-                        f"{q['label']}:{q['similarity']:.4f}" for q in preds[:3]),
+                    #
+                    # Five, not three, and the column is named for its contents:
+                    # `clip_top5` was already taken downstream by the BOOLEAN
+                    # "was the true class within the top 5", and two different
+                    # meanings under one key is how a card ends up printing a
+                    # 0/1 where a label list belongs. Reading five also makes
+                    # the labels agree with that boolean -- with three, a clip
+                    # could report top5=1 while the list it showed did not
+                    # contain the true class anywhere.
+                    "clip_top5_labels": "|".join(
+                        f"{q['label']}:{q['similarity']:.4f}" for q in preds[:5]),
                     "n_classes": len(class_names),
                     "chance_top1": round(1 / len(class_names), 4),
                 })
@@ -232,7 +241,7 @@ def main() -> None:
                 # this. `top1` is its default and the strict reading -- how often
                 # the shadow wins outright. `mrr` is the graded one, and it is
                 # the aggregate counterpart of the per-item clip_rr ratio the
-                # atlas card shows, since mean(1/rank) is MRR. Reporting both is
+                # dashboard card shows, since mean(1/rank) is MRR. Reporting both is
                 # what stops "the ratio" meaning two things: hand_shadow is 0.000
                 # by top1 and 0.576 by rank, and each is true.
                 "ratio_vs_target": (round(recognizability_ratio(res, base, "top1"), 4)

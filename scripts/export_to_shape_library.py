@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish atlas sequences into the UI's Targets shelf, so demos can be collected there.
+"""Publish dashboard sequences into the UI's Targets shelf, so demos can be collected there.
 
 The plumbing already exists on both ends; this only moves the data.
 
@@ -16,7 +16,7 @@ into `models.json` is the supported route, not a workaround -- the GET/POST pair
 
 Frames come from `results/sequences_payload.json`, already base64'd at a shared px
 by `_build_sequences_payload.py`, so nothing is re-encoded and nothing can drift
-from what the atlas shows. All 54 sequences are 0.31 MB of base64 in total -- size
+from what the dashboard shows. All 54 sequences are 0.31 MB of base64 in total -- size
 is not a reason to be selective here.
 
 Ids are `umbra-<sequence id>`: stable, so re-running updates in place rather than

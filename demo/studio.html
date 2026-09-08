@@ -185,7 +185,7 @@
       <button onclick="run('compose')" class="primary">7 · compose video</button>
       <button onclick="run('pack')">8 · pack (deploy)</button>
       <button onclick="run('score')">score</button>
-      <button onclick="run('atlas')">atlas</button>
+      <button onclick="run('benchmark')">benchmark</button>
     </div>
   </section>
 </div>
@@ -609,7 +609,14 @@ document.addEventListener("keydown", ev => {
 });
 
 /* ---- library rail ----------------------------------------------------- */
+// Bumped on every renderLib, and used as the seqanim cache-buster. A re-solve
+// re-renders the rail, so the new URLs pull fresh bytes; within one render the
+// animation ticker reuses the same URL per frame index and stays cached rather
+// than refetching 20x a second. The server-side THUMBS cache is keyed on the
+// frame's mtime, so the two layers agree on what "fresh" means.
+let SEQV = Date.now();
 function renderLib(){
+  SEQV = Date.now();
   const q = $("#q").value.trim().toLowerCase();
   let pool = $("#qunsolved").checked ? LIB : LIB.filter(e => e.solved);
   let hits;
@@ -625,7 +632,7 @@ function renderLib(){
          title="${e.id}${e.solved ? "" : " (unsolved)"}${e.kind === "seq" ? " — sequence" : ""}">
       <img loading="lazy" ${e.kind === "seq"
              ? `class="seqanim" data-seq="${e.stem}" data-nf="${e.nf || 1}"
-                src="/seqanim/${e.stem}/0"`
+                src="/seqanim/${e.stem}/0?v=${SEQV}"`
              : `src="/thumb/${e.subset}/${e.stem}"`}>
       <div class="nm">${e.kind === "seq" ? "▶ " : ""}${e.cls}</div>
     </div>`).join("");
@@ -745,7 +752,7 @@ setInterval(() => {
   SEQTICK++;
   imgs.forEach(im => {
     const nf = +im.dataset.nf || 1;
-    if(nf > 1) im.src = `/seqanim/${im.dataset.seq}/${SEQTICK % nf}`;
+    if(nf > 1) im.src = `/seqanim/${im.dataset.seq}/${SEQTICK % nf}?v=${SEQV}`;
   });
 }, 350);
 </script>
