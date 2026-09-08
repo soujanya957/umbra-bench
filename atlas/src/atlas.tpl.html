@@ -403,6 +403,16 @@ button.act:hover{border-color:var(--accent); color:var(--accent-ink)}
 .seqwrap h2{margin:0 0 4px; font-size:17px; font-weight:600; letter-spacing:-.01em}
 .seqwrap>.intro{margin:0; font-size:13px; line-height:1.6; color:var(--ink-2); max-width:78ch}
 .seqgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px}
+/* The library button rides along with the studio: always in the markup, revealed
+   only when /api/ping reports a Shadow_robot_ui to export into. Served as a plain
+   static file these cards render identically, minus one button. */
+.libline{display:flex; align-items:center; gap:8px; margin-top:8px}
+.libbtn{font:inherit; font-size:11px; padding:3px 9px; border-radius:6px; cursor:pointer;
+  border:1px solid var(--line); background:var(--panel); color:inherit}
+.libbtn:hover:not(:disabled){border-color:currentColor}
+.libbtn:disabled{opacity:.55; cursor:default}
+.libmsg{font-size:11px; opacity:.75}
+.libhint{opacity:.8}
 .seqcard{border:1px solid var(--line); border-radius:9px; background:var(--panel);
   box-shadow:var(--shadow); overflow:hidden; display:flex; flex-direction:column}
 .seqcard .anim{position:relative; background:var(--screen); display:grid;
@@ -2110,7 +2120,7 @@ function renderTeleop(){
       return j;
     } finally { btn.disabled = false; btn.textContent = t; }
   };
-  fetch("/api/ping").then(r => r.ok ? r.json() : null).then(j => {
+  STUDIO_PING.then(j => {
     if(!j || !TEL.src) return;
     const sv = $("#tSave"), rr = $("#tRerun");
     sv.hidden = rr.hidden = false;
@@ -2259,6 +2269,45 @@ function seqSpark(mo, loop){
      <polyline points="${pts.join(" ")}" fill="none" stroke="var(--s1)" stroke-width="1.5"/>${wrap}</svg>`;
 }
 
+/* Same rule as the teleop save/rerun pair, one view over. Cards are built lazily
+   on first visit, so the reveal runs from both ends -- whichever of the ping and
+   the render lands second finds the other already done. */
+/* null until the probe answers, so a card built before it lands neither shows a
+   button that will not work nor a hint that is about to be wrong. */
+let STUDIO_LIB = null;
+function applyStudioState(){
+  if(STUDIO_LIB === null) return;
+  document.querySelectorAll(".libbtn").forEach(b => { b.hidden = !STUDIO_LIB; });
+  // Hiding the button silently is what made this feature undiscoverable: opened
+  // as a plain file the page looked identical to one where the export had
+  // simply not been built. The hint is the absence explaining itself.
+  document.querySelectorAll(".libhint").forEach(h => { h.hidden = STUDIO_LIB; });
+}
+/* Probed once at load rather than from inside a view. This used to live in
+   renderTeleop, which meant a sequences card could only discover the studio
+   after someone had visited the teleop view first -- so the button was hidden
+   on the page that owns it. One shared promise, so there is still one request. */
+const STUDIO_PING = fetch("/api/ping")
+  .then(r => r.ok ? r.json() : null)
+  .catch(() => null);
+STUDIO_PING.then(j => { STUDIO_LIB = !!(j && j.library); applyStudioState(); });
+async function seqLibClick(e){
+  const b = e.target.closest(".libbtn"); if(!b) return;
+  const msg = b.parentElement.querySelector(".libmsg");
+  const label = b.textContent;
+  b.disabled = true; b.textContent = "exporting\u2026"; msg.textContent = "";
+  try{
+    const r = await fetch("/api/library/" + encodeURIComponent(b.dataset.sid),
+                          { method: "POST", headers: { "Content-Type": "application/json" },
+                            body: "{}" });
+    const j = await r.json();
+    if(!r.ok || j.error) throw new Error(j.error || r.status);
+    msg.textContent = "on the shelf \u2713";
+  }catch(err){
+    msg.textContent = String(err && err.message ? err.message : err);
+  }finally{ b.disabled = false; b.textContent = label; }
+}
+
 function seqCard(q){
   const card = document.createElement("div"); card.className = "seqcard";
   const period = Math.max(1000 / (q.fps || 6), 200);
@@ -2291,6 +2340,8 @@ function seqCard(q){
         <div><span>wrap</span><b>${num(q.motion.wrap_iou)}</b></div>
       </div>
       ${seqSpark(q.motion, q.loop)}
+      <div class="libline"><button class="libbtn" hidden data-sid="${q.id}"
+        title="Write this clip onto the UI's Targets shelf (Shadow_robot_ui/library/models.json) as a frame sequence">&rarr; shape library</button><span class="libmsg"></span></div>
     </div>`;
   for(const src of q.solved){
     const so = q.solves[src], h = so.headline;
@@ -2417,7 +2468,12 @@ function renderSequences(){
     ${SEQ.n_solved} solved so far. A clip is not a bag of frames: <b>star_spin averages 0.6679 per-frame IoU
     and cannot be performed</b> — one transition needs a 291° single-joint swing. So every solve here shows its
     mean frame IoU only next to <span class="mono">dq_infeasible_frac</span>, and previews only wrap around when
-    the sequence actually loops. The guide view explains each number.</p>`;
+    the sequence actually loops. The guide view explains each number.</p>
+    <p class="libhint intro" hidden>These clips can be pushed straight onto the UI&rsquo;s Targets shelf, but only
+    when this page is served by the studio rather than opened from disk. Run
+    <span class="mono">python scripts/teleop_studio.py</span> and open
+    <span class="mono">localhost:8479/atlas.html</span> &mdash; each card then carries a
+    <b>&rarr; shape library</b> button.</p>`;
   // The same plate control as the atlas grid, animated: every pane of a card
   // draws the same frame index, so the three modes stay aligned through the
   // clip. Clips without a solved shadow stay on target rather than going blank.
@@ -2436,8 +2492,11 @@ function renderSequences(){
     <span class="hint">shadow &amp; overlay need a solved clip — ${SEQ.n_solved} of ${SEQ.n} so far</span>`;
   const grid = document.createElement("div"); grid.className = "seqgrid";
   for(const q of SEQ.sequences) grid.appendChild(seqCard(q));
+  grid.addEventListener("click", seqLibClick);   // grid is rebuilt per render, so
+                                                 // this cannot accumulate listeners
   wrap.append(head, ctl, grid);
   v.replaceChildren(wrap);
+  applyStudioState();
   ctl.querySelectorAll("#seqPlateSeg button").forEach(b => b.addEventListener("click", () => {
     seqPlate = b.dataset.v;
     ctl.querySelectorAll("#seqPlateSeg button").forEach(x =>
