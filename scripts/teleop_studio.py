@@ -8,6 +8,7 @@ longer half of a workflow whose other half lives in a terminal:
     POST /api/points/<set>   merge the exported points into <set>/points.json
     POST /api/rerun/<set>    same merge, then teleop_pipeline.py on exactly the
                              named captures, then payload + atlas rebuild
+    POST /api/library/<id>   put one sequence on the UI's Targets shelf
     GET  /api/ping           how the page discovers it is being served by the
                              studio rather than a plain static server
 
@@ -48,6 +49,32 @@ def discover_sets():
         root = os.path.dirname(os.path.dirname(mp))
         sets[os.path.basename(root)] = root
     return sets
+
+
+def discover_sequences():
+    """What the library button is allowed to export, and whether it can at all.
+
+    Both are resolved once at startup so the page can feature-detect this button
+    exactly as it feature-detects the studio: a machine with no Shadow_robot_ui
+    checked out reports library=false and never shows the button, rather than
+    showing one that fails on click.
+    """
+    ids = set()
+    path = os.path.join(BENCH, "sequences.jsonl")
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    ids.add(json.loads(line)["id"])
+                except (json.JSONDecodeError, KeyError):
+                    pass
+    sys.path.insert(0, HERE)
+    try:
+        from export_to_shape_library import _default_ui
+        ui = _default_ui()
+    except Exception:
+        ui = ""
+    return ids, ui
 
 
 def merge_points(root, body):
@@ -93,7 +120,8 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/api/ping":
-            return self._json(200, {"ok": True, "sets": sorted(SETS)})
+            return self._json(200, {"ok": True, "sets": sorted(SETS),
+                                    "library": bool(SEQ_IDS and UI_REPO)})
         return super().do_GET()
 
     def _body(self):
@@ -102,7 +130,30 @@ class Handler(SimpleHTTPRequestHandler):
             raise ValueError("bad Content-Length")
         return json.loads(self.rfile.read(n))
 
+    def _library(self, sid):
+        """Put one sequence on the UI's Targets shelf.
+
+        Same validation shape as the teleop routes: the id must be one the repo
+        already calls a sequence, so a request can only reach a clip that exists.
+        The export is delegated rather than reimplemented -- one code path writes
+        models.json whether it was reached from a terminal or from this page.
+        """
+        if sid not in SEQ_IDS:
+            return self._json(404, {"error": f"unknown sequence {sid!r}"})
+        if not UI_REPO:
+            return self._json(409, {"error": "no Shadow_robot_ui to export into"})
+        try:
+            log = run([sys.executable,
+                       os.path.join(HERE, "export_to_shape_library.py"),
+                       "--only", sid])
+        except Exception as e:
+            return self._json(500, {"error": str(e)})
+        return self._json(200, {"ok": True, "id": sid, "log": log})
+
     def do_POST(self):
+        m = re.match(r"^/api/library/([A-Za-z0-9_\-]+)$", self.path)
+        if m:
+            return self._library(m.group(1))
         m = re.match(r"^/api/(points|rerun)/([A-Za-z0-9_\-]+)$", self.path)
         if not m:
             return self._json(404, {"error": "unknown endpoint"})
@@ -147,11 +198,15 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--port", type=int, default=8479)
     a = ap.parse_args()
-    global SETS
+    global SETS, SEQ_IDS, UI_REPO
     SETS = discover_sets()
+    SEQ_IDS, UI_REPO = discover_sequences()
     if not SETS:
         raise SystemExit("[!] no sets under Teleops/source/*/masks/manifest.json")
     print(f"[studio] sets: {', '.join(sorted(SETS))}")
+    print(f"[studio] sequences: {len(SEQ_IDS)}"
+          + (f", library -> {UI_REPO}" if UI_REPO
+             else ", no Shadow_robot_ui found (library button hidden)"))
     print(f"[studio] http://localhost:{a.port}/atlas.html")
     ThreadingHTTPServer(("127.0.0.1", a.port), Handler).serve_forever()
 
