@@ -4,7 +4,19 @@ __pycache__/
 .venv/
 external/*
 !external/README.md
-results/
+# `results/*` rather than `results/`: an excluded DIRECTORY cannot be
+# re-entered by a later negation, so the batch-review folder below would be
+# unreachable. Everything directly under results/ is still ignored.
+results/*
+
+# The review folder ships: one table of every solve, the command that exports
+# each, and the clip it produced -- so a reader can see what the batch cast
+# without re-solving 100+ clips first. Only the CURRENT-rig gifs are tracked;
+# clips_legacy/ (the 0.15 archive) and every mp4 (54 MB, and the gif already
+# carries the motion) stay local.
+!results/batch_review/
+results/batch_review/clips_legacy/
+results/batch_review/**/*.mp4
 
 # Per-run optimizer shadows: intermediates, regenerable from the seeds in
 # results.json. Only <stem>_best.png is dataset content (metadata.jsonl carries a
@@ -29,5 +41,5 @@ demo/out/studio_logs/
 demo/out/studio_state.json
 # seq_video.py output: regenerable from the solve in one command,
 # and a gif per clip is not what a git history is for
-demo/out/seqvideo/
+# demo/out/seqvideo/
 *.bak_*
