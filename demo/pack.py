@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import ast
 import csv
+import glob
 import math
 import re
 import json
@@ -46,15 +47,27 @@ ROOT = Path(__file__).resolve().parent
 BENCH = ROOT.parent
 
 # The solver rig behind every solve in this repo (run logs: light_y=1.00
-# wall_y=-2.40, three arms 0.2 apart, light 0.30 high, arm 0 nearest the
+# wall_y=-2.40, arms ARM_GAP apart, light 0.30 high, arm 0 nearest the
 # light), mapped into the UI frame per Shadow_robot_ui/render_server/
 # optimize.py's documented transform: base.x = -depth, lightH = h + tableY
 # (0.55). This is what makes the Play preview's shadow geometry match the
 # solve instead of whatever stage the UI happens to have open.
+#
+# ARM_GAP is 0.25 as of the 2026-09-08 re-solve. It was a hardcoded 0.2 here
+# while run_sequence.py inherited renderer.py's 0.15, so every demo clip was
+# solved at one spacing and exported at another -- the Play preview drew a
+# shadow the optimiser had never been asked for, and the comment above claimed
+# the opposite. Bases are DERIVED from it now, so the two can only disagree by
+# someone passing --arm-gap without changing this constant. A clip solved
+# before that change is stale here: re-solve rather than re-export it.
+ARM_GAP = 0.25
+# What every solve before CONFIG.json existed ran at: night_solve_cmd never
+# passed --arm-gap, so they all inherited renderer.py's default. Kept as a
+# named constant because it is the archive's spacing, not a fallback guess.
+LEGACY_ARM_GAP = 0.15
 CHOREO_SCENE = {"lightX": -1.0, "lightY": 0, "lightH": 0.85, "screenX": 2.4}
-CHOREO_BASES = [{"x": 0.0, "y": 0, "z": 0, "yaw": 0},
-                {"x": 0.2, "y": 0, "z": 0, "yaw": 0},
-                {"x": 0.4, "y": 0, "z": 0, "yaw": 0}]
+CHOREO_BASES = [{"x": round(ARM_GAP * i, 6), "y": 0, "z": 0, "yaw": 0}
+                for i in range(3)]
 
 
 def latest_ts(run: Path) -> str | None:
@@ -77,24 +90,36 @@ def recorded_run(sid: str, source: str = "optimizer"):
     against, so the picture, the metrics and the deploy all describe one solve.
     Falls back to the conventional path when no CSV row names a run, which is
     every clip scored before this and all but one after.
+
+    EVERY results/sequence_metrics_*.csv is searched, not just the one named
+    after `sid`. sequence_metrics.py tags its output file after the --run
+    DIRECTORY, so a second solve of one clip lands in a differently-named file
+    -- `optimizer_n5` for star_spinning lives in sequence_metrics_star_n5.csv.
+    Looking only at the sid-named file found the shipping solve and reported
+    every variant as unscored. Rows are matched on (sequence_id, source), the
+    same key _build_sequences_payload.read_solves() uses, so what the card
+    calls a solve and what this exports are the same thing; newest file wins a
+    duplicate, also as there.
     """
-    csv_path = BENCH / "results" / f"sequence_metrics_{sid}.csv"
-    if not csv_path.exists():
-        return None
-    try:
-        with open(csv_path, encoding="utf-8") as f:
-            for r in csv.DictReader(f):
-                if r.get("source") != source:
-                    continue
-                m = re.search(r"optimized[\\/]([^\\/]+)[\\/]frame_\d+_(\d{8}_\d{6})",
-                              (r.get("shadow") or "").replace("\\", "/"))
-                if m:
-                    run = BENCH / "optimized" / m.group(1)
-                    if run.is_dir():
-                        return run, m.group(2)
-    except (OSError, csv.Error):
-        pass
-    return None
+    best = None
+    pat = re.compile(r"optimized[\\/]([^\\/]+)[\\/]frame_\d+_(\d{8}_\d{6})")
+    for csv_path in sorted(glob.glob(str(BENCH / "results"
+                                        / "sequence_metrics_*.csv")),
+                           key=os.path.getmtime):
+        try:
+            with open(csv_path, encoding="utf-8") as f:
+                for r in csv.DictReader(f):
+                    if r.get("sequence_id") != sid or r.get("source") != source:
+                        continue
+                    m = pat.search((r.get("shadow") or "").replace("\\", "/"))
+                    if m:
+                        run = BENCH / "optimized" / m.group(1)
+                        if run.is_dir():
+                            best = (run, m.group(2))
+                            break
+        except (OSError, csv.Error):
+            continue
+    return best
 
 
 def write_joints(path: Path, rows: list[np.ndarray]):
@@ -132,8 +157,14 @@ def seq_row(sid: str) -> dict | None:
     return None
 
 
-def clip_poses(sid: str, fps: float | None = None):
+def clip_poses(sid: str, fps: float | None = None, source: str = "optimizer"):
     """The pose track for a solved sequence -- what a DEPLOY needs, no more.
+
+    `source` picks WHICH solve, and matches the names the dashboard shows on a
+    card: one clip can carry several (optimizer, optimizer_n5, optimizer_v0).
+    They are not variants of one run -- a 5-arm solve is a different rig -- so
+    exporting the wrong one ships poses for arms that are not there. Default
+    stays `optimizer`: the shipping solve, and the only one deploy assumes.
 
     Reassembly is a VIDEO step: 08_reassemble.py inverts the clip fit to put
     the shadow back where the ad drew it on the 1920x1080 canvas. On hardware
@@ -147,10 +178,19 @@ def clip_poses(sid: str, fps: float | None = None):
 
     Returns (qs, fps, info).
     """
-    rec = recorded_run(sid)
+    rec = recorded_run(sid, source)
     if rec is not None:
         run, ts = rec
     else:
+        # Only the shipping source may fall back to the conventional path. A
+        # named variant that no CSV row claims has NOT been scored, and
+        # silently handing back optimized/<sid> would export the 3-arm solve
+        # under the name of the 5-arm one.
+        if source != "optimizer":
+            sys.exit(f"[!] {sid}: no solve recorded for source {source!r} -- "
+                     f"score it first:\n"
+                     f"    python scripts/sequence_metrics.py --run "
+                     f"<run_dir> --sequence {sid} --source {source}")
         run = BENCH / "optimized" / sid
         ts = latest_ts(run)
     if ts is None:
@@ -177,7 +217,25 @@ def clip_poses(sid: str, fps: float | None = None):
         "reassembled": r is not None, "reassembly": r,
         "held_static": bool((r or {}).get("held_static")),
         "loop": bool(((row or {}).get("target_motion") or {}).get("loop")),
+        "arm_gap_m": run_arm_gap(run),
     }
+
+
+def run_arm_gap(run: Path) -> float:
+    """The spacing THIS run was solved at, so its export can describe the rig
+    it actually used rather than whichever one the constant happens to name.
+
+    CONFIG.json is written by the batch driver from the solver's own argv.
+    Without one the run predates that, and every solve before it went through
+    night_solve_cmd, which never passed --arm-gap and so inherited renderer.py
+    ARM_GAP = 0.15. That is a fact about those runs, not a guess -- which is
+    what makes the archive exportable instead of needing 35 re-solves.
+    """
+    try:
+        c = json.loads((run / "CONFIG.json").read_text(encoding="utf-8"))
+        return float(c["arm_gap_m"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return LEGACY_ARM_GAP
 
 
 def pack_clip(sid: str, dest: Path):
@@ -228,6 +286,11 @@ def pack_library(stem: str, sweep: str, dest: Path):
     shutil.copyfile(BENCH / rec["target"], dest / "frames" / "target.png")
     write_joints(dest / "joints.csv", [np.asarray(best["q_rad"])])
     pack_library.last_qs = [np.asarray(best["q_rad"], dtype=float).ravel()]
+    # The sweep's own rig, so the choreography's bases match the pose. The
+    # static sweeps are 0.2 and are not being re-solved onto the sequence
+    # spacing; exporting them at ARM_GAP would misplace every library shape.
+    pack_library.last_gap = float((res.get("rig") or {}).get("arm_gap_m")
+                                  or ARM_GAP)
     (dest / "meta.json").write_text(json.dumps({
         "kind": "library_static", "id": stem, "class": rec.get("class"),
         "subset": subset, "sweep": sweep,
@@ -374,7 +437,7 @@ def transition_check(qs: list[np.ndarray]) -> dict:
 
 
 def write_choreo(dest: Path, name: str, hz: float, qs: list[np.ndarray],
-                 force: bool = False):
+                 force: bool = False, arm_gap: float | None = None):
     """The unified clip envelope Shadow_robot_ui consumes, one file per element.
 
     Dropping this into fleet-shadow-art/choreographies/ is the whole deploy
@@ -431,12 +494,18 @@ def write_choreo(dest: Path, name: str, hz: float, qs: list[np.ndarray],
     tail = [np.asarray(qs[-1], dtype=float)] * CHOREO_HZ
     qs = hold + [np.asarray(q, dtype=float) for q in qs] + tail
     n_arms = np.asarray(qs[0]).size // 6
+    # The bases must describe the rig THIS pose was solved on, and the two
+    # sources in this repo do not agree: sequence clips are solved at
+    # ARM_GAP (0.25) while the static benchmark sweeps recorded 0.2 in their
+    # own results.json. Taking it from the caller keeps each export honest
+    # instead of making one of them silently wrong -- the exact failure the
+    # 0.15/0.2 split was.
+    gap = ARM_GAP if arm_gap is None else float(arm_gap)
     robots = []
     for i in range(n_arms):
         robots.append({
             "id": f"SR{101 + i}", "model": "so-101",
-            "base": CHOREO_BASES[i] if i < len(CHOREO_BASES) else
-                    {"x": 0.2 * i, "y": 0, "z": 0, "yaw": 0},
+            "base": {"x": round(gap * i, 6), "y": 0, "z": 0, "yaw": 0},
             # cutout must stay null: with one set, the UI reinterprets q5 as a
             # rod-servo spin and drives only five joints
             "cutout": None, "cutout_id": None, "cutout_rot": 0, "mount": None,
@@ -556,9 +625,11 @@ def main():
                  if not (x in seen_lib or seen_lib.add(x))]
     for lid in a.library:
         n = pack_library(lid, a.sweep, pkg / "elements" / lid)
-        write_choreo(pkg / "choreo", lid, 5.0, pack_library.last_qs)
+        write_choreo(pkg / "choreo", lid, 5.0, pack_library.last_qs,
+                     arm_gap=pack_library.last_gap)
         elements[lid] = {"kind": "library_static", "sweep": a.sweep}
-        print(f"  library  {lid:<28} 1 pose ({a.sweep}) + choreo")
+        print(f"  library  {lid:<28} 1 pose ({a.sweep}, gap "
+              f"{pack_library.last_gap:g} m) + choreo")
 
     # Scene replay: one UI arrangement per scene, elements offset by when
     # they enter the shot (source frame ids at the footage's 25 fps). Copy

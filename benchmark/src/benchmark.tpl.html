@@ -2516,6 +2516,14 @@ function seqCard(q){
           demo (08_reassemble.py), as a per-clip camera reframe for a filmed rig</div>` : "";
     // a 5-arm clip solved with 3 arms is a different problem, not a bad solve
     const armChip = so.n_arms_solved ? ` · ${so.n_arms_solved} arms` : "";
+    // The command for THIS solve, not for the clip. A card can carry several
+    // sources and they are different rigs, so one command per box is the only
+    // honest form -- a single card-level button would export whichever solve
+    // the exporter defaulted to and look like it had exported the one you
+    // were reading. --source is omitted for `optimizer` because that IS the
+    // exporter's default and the shorter line is the one to paste.
+    const exportCmd = "python demo/export_library_clip.py --sequence " + q.id
+      + (src === "optimizer" ? "" : " --source " + src);
     const priorChip = so.prior_iou != null ? ` · prior ${num(so.prior_iou)}` : "";
     const armWarn = (so.n_arms_declared && so.n_arms_solved
                      && so.n_arms_declared !== so.n_arms_solved)
@@ -2570,7 +2578,11 @@ function seqCard(q){
       })()}
       ${fitNote}
       ${armWarn}
-      ${mism}`;
+      ${mism}
+      <div class="warnline">export this solve: <span class="mono">${exportCmd}</span>
+        <button class="libcopy seqexport" type="button">copy</button></div>`;
+    const eb = box.querySelector(".seqexport");
+    if(eb) eb.addEventListener("click", () => copy(exportCmd, eb));
     card.appendChild(box);
   }
   if(!q.solved.length){

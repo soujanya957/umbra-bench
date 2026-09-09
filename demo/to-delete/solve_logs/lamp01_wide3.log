@@ -1,0 +1,915 @@
+==============================================================
+  run_sequence.py  —  13 frame(s)  ×  3 robot(s)
+  Timestamp : 20260903_031547
+  URDF      : urdf/SO101/so101_new_calib.urdf
+  Output    : ../../umbra-bench/optimized/pixar_scene_01_lamp_stab_wide3
+  Loss      : α=1.0 β=0.3 γ=0.0 γ_final=0.0 δ=0.0
+  Budget    : Ph1=128×3  Ph2=128×3  Final=256  pop=192
+  Multi-res : Ph1+2@64px → Final@128px
+  Hungarian : reuse if sim≥0.7
+==============================================================
+
+[1/3] Building MuJoCo scene...
+[scene] so101 ×3: light_y=1.00 wall_y=-2.30 throw=3.30m table_len=0.30m | magnification 2.5x–3.3x
+      3 robots  |  18 DOF  |  built in 0.5s  (saved 7s vs per-frame rebuild)
+
+[2/3] Optimizing 13 frame(s)...
+
+[reach] cached → reach_cfa63527aa8df2ad.npz
+[fit] castability 0.004 → 0.107  (scale 4.115, dy +16.5px, dx -41.1px, clip 1.4%)
+[fit] clip transform {'scale': 4.1154, 'dy': 16.46, 'dx': -41.14, 'rot': 0.0, 'score': 0.1065, 'clip_frac': 0.01439, 'touches_edge': True, 'at_bound': False}  uncastable 0.0% → 2.1%
+
+──────────────────────────────────────────────────────────────
+  Frame 1/13 : f00.png
+──────────────────────────────────────────────────────────────
+[staged] Multi-res: Phase 1+2 at 64²px  Final at 128²px
+[staged] Popsize: per-robot phases=32  final=192  (theory optimum for 6 DOF = 10)
+
+[staged] Hungarian pre-assignment  (3×3 cost matrix, 8 samples/entry = 72 renders)...
+[staged]   robot_a → zone 0  robot_b → zone 1  robot_c → zone 2
+
+[staged] Phase 1 — forward greedy  (128 iters × 3 robot(s), sigma=0.40×1.00, popsize=32)
+[staged]   Ph1 robot a  zone 0  (uncovered: 25% of target)
+    voronoi warm-start: IoU 0.000 ≤ 0.000, kept current
+    init sampling: best coverage score 100.0px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 74  (IoU 0.329)
+    stagnation restart #2 at iter 87  (IoU 0.329)
+    stagnation restart #3 at iter 100  (IoU 0.329)
+    stagnation restart #4 at iter 113  (IoU 0.329)
+[staged]   → robot a: IoU 0.001 → 0.324  ✓
+    ↑ new global best IoU 0.324  [phase Ph1 robot a]
+[staged]   Ph1 robot b  zone 1  (uncovered: 2% of target)
+    voronoi warm-start: IoU 0.313 ≤ 0.327, kept current
+    init sampling: best coverage score 8.2px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 79  (IoU 0.458)
+    stagnation restart #2 at iter 92  (IoU 0.458)
+    stagnation restart #3 at iter 105  (IoU 0.458)
+[staged]   → robot b: IoU 0.324 → 0.456  ✓
+    ↑ new global best IoU 0.456  [phase Ph1 robot b]
+[staged]   Ph1 robot c  zone 2  (uncovered: 0% of target)
+    voronoi warm-start: IoU 0.420 ≤ 0.456, kept current
+    init sampling: best coverage score 1.9px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 21  (IoU 0.516)
+    stagnation restart #2 at iter 34  (IoU 0.516)
+    stagnation restart #3 at iter 47  (IoU 0.516)
+    stagnation restart #4 at iter 84  (IoU 0.518)
+    stagnation restart #5 at iter 97  (IoU 0.518)
+    stagnation restart #6 at iter 110  (IoU 0.518)
+[staged]   → robot c: IoU 0.456 → 0.509  ✓
+    ↑ new global best IoU 0.509  [phase Ph1 robot c]
+[staged] Phase 1 done — composite IoU: 0.509
+
+[staged] Phase 2 — backward pass  (128 iters × 3 robots, sigma=0.260)
+[staged]   contributions before Phase 2:
+[staged]     robot a: +0.140 IoU
+[staged]     robot b: +0.172 IoU
+[staged]     robot c: +0.053 IoU
+[staged]   Ph2 robot c  zone 2  (uncovered: 4% of target)
+    init sampling: best coverage score 6.2px of uncovered area  (32 samples)
+[staged]   → robot c: candidate 0.507 < current 0.509  ✗ rejected
+[staged]   Ph2 robot b  zone 1  (uncovered: 28% of target)
+    init sampling: best coverage score 45.2px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 51  (IoU 0.511)
+    stagnation restart #2 at iter 64  (IoU 0.511)
+    stagnation restart #3 at iter 77  (IoU 0.511)
+    stagnation restart #4 at iter 90  (IoU 0.511)
+    stagnation restart #5 at iter 103  (IoU 0.511)
+    stagnation restart #6 at iter 116  (IoU 0.511)
+[staged]   → robot b: candidate 0.503 < current 0.509  ✗ rejected
+[staged]   Ph2 robot a  zone 0  (uncovered: 19% of target)
+    init sampling: best coverage score 49.1px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 42  (IoU 0.511)
+    stagnation restart #2 at iter 55  (IoU 0.511)
+    stagnation restart #3 at iter 94  (IoU 0.543)
+    stagnation restart #4 at iter 107  (IoU 0.543)
+[staged]   → robot a: IoU 0.509 → 0.537  ✓
+    ↑ new global best IoU 0.537  [phase Ph2 robot a]
+[staged] Phase 2 done — composite IoU: 0.537
+
+[staged] Best snapshot: Phase 2  IoU=0.537
+[staged] Adaptive final budget: warm (0.537)  iters 256→141  popsize 192→192
+[staged] Final refinement — all joints  (141 iters, popsize=192, sigma=0.200)
+    stagnation restart #1 at iter 93  (IoU 0.587)  ICP δ=[-11.170439559229044, -11.170439559229044, -11.170439559229044]°
+    stagnation restart #2 at iter 106  (IoU 0.587)  ICP δ=[11.170439559229044, 11.170439559229044, 11.170439559229044]°
+    stagnation restart #3 at iter 119  (IoU 0.587)  ICP δ=[-11.170439559229044, -11.170439559229044, -11.170439559229044]°
+    ↑ new global best IoU 0.587  [final refinement]
+[staged] Final done — IoU: 0.587  ✓
+[staged] Done — final IoU: 0.587  loss: 0.4140
+
+  ✓  IoU=0.587  loss=0.4140  evals=48583  time=35s
+
+──────────────────────────────────────────────────────────────
+  Frame 2/13 : f01.png
+──────────────────────────────────────────────────────────────
+[seq] Recomputing zones  (sim=0.33 < 0.7)
+[seq] ICP warm-start: Δθ=6.9°  IoU 0.421 → 0.471
+[staged] Temporal continuity: Ph1/Ph2 weight=0.300  final weight=0.000  (curriculum: IoU-free final pass)
+[staged] Prior quality: warm (0.471)  →  Ph1 sigma×0.70  iters×0.85  init_samples=16
+[staged] Multi-res: Phase 1+2 at 64²px  Final at 128²px
+[staged] Popsize: per-robot phases=32  final=192  (theory optimum for 6 DOF = 10)
+[staged] Hungarian skipped (skip_greedy: zones unused)
+    ↑ new global best IoU 0.471  [warm-start prior]
+[staged] Greedy phases skipped (skip_greedy=True, prior IoU=0.471)
+
+[staged] Best snapshot: Phase 1  IoU=0.471
+[staged] Adaptive final budget: warm (0.471)  iters 256→141  popsize 192→192
+[staged] Final refinement — all joints  (141 iters, popsize=192, sigma=0.200)
+    [temporal] λ=0.000  μ=100.0  δ_max=1.20 rad  dof=18
+    [temporal] Δq_max=0.296 rad  Δq_norm_rms=0.042  → direct quintic ✓
+[staged] Final: candidate dq_max=0.296 rad (reachable), snapshot dq_max=0.121 rad (reachable)
+    ↑ new global best IoU 0.638  [final refinement]
+[staged] Final done — IoU: 0.638  ✓
+[staged] Done — final IoU: 0.638  loss: 0.3621
+[staged] Displacement from prior:  global_max=0.296 rad
+          robot_a: Δq_max=0.296 rad [direct ✓]
+          robot_b: Δq_max=0.213 rad [direct ✓]
+          robot_c: Δq_max=0.280 rad [direct ✓]
+
+  ✓  IoU=0.638  loss=0.3621  evals=16897  time=13s
+
+──────────────────────────────────────────────────────────────
+  Frame 3/13 : f02.png
+──────────────────────────────────────────────────────────────
+[seq] Recomputing zones  (sim=0.39 < 0.7)
+[seq] ICP warm-start: Δθ=-23.5°  IoU 0.367 → 0.450
+[staged] Temporal continuity: Ph1/Ph2 weight=0.300  final weight=0.000  (curriculum: IoU-free final pass)
+[staged] Prior quality: warm (0.450)  →  Ph1 sigma×0.70  iters×0.85  init_samples=16
+[staged] Multi-res: Phase 1+2 at 64²px  Final at 128²px
+[staged] Popsize: per-robot phases=32  final=192  (theory optimum for 6 DOF = 10)
+[staged] Hungarian skipped (skip_greedy: zones unused)
+    ↑ new global best IoU 0.450  [warm-start prior]
+[staged] Greedy phases skipped (skip_greedy=True, prior IoU=0.450)
+
+[staged] Best snapshot: Phase 1  IoU=0.450
+[staged] Adaptive final budget: warm (0.450)  iters 256→141  popsize 192→192
+[staged] Final refinement — all joints  (141 iters, popsize=192, sigma=0.200)
+    [temporal] λ=0.000  μ=100.0  δ_max=1.20 rad  dof=18
+    [temporal] Δq_max=0.796 rad  Δq_norm_rms=0.111  → direct quintic ✓
+[staged] Final: candidate dq_max=0.796 rad (reachable), snapshot dq_max=0.410 rad (reachable)
+    ↑ new global best IoU 0.552  [final refinement]
+[staged] Final done — IoU: 0.552  ✓
+[staged] Done — final IoU: 0.552  loss: 0.4495
+[staged] Displacement from prior:  global_max=0.796 rad
+          robot_a: Δq_max=0.631 rad [direct ✓]
+          robot_b: Δq_max=0.796 rad [direct ✓]
+          robot_c: Δq_max=0.320 rad [direct ✓]
+
+  ✓  IoU=0.552  loss=0.4495  evals=18817  time=14s
+
+──────────────────────────────────────────────────────────────
+  Frame 4/13 : f03.png
+──────────────────────────────────────────────────────────────
+[seq] Recomputing zones  (sim=0.45 < 0.7)
+[seq] ICP warm-start rejected: IoU 0.417 → 0.426 (Δθ=-8.5°), using prev_q
+[staged] Temporal continuity: Ph1/Ph2 weight=0.300  final weight=0.000  (curriculum: IoU-free final pass)
+[staged] Prior quality: warm (0.417)  →  Ph1 sigma×0.70  iters×0.85  init_samples=16
+[staged] Multi-res: Phase 1+2 at 64²px  Final at 128²px
+[staged] Popsize: per-robot phases=32  final=192  (theory optimum for 6 DOF = 10)
+
+[staged] Hungarian pre-assignment  (3×3 cost matrix, 8 samples/entry = 72 renders)...
+[staged]   robot_a → zone 1  robot_b → zone 2  robot_c → zone 0
+
+[staged] Phase 1 — forward greedy  (128 iters × 3 robot(s), sigma=0.40×0.70, popsize=32)
+[staged]   Ph1 robot a  zone 1  (uncovered: 6% of target)
+    voronoi warm-start: IoU 0.331 ≤ 0.418, kept current
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 16.3px of uncovered area  (16 samples)
+    stagnation restart #1 at iter 76  (IoU 0.495)
+    stagnation restart #2 at iter 89  (IoU 0.495)
+    [temporal] Δq_max=0.357 rad  Δq_norm_rms=0.058  → direct quintic ✓
+[staged]   → robot a: IoU 0.417 → 0.490  ✓
+    ↑ new global best IoU 0.490  [phase Ph1 robot a]
+[staged]   Ph1 robot b  zone 2  (uncovered: 1% of target)
+    voronoi warm-start: IoU 0.368 ≤ 0.490, kept current
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 2.9px of uncovered area  (16 samples)
+    stagnation restart #1 at iter 45  (IoU 0.506)
+    stagnation restart #2 at iter 89  (IoU 0.516)
+    [temporal] Δq_max=0.443 rad  Δq_norm_rms=0.071  → direct quintic ✓
+[staged]   → robot b: IoU 0.490 → 0.507  ✓
+    ↑ new global best IoU 0.507  [phase Ph1 robot b]
+[staged]   Ph1 robot c  zone 0  (uncovered: 4% of target)
+    voronoi warm-start: IoU 0.433 ≤ 0.512, kept current
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 11.1px of uncovered area  (16 samples)
+    stagnation restart #1 at iter 54  (IoU 0.576)
+    stagnation restart #2 at iter 67  (IoU 0.576)
+    stagnation restart #3 at iter 80  (IoU 0.576)
+    stagnation restart #4 at iter 93  (IoU 0.576)
+    [temporal] Δq_max=0.324 rad  Δq_norm_rms=0.055  → direct quintic ✓
+[staged]   → robot c: IoU 0.507 → 0.561  ✓
+    ↑ new global best IoU 0.561  [phase Ph1 robot c]
+[staged] Phase 1 done — composite IoU: 0.561
+
+[staged] Phase 2 — backward pass  (128 iters × 3 robots, sigma=0.260)
+[staged]   contributions before Phase 2:
+[staged]     robot a: +0.172 IoU
+[staged]     robot b: +0.116 IoU
+[staged]     robot c: +0.122 IoU
+[staged]   Ph2 robot c  zone 0  (uncovered: 11% of target)
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 22.6px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 58  (IoU 0.570)
+    stagnation restart #2 at iter 71  (IoU 0.570)
+    stagnation restart #3 at iter 84  (IoU 0.570)
+    stagnation restart #4 at iter 97  (IoU 0.570)
+    stagnation restart #5 at iter 110  (IoU 0.570)
+    [temporal] Δq_max=0.321 rad  Δq_norm_rms=0.054  → direct quintic ✓
+[staged]   → robot c: candidate 0.561 < current 0.561  ✗ rejected
+[staged]   Ph2 robot b  zone 2  (uncovered: 10% of target)
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 11.6px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 53  (IoU 0.560)
+    stagnation restart #2 at iter 66  (IoU 0.560)
+    stagnation restart #3 at iter 79  (IoU 0.560)
+    stagnation restart #4 at iter 92  (IoU 0.560)
+    stagnation restart #5 at iter 105  (IoU 0.560)
+    [temporal] Δq_max=0.370 rad  Δq_norm_rms=0.055  → direct quintic ✓
+[staged]   → robot b: candidate 0.555 < current 0.561  ✗ rejected
+[staged]   Ph2 robot a  zone 1  (uncovered: 24% of target)
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 25.9px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 69  (IoU 0.573)
+    stagnation restart #2 at iter 82  (IoU 0.573)
+    stagnation restart #3 at iter 95  (IoU 0.573)
+    stagnation restart #4 at iter 108  (IoU 0.573)
+    [temporal] Δq_max=0.371 rad  Δq_norm_rms=0.058  → direct quintic ✓
+[staged]   → robot a: candidate 0.561 < current 0.561  ✗ rejected
+[staged] Phase 2 done — composite IoU: 0.561
+
+[staged] Best snapshot: Phase 1  IoU=0.561
+[staged] Adaptive final budget: warm (0.561)  iters 256→141  popsize 192→192
+[staged] Final refinement — all joints  (141 iters, popsize=192, sigma=0.200)
+    [temporal] λ=0.000  μ=100.0  δ_max=1.20 rad  dof=18
+    stagnation restart #1 at iter 13  (IoU 0.561)  ICP δ=[-11.12881015977685, -11.12881015977685, -11.12881015977685]°
+    stagnation restart #2 at iter 26  (IoU 0.561)  ICP δ=[11.12881015977685, 11.12881015977685, 11.12881015977685]°
+    stagnation restart #3 at iter 39  (IoU 0.561)  ICP δ=[-11.12881015977685, -11.12881015977685, -11.12881015977685]°
+    stagnation restart #4 at iter 52  (IoU 0.561)  ICP δ=[11.12881015977685, 11.12881015977685, 11.12881015977685]°
+    stagnation restart #5 at iter 65  (IoU 0.561)  ICP δ=[-11.12881015977685, -11.12881015977685, -11.12881015977685]°
+    stagnation restart #6 at iter 78  (IoU 0.561)  ICP δ=[11.12881015977685, 11.12881015977685, 11.12881015977685]°
+    stagnation restart #7 at iter 91  (IoU 0.561)  ICP δ=[-11.12881015977685, -11.12881015977685, -11.12881015977685]°
+    stagnation restart #8 at iter 104  (IoU 0.561)  ICP δ=[11.12881015977685, 11.12881015977685, 11.12881015977685]°
+    stagnation restart #9 at iter 117  (IoU 0.561)  ICP δ=[-11.12881015977685, -11.12881015977685, -11.12881015977685]°
+    stagnation restart #10 at iter 130  (IoU 0.561)  ICP δ=[11.12881015977685, 11.12881015977685, 11.12881015977685]°
+    [temporal] Δq_max=0.443 rad  Δq_norm_rms=0.061  → direct quintic ✓
+[staged] Final: candidate dq_max=0.443 rad (reachable), snapshot dq_max=0.443 rad (reachable)
+[staged] Final done — IoU: 0.561  ✓
+[staged] Done — final IoU: 0.561  loss: 0.4396
+[staged] Displacement from prior:  global_max=0.443 rad
+          robot_a: Δq_max=0.357 rad [direct ✓]
+          robot_b: Δq_max=0.443 rad [direct ✓]
+          robot_c: Δq_max=0.324 rad [direct ✓]
+
+  ✓  IoU=0.561  loss=0.4396  evals=49735  time=35s
+
+──────────────────────────────────────────────────────────────
+  Frame 5/13 : f04.png
+──────────────────────────────────────────────────────────────
+[seq] Recomputing zones  (sim=0.35 < 0.7)
+[seq] ICP warm-start: Δθ=7.7°  IoU 0.381 → 0.422
+[staged] Temporal continuity: Ph1/Ph2 weight=0.300  final weight=0.000  (curriculum: IoU-free final pass)
+[staged] Prior quality: warm (0.422)  →  Ph1 sigma×0.70  iters×0.85  init_samples=16
+[staged] Multi-res: Phase 1+2 at 64²px  Final at 128²px
+[staged] Popsize: per-robot phases=32  final=192  (theory optimum for 6 DOF = 10)
+[staged] Hungarian skipped (skip_greedy: zones unused)
+    ↑ new global best IoU 0.422  [warm-start prior]
+[staged] Greedy phases skipped (skip_greedy=True, prior IoU=0.422)
+
+[staged] Best snapshot: Phase 1  IoU=0.422
+[staged] Adaptive final budget: warm (0.422)  iters 256→141  popsize 192→192
+[staged] Final refinement — all joints  (141 iters, popsize=192, sigma=0.200)
+    [temporal] λ=0.000  μ=100.0  δ_max=1.20 rad  dof=18
+    stagnation restart #1 at iter 83  (IoU 0.632)
+    stagnation restart #2 at iter 96  (IoU 0.632)
+    stagnation restart #3 at iter 109  (IoU 0.632)
+    stagnation restart #4 at iter 122  (IoU 0.632)
+    [temporal] Δq_max=0.513 rad  Δq_norm_rms=0.076  → direct quintic ✓
+[staged] Final: candidate dq_max=0.513 rad (reachable), snapshot dq_max=0.135 rad (reachable)
+    ↑ new global best IoU 0.632  [final refinement]
+[staged] Final done — IoU: 0.632  ✓
+[staged] Done — final IoU: 0.632  loss: 0.3688
+[staged] Displacement from prior:  global_max=0.513 rad
+          robot_a: Δq_max=0.513 rad [direct ✓]
+          robot_b: Δq_max=0.353 rad [direct ✓]
+          robot_c: Δq_max=0.376 rad [direct ✓]
+
+  ✓  IoU=0.632  loss=0.3688  evals=27073  time=18s
+
+──────────────────────────────────────────────────────────────
+  Frame 6/13 : f05.png
+──────────────────────────────────────────────────────────────
+[seq] Recomputing zones  (sim=0.40 < 0.7)
+[seq] ICP warm-start: Δθ=-23.3°  IoU 0.413 → 0.519
+[staged] Temporal continuity: Ph1/Ph2 weight=0.300  final weight=0.000  (curriculum: IoU-free final pass)
+[staged] Prior quality: warm (0.519)  →  Ph1 sigma×0.70  iters×0.85  init_samples=16
+[staged] Multi-res: Phase 1+2 at 64²px  Final at 128²px
+[staged] Popsize: per-robot phases=32  final=192  (theory optimum for 6 DOF = 10)
+[staged] Hungarian skipped (skip_greedy: zones unused)
+    ↑ new global best IoU 0.519  [warm-start prior]
+[staged] Greedy phases skipped (skip_greedy=True, prior IoU=0.519)
+
+[staged] Best snapshot: Phase 1  IoU=0.519
+[staged] Adaptive final budget: warm (0.519)  iters 256→141  popsize 192→192
+[staged] Final refinement — all joints  (141 iters, popsize=192, sigma=0.200)
+    [temporal] λ=0.000  μ=100.0  δ_max=1.20 rad  dof=18
+    stagnation restart #1 at iter 101  (IoU 0.649)  ICP δ=[-10.634858865124789, -10.634858865124789, -10.634858865124789]°
+    stagnation restart #2 at iter 114  (IoU 0.649)  ICP δ=[10.634858865124789, 10.634858865124789, 10.634858865124789]°
+    stagnation restart #3 at iter 127  (IoU 0.649)  ICP δ=[-10.634858865124789, -10.634858865124789, -10.634858865124789]°
+    [temporal] Δq_max=0.818 rad  Δq_norm_rms=0.149  → direct quintic ✓
+[staged] Final: candidate dq_max=0.818 rad (reachable), snapshot dq_max=0.406 rad (reachable)
+    ↑ new global best IoU 0.649  [final refinement]
+[staged] Final done — IoU: 0.649  ✓
+[staged] Done — final IoU: 0.649  loss: 0.3512
+[staged] Displacement from prior:  global_max=0.818 rad
+          robot_a: Δq_max=0.818 rad [direct ✓]
+          robot_b: Δq_max=0.712 rad [direct ✓]
+          robot_c: Δq_max=0.742 rad [direct ✓]
+
+  ✓  IoU=0.649  loss=0.3512  evals=27073  time=18s
+
+──────────────────────────────────────────────────────────────
+  Frame 7/13 : f06.png
+──────────────────────────────────────────────────────────────
+[seq] Recomputing zones  (sim=0.57 < 0.7)
+[staged] Temporal continuity: Ph1/Ph2 weight=0.300  final weight=0.000  (curriculum: IoU-free final pass)
+[staged] Prior quality: warm (0.510)  →  Ph1 sigma×0.70  iters×0.85  init_samples=16
+[staged] Multi-res: Phase 1+2 at 64²px  Final at 128²px
+[staged] Popsize: per-robot phases=32  final=192  (theory optimum for 6 DOF = 10)
+
+[staged] Hungarian pre-assignment  (3×3 cost matrix, 8 samples/entry = 72 renders)...
+[staged]   robot_a → zone 0  robot_b → zone 2  robot_c → zone 1
+
+[staged] Phase 1 — forward greedy  (128 iters × 3 robot(s), sigma=0.40×0.70, popsize=32)
+[staged]   Ph1 robot a  zone 0  (uncovered: 6% of target)
+    voronoi warm-start: IoU 0.403 ≤ 0.511, kept current
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 22.9px of uncovered area  (16 samples)
+    stagnation restart #1 at iter 79  (IoU 0.546)
+    stagnation restart #2 at iter 92  (IoU 0.546)
+    [temporal] Δq_max=0.637 rad  Δq_norm_rms=0.061  → direct quintic ✓
+[staged]   → robot a: IoU 0.510 → 0.535  ✓
+    ↑ new global best IoU 0.535  [phase Ph1 robot a]
+[staged]   Ph1 robot b  zone 2  (uncovered: 5% of target)
+    voronoi warm-start: IoU 0.415 ≤ 0.541, kept current
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 3.0px of uncovered area  (16 samples)
+    stagnation restart #1 at iter 78  (IoU 0.572)
+    stagnation restart #2 at iter 91  (IoU 0.572)
+    [temporal] Δq_max=0.267 rad  Δq_norm_rms=0.042  → direct quintic ✓
+[staged]   → robot b: IoU 0.535 → 0.562  ✓
+    ↑ new global best IoU 0.562  [phase Ph1 robot b]
+[staged]   Ph1 robot c  zone 1  (uncovered: 15% of target)
+    voronoi warm-start: IoU 0.439 ≤ 0.565, kept current
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 23.6px of uncovered area  (16 samples)
+    stagnation restart #1 at iter 37  (IoU 0.590)
+    stagnation restart #2 at iter 50  (IoU 0.590)
+    stagnation restart #3 at iter 63  (IoU 0.590)
+    stagnation restart #4 at iter 76  (IoU 0.590)
+    stagnation restart #5 at iter 89  (IoU 0.590)
+    [temporal] Δq_max=0.260 rad  Δq_norm_rms=0.032  → direct quintic ✓
+[staged]   → robot c: IoU 0.562 → 0.573  ✓
+    ↑ new global best IoU 0.573  [phase Ph1 robot c]
+[staged] Phase 1 done — composite IoU: 0.573
+
+[staged] Phase 2 — backward pass  (128 iters × 3 robots, sigma=0.260)
+[staged]   contributions before Phase 2:
+[staged]     robot a: +0.142 IoU
+[staged]     robot b: +0.127 IoU
+[staged]     robot c: +0.157 IoU
+[staged]   Ph2 robot c  zone 1  (uncovered: 15% of target)
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 22.4px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 87  (IoU 0.584)
+    stagnation restart #2 at iter 100  (IoU 0.584)
+    stagnation restart #3 at iter 113  (IoU 0.584)
+    [temporal] Δq_max=0.214 rad  Δq_norm_rms=0.026  → direct quintic ✓
+[staged]   → robot c: candidate 0.572 < current 0.573  ✗ rejected
+[staged]   Ph2 robot b  zone 2  (uncovered: 8% of target)
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 9.5px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 61  (IoU 0.588)
+    stagnation restart #2 at iter 84  (IoU 0.590)
+    stagnation restart #3 at iter 97  (IoU 0.590)
+    stagnation restart #4 at iter 110  (IoU 0.590)
+    [temporal] Δq_max=0.303 rad  Δq_norm_rms=0.054  → direct quintic ✓
+[staged]   → robot b: IoU 0.573 → 0.579  ✓
+    ↑ new global best IoU 0.579  [phase Ph2 robot b]
+[staged]   Ph2 robot a  zone 0  (uncovered: 10% of target)
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 15.5px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 63  (IoU 0.590)
+    stagnation restart #2 at iter 76  (IoU 0.590)
+    stagnation restart #3 at iter 89  (IoU 0.590)
+    stagnation restart #4 at iter 102  (IoU 0.590)
+    stagnation restart #5 at iter 115  (IoU 0.590)
+    [temporal] Δq_max=0.220 rad  Δq_norm_rms=0.040  → direct quintic ✓
+[staged]   → robot a: IoU 0.579 → 0.582  ✓
+    ↑ new global best IoU 0.582  [phase Ph2 robot a]
+[staged] Phase 2 done — composite IoU: 0.582
+
+[staged] Best snapshot: Phase 2  IoU=0.582
+[staged] Adaptive final budget: warm (0.582)  iters 256→141  popsize 192→192
+[staged] Final refinement — all joints  (141 iters, popsize=192, sigma=0.200)
+    [temporal] λ=0.000  μ=100.0  δ_max=1.20 rad  dof=18
+    stagnation restart #1 at iter 61  (IoU 0.608)  ICP δ=[-8.074015850183459, -8.074015850183459, -8.074015850183459]°
+    stagnation restart #2 at iter 74  (IoU 0.608)  ICP δ=[8.074015850183459, 8.074015850183459, 8.074015850183459]°
+    stagnation restart #3 at iter 87  (IoU 0.608)  ICP δ=[-8.074015850183459, -8.074015850183459, -8.074015850183459]°
+    stagnation restart #4 at iter 100  (IoU 0.608)  ICP δ=[8.074015850183459, 8.074015850183459, 8.074015850183459]°
+    stagnation restart #5 at iter 113  (IoU 0.608)  ICP δ=[-8.074015850183459, -8.074015850183459, -8.074015850183459]°
+    stagnation restart #6 at iter 126  (IoU 0.608)  ICP δ=[8.074015850183459, 8.074015850183459, 8.074015850183459]°
+    [temporal] Δq_max=0.483 rad  Δq_norm_rms=0.078  → direct quintic ✓
+[staged] Final: candidate dq_max=0.483 rad (reachable), snapshot dq_max=0.303 rad (reachable)
+    ↑ new global best IoU 0.608  [final refinement]
+[staged] Final done — IoU: 0.608  ✓
+[staged] Done — final IoU: 0.608  loss: 0.3929
+[staged] Displacement from prior:  global_max=0.483 rad
+          robot_a: Δq_max=0.483 rad [direct ✓]
+          robot_b: Δq_max=0.301 rad [direct ✓]
+          robot_c: Δq_max=0.471 rad [direct ✓]
+
+  ✓  IoU=0.608  loss=0.3929  evals=49735  time=32s
+
+──────────────────────────────────────────────────────────────
+  Frame 8/13 : f07.png
+──────────────────────────────────────────────────────────────
+[seq] Zone assignment reused  (sim=0.75 ≥ 0.7, saves 72 renders)
+[seq] ICP warm-start rejected: IoU 0.615 → 0.594 (Δθ=-8.6°), using prev_q
+[staged] Temporal continuity: Ph1/Ph2 weight=0.300  final weight=0.000  (curriculum: IoU-free final pass)
+[staged] Prior quality: warm (0.615)  →  Ph1 sigma×0.70  iters×0.85  init_samples=16
+[staged] Multi-res: Phase 1+2 at 64²px  Final at 128²px
+[staged] Popsize: per-robot phases=32  final=192  (theory optimum for 6 DOF = 10)
+[staged] Hungarian: reusing cached zone assignment  robot_a → zone 0  robot_b → zone 2  robot_c → zone 1
+
+[staged] Phase 1 — forward greedy  (128 iters × 3 robot(s), sigma=0.40×0.70, popsize=32)
+[staged]   Ph1 robot a  zone 0  (uncovered: 2% of target)
+    voronoi warm-start: IoU 0.487 ≤ 0.605, kept current
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 9.8px of uncovered area  (16 samples)
+    stagnation restart #1 at iter 62  (IoU 0.624)
+    stagnation restart #2 at iter 75  (IoU 0.624)
+    stagnation restart #3 at iter 88  (IoU 0.624)
+    [temporal] Δq_max=0.042 rad  Δq_norm_rms=0.006  → direct quintic ✓
+[staged]   → robot a: IoU 0.615 → 0.615  ✓
+    ↑ new global best IoU 0.615  [phase Ph1 robot a]
+[staged]   Ph1 robot b  zone 2  (uncovered: 4% of target)
+    voronoi warm-start: IoU 0.469 ≤ 0.615, kept current
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 6.6px of uncovered area  (16 samples)
+    stagnation restart #1 at iter 76  (IoU 0.638)
+    stagnation restart #2 at iter 89  (IoU 0.638)
+    [temporal] Δq_max=0.291 rad  Δq_norm_rms=0.056  → direct quintic ✓
+[staged]   → robot b: IoU 0.615 → 0.628  ✓
+    ↑ new global best IoU 0.628  [phase Ph1 robot b]
+[staged]   Ph1 robot c  zone 1  (uncovered: 13% of target)
+    voronoi warm-start: IoU 0.500 ≤ 0.633, kept current
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 31.8px of uncovered area  (16 samples)
+    stagnation restart #1 at iter 21  (IoU 0.639)
+    stagnation restart #2 at iter 73  (IoU 0.657)
+    [temporal] Δq_max=0.191 rad  Δq_norm_rms=0.030  → direct quintic ✓
+[staged]   → robot c: IoU 0.628 → 0.640  ✓
+    ↑ new global best IoU 0.640  [phase Ph1 robot c]
+[staged] Phase 1 done — composite IoU: 0.640
+
+[staged] Phase 2 — backward pass  (128 iters × 3 robots, sigma=0.260)
+[staged]   contributions before Phase 2:
+[staged]     robot a: +0.160 IoU
+[staged]     robot b: +0.169 IoU
+[staged]     robot c: +0.152 IoU
+[staged]   Ph2 robot c  zone 1  (uncovered: 13% of target)
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 31.3px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 78  (IoU 0.649)
+    stagnation restart #2 at iter 91  (IoU 0.649)
+    stagnation restart #3 at iter 104  (IoU 0.649)
+    stagnation restart #4 at iter 117  (IoU 0.649)
+    [temporal] Δq_max=0.175 rad  Δq_norm_rms=0.026  → direct quintic ✓
+[staged]   → robot c: candidate 0.637 < current 0.640  ✗ rejected
+[staged]   Ph2 robot b  zone 2  (uncovered: 15% of target)
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 24.3px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 106  (IoU 0.656)
+    [temporal] Δq_max=0.364 rad  Δq_norm_rms=0.055  → direct quintic ✓
+[staged]   → robot b: IoU 0.640 → 0.641  ✓
+    ↑ new global best IoU 0.641  [phase Ph2 robot b]
+[staged]   Ph2 robot a  zone 0  (uncovered: 14% of target)
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 25.6px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 71  (IoU 0.661)
+    stagnation restart #2 at iter 84  (IoU 0.661)
+    stagnation restart #3 at iter 97  (IoU 0.661)
+    stagnation restart #4 at iter 110  (IoU 0.661)
+    [temporal] Δq_max=0.035 rad  Δq_norm_rms=0.006  → direct quintic ✓
+[staged]   → robot a: IoU 0.641 → 0.645  ✓
+    ↑ new global best IoU 0.645  [phase Ph2 robot a]
+[staged] Phase 2 done — composite IoU: 0.645
+
+[staged] Best snapshot: Phase 2  IoU=0.645
+[staged] Adaptive final budget: warm (0.645)  iters 256→141  popsize 192→192
+[staged] Final refinement — all joints  (141 iters, popsize=192, sigma=0.200)
+    [temporal] λ=0.000  μ=100.0  δ_max=1.20 rad  dof=18
+    [temporal] Δq_max=0.824 rad  Δq_norm_rms=0.113  → direct quintic ✓
+[staged] Final: candidate dq_max=0.824 rad (reachable), snapshot dq_max=0.364 rad (reachable)
+    ↑ new global best IoU 0.680  [final refinement]
+[staged] Final done — IoU: 0.680  ✓
+[staged] Done — final IoU: 0.680  loss: 0.3205
+[staged] Displacement from prior:  global_max=0.824 rad
+          robot_a: Δq_max=0.166 rad [direct ✓]
+          robot_b: Δq_max=0.592 rad [direct ✓]
+          robot_c: Δq_max=0.824 rad [direct ✓]
+
+  ✓  IoU=0.680  loss=0.3205  evals=40519  time=25s
+
+──────────────────────────────────────────────────────────────
+  Frame 9/13 : f08.png
+──────────────────────────────────────────────────────────────
+[seq] Recomputing zones  (sim=0.60 < 0.7)
+[seq] ICP warm-start rejected: IoU 0.550 → 0.552 (Δθ=-13.5°), using prev_q
+[staged] Temporal continuity: Ph1/Ph2 weight=0.300  final weight=0.000  (curriculum: IoU-free final pass)
+[staged] Prior quality: warm (0.550)  →  Ph1 sigma×0.70  iters×0.85  init_samples=16
+[staged] Multi-res: Phase 1+2 at 64²px  Final at 128²px
+[staged] Popsize: per-robot phases=32  final=192  (theory optimum for 6 DOF = 10)
+
+[staged] Hungarian pre-assignment  (3×3 cost matrix, 8 samples/entry = 72 renders)...
+[staged]   robot_a → zone 0  robot_b → zone 1  robot_c → zone 2
+
+[staged] Phase 1 — forward greedy  (128 iters × 3 robot(s), sigma=0.40×0.70, popsize=32)
+[staged]   Ph1 robot a  zone 0  (uncovered: 4% of target)
+    voronoi warm-start: IoU 0.427 ≤ 0.540, kept current
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 15.3px of uncovered area  (16 samples)
+    stagnation restart #1 at iter 90  (IoU 0.584)  ICP δ=[-2.955964822738286]°
+    [temporal] Δq_max=0.266 rad  Δq_norm_rms=0.034  → direct quintic ✓
+[staged]   → robot a: IoU 0.550 → 0.575  ✓
+    ↑ new global best IoU 0.575  [phase Ph1 robot a]
+[staged]   Ph1 robot b  zone 1  (uncovered: 0% of target)
+    voronoi warm-start: IoU 0.421 ≤ 0.579, kept current
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 2.0px of uncovered area  (16 samples)
+    stagnation restart #1 at iter 62  (IoU 0.601)
+    stagnation restart #2 at iter 75  (IoU 0.601)
+    stagnation restart #3 at iter 88  (IoU 0.601)
+    [temporal] Δq_max=0.346 rad  Δq_norm_rms=0.034  → direct quintic ✓
+[staged]   → robot b: IoU 0.575 → 0.588  ✓
+    ↑ new global best IoU 0.588  [phase Ph1 robot b]
+[staged]   Ph1 robot c  zone 2  (uncovered: 3% of target)
+    voronoi warm-start: IoU 0.467 ≤ 0.595, kept current
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 8.3px of uncovered area  (16 samples)
+    stagnation restart #1 at iter 49  (IoU 0.616)
+    stagnation restart #2 at iter 62  (IoU 0.616)
+    stagnation restart #3 at iter 75  (IoU 0.616)
+    stagnation restart #4 at iter 88  (IoU 0.616)
+    [temporal] Δq_max=0.197 rad  Δq_norm_rms=0.036  → direct quintic ✓
+[staged]   → robot c: IoU 0.588 → 0.602  ✓
+    ↑ new global best IoU 0.602  [phase Ph1 robot c]
+[staged] Phase 1 done — composite IoU: 0.602
+
+[staged] Phase 2 — backward pass  (128 iters × 3 robots, sigma=0.260)
+[staged]   contributions before Phase 2:
+[staged]     robot a: +0.156 IoU
+[staged]     robot b: +0.134 IoU
+[staged]     robot c: +0.157 IoU
+[staged]   Ph2 robot c  zone 2  (uncovered: 19% of target)
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 48.1px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 62  (IoU 0.613)
+    stagnation restart #2 at iter 75  (IoU 0.613)
+    stagnation restart #3 at iter 88  (IoU 0.613)
+    stagnation restart #4 at iter 101  (IoU 0.613)
+    stagnation restart #5 at iter 114  (IoU 0.613)
+    [temporal] Δq_max=0.190 rad  Δq_norm_rms=0.031  → direct quintic ✓
+[staged]   → robot c: candidate 0.600 < current 0.602  ✗ rejected
+[staged]   Ph2 robot b  zone 1  (uncovered: 13% of target)
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 19.9px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 63  (IoU 0.614)
+    stagnation restart #2 at iter 76  (IoU 0.614)
+    stagnation restart #3 at iter 89  (IoU 0.614)
+    stagnation restart #4 at iter 102  (IoU 0.614)
+    stagnation restart #5 at iter 115  (IoU 0.614)
+    [temporal] Δq_max=0.126 rad  Δq_norm_rms=0.021  → direct quintic ✓
+[staged]   → robot b: candidate 0.601 < current 0.602  ✗ rejected
+[staged]   Ph2 robot a  zone 0  (uncovered: 17% of target)
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 24.5px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 69  (IoU 0.613)
+    stagnation restart #2 at iter 82  (IoU 0.613)
+    stagnation restart #3 at iter 95  (IoU 0.613)
+    stagnation restart #4 at iter 108  (IoU 0.613)
+    [temporal] Δq_max=0.182 rad  Δq_norm_rms=0.027  → direct quintic ✓
+[staged]   → robot a: IoU 0.602 → 0.607  ✓
+    ↑ new global best IoU 0.607  [phase Ph2 robot a]
+[staged] Phase 2 done — composite IoU: 0.607
+
+[staged] Best snapshot: Phase 2  IoU=0.607
+[staged] Adaptive final budget: warm (0.607)  iters 256→141  popsize 192→192
+[staged] Final refinement — all joints  (141 iters, popsize=192, sigma=0.200)
+    [temporal] λ=0.000  μ=100.0  δ_max=1.20 rad  dof=18
+    [temporal] Δq_max=0.405 rad  Δq_norm_rms=0.072  → direct quintic ✓
+[staged] Final: candidate dq_max=0.405 rad (reachable), snapshot dq_max=0.346 rad (reachable)
+    ↑ new global best IoU 0.641  [final refinement]
+[staged] Final done — IoU: 0.641  ✓
+[staged] Done — final IoU: 0.641  loss: 0.3594
+[staged] Displacement from prior:  global_max=0.405 rad
+          robot_a: Δq_max=0.367 rad [direct ✓]
+          robot_b: Δq_max=0.405 rad [direct ✓]
+          robot_c: Δq_max=0.299 rad [direct ✓]
+
+  ✓  IoU=0.641  loss=0.3594  evals=36679  time=22s
+
+──────────────────────────────────────────────────────────────
+  Frame 10/13 : f09.png
+──────────────────────────────────────────────────────────────
+[seq] Zone assignment reused  (sim=0.80 ≥ 0.7, saves 72 renders)
+[seq] ICP warm-start rejected: IoU 0.621 → 0.580 (Δθ=-8.1°), using prev_q
+[staged] Temporal continuity: Ph1/Ph2 weight=0.300  final weight=0.000  (curriculum: IoU-free final pass)
+[staged] Prior quality: warm (0.621)  →  Ph1 sigma×0.70  iters×0.85  init_samples=16
+[staged] Multi-res: Phase 1+2 at 64²px  Final at 128²px
+[staged] Popsize: per-robot phases=32  final=192  (theory optimum for 6 DOF = 10)
+[staged] Hungarian: reusing cached zone assignment  robot_a → zone 0  robot_b → zone 1  robot_c → zone 2
+
+[staged] Phase 1 — forward greedy  (128 iters × 3 robot(s), sigma=0.40×0.70, popsize=32)
+[staged]   Ph1 robot a  zone 0  (uncovered: 3% of target)
+    voronoi warm-start: IoU 0.440 ≤ 0.607, kept current
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 15.1px of uncovered area  (16 samples)
+    stagnation restart #1 at iter 61  (IoU 0.634)
+    stagnation restart #2 at iter 74  (IoU 0.634)
+    stagnation restart #3 at iter 87  (IoU 0.634)
+    [temporal] Δq_max=0.057 rad  Δq_norm_rms=0.012  → direct quintic ✓
+[staged]   → robot a: IoU 0.621 → 0.629  ✓
+    ↑ new global best IoU 0.629  [phase Ph1 robot a]
+[staged]   Ph1 robot b  zone 1  (uncovered: 2% of target)
+    voronoi warm-start: IoU 0.461 ≤ 0.627, kept current
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 6.7px of uncovered area  (16 samples)
+    stagnation restart #1 at iter 63  (IoU 0.634)
+    stagnation restart #2 at iter 76  (IoU 0.634)
+    stagnation restart #3 at iter 89  (IoU 0.634)
+    [temporal] Δq_max=0.045 rad  Δq_norm_rms=0.007  → direct quintic ✓
+[staged]   → robot b: candidate 0.628 < current 0.629  ✗ rejected
+[staged]   Ph1 robot c  zone 2  (uncovered: 4% of target)
+    voronoi warm-start: IoU 0.501 ≤ 0.627, kept current
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 7.0px of uncovered area  (16 samples)
+    stagnation restart #1 at iter 60  (IoU 0.655)
+    stagnation restart #2 at iter 73  (IoU 0.655)
+    stagnation restart #3 at iter 86  (IoU 0.655)
+    [temporal] Δq_max=0.286 rad  Δq_norm_rms=0.046  → direct quintic ✓
+[staged]   → robot c: IoU 0.629 → 0.646  ✓
+    ↑ new global best IoU 0.646  [phase Ph1 robot c]
+[staged] Phase 1 done — composite IoU: 0.646
+
+[staged] Phase 2 — backward pass  (128 iters × 3 robots, sigma=0.260)
+[staged]   contributions before Phase 2:
+[staged]     robot a: +0.195 IoU
+[staged]     robot b: +0.129 IoU
+[staged]     robot c: +0.148 IoU
+[staged]   Ph2 robot c  zone 2  (uncovered: 15% of target)
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 42.2px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 80  (IoU 0.648)
+    stagnation restart #2 at iter 93  (IoU 0.648)
+    stagnation restart #3 at iter 106  (IoU 0.648)
+    [temporal] Δq_max=0.203 rad  Δq_norm_rms=0.037  → direct quintic ✓
+[staged]   → robot c: IoU 0.646 → 0.647  ✓
+    ↑ new global best IoU 0.647  [phase Ph2 robot c]
+[staged]   Ph2 robot b  zone 1  (uncovered: 12% of target)
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 18.3px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 73  (IoU 0.656)
+    stagnation restart #2 at iter 86  (IoU 0.656)
+    stagnation restart #3 at iter 99  (IoU 0.656)
+    stagnation restart #4 at iter 112  (IoU 0.656)
+    [temporal] Δq_max=0.389 rad  Δq_norm_rms=0.035  → direct quintic ✓
+[staged]   → robot b: IoU 0.647 → 0.650  ✓
+    ↑ new global best IoU 0.650  [phase Ph2 robot b]
+[staged]   Ph2 robot a  zone 0  (uncovered: 18% of target)
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 42.4px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 64  (IoU 0.661)
+    stagnation restart #2 at iter 77  (IoU 0.661)
+    stagnation restart #3 at iter 90  (IoU 0.661)
+    stagnation restart #4 at iter 103  (IoU 0.661)
+    stagnation restart #5 at iter 116  (IoU 0.661)
+    [temporal] Δq_max=0.088 rad  Δq_norm_rms=0.016  → direct quintic ✓
+[staged]   → robot a: IoU 0.650 → 0.653  ✓
+    ↑ new global best IoU 0.653  [phase Ph2 robot a]
+[staged] Phase 2 done — composite IoU: 0.653
+
+[staged] Best snapshot: Phase 2  IoU=0.653
+[staged] Adaptive final budget: warm (0.653)  iters 256→141  popsize 192→192
+[staged] Final refinement — all joints  (141 iters, popsize=192, sigma=0.200)
+    [temporal] λ=0.000  μ=100.0  δ_max=1.20 rad  dof=18
+    [temporal] Δq_max=0.707 rad  Δq_norm_rms=0.113  → direct quintic ✓
+[staged] Final: candidate dq_max=0.707 rad (reachable), snapshot dq_max=0.389 rad (reachable)
+    ↑ new global best IoU 0.673  [final refinement]
+[staged] Final done — IoU: 0.673  ✓
+[staged] Done — final IoU: 0.673  loss: 0.3272
+[staged] Displacement from prior:  global_max=0.707 rad
+          robot_a: Δq_max=0.629 rad [direct ✓]
+          robot_b: Δq_max=0.707 rad [direct ✓]
+          robot_c: Δq_max=0.428 rad [direct ✓]
+
+  ✓  IoU=0.673  loss=0.3272  evals=38983  time=24s
+
+──────────────────────────────────────────────────────────────
+  Frame 11/13 : f10.png
+──────────────────────────────────────────────────────────────
+[seq] Recomputing zones  (sim=0.46 < 0.7)
+[seq] ICP warm-start: Δθ=4.7°  IoU 0.477 → 0.505
+[staged] Temporal continuity: Ph1/Ph2 weight=0.300  final weight=0.000  (curriculum: IoU-free final pass)
+[staged] Prior quality: warm (0.505)  →  Ph1 sigma×0.70  iters×0.85  init_samples=16
+[staged] Multi-res: Phase 1+2 at 64²px  Final at 128²px
+[staged] Popsize: per-robot phases=32  final=192  (theory optimum for 6 DOF = 10)
+[staged] Hungarian skipped (skip_greedy: zones unused)
+    ↑ new global best IoU 0.505  [warm-start prior]
+[staged] Greedy phases skipped (skip_greedy=True, prior IoU=0.505)
+
+[staged] Best snapshot: Phase 1  IoU=0.505
+[staged] Adaptive final budget: warm (0.505)  iters 256→141  popsize 192→192
+[staged] Final refinement — all joints  (141 iters, popsize=192, sigma=0.200)
+    [temporal] λ=0.000  μ=100.0  δ_max=1.20 rad  dof=18
+    stagnation restart #1 at iter 58  (IoU 0.662)
+    stagnation restart #2 at iter 71  (IoU 0.662)
+    stagnation restart #3 at iter 84  (IoU 0.662)
+    stagnation restart #4 at iter 97  (IoU 0.662)
+    stagnation restart #5 at iter 110  (IoU 0.662)
+    stagnation restart #6 at iter 123  (IoU 0.662)
+    [temporal] Δq_max=0.414 rad  Δq_norm_rms=0.051  → direct quintic ✓
+[staged] Final: candidate dq_max=0.414 rad (reachable), snapshot dq_max=0.082 rad (reachable)
+    ↑ new global best IoU 0.662  [final refinement]
+[staged] Final done — IoU: 0.662  ✓
+[staged] Done — final IoU: 0.662  loss: 0.3384
+[staged] Displacement from prior:  global_max=0.414 rad
+          robot_a: Δq_max=0.303 rad [direct ✓]
+          robot_b: Δq_max=0.341 rad [direct ✓]
+          robot_c: Δq_max=0.414 rad [direct ✓]
+
+  ✓  IoU=0.662  loss=0.3384  evals=27073  time=18s
+
+──────────────────────────────────────────────────────────────
+  Frame 12/13 : f11.png
+──────────────────────────────────────────────────────────────
+[seq] Recomputing zones  (sim=0.48 < 0.7)
+[staged] Temporal continuity: Ph1/Ph2 weight=0.300  final weight=0.000  (curriculum: IoU-free final pass)
+[staged] Prior quality: warm (0.487)  →  Ph1 sigma×0.70  iters×0.85  init_samples=16
+[staged] Multi-res: Phase 1+2 at 64²px  Final at 128²px
+[staged] Popsize: per-robot phases=32  final=192  (theory optimum for 6 DOF = 10)
+
+[staged] Hungarian pre-assignment  (3×3 cost matrix, 8 samples/entry = 72 renders)...
+[staged]   robot_a → zone 2  robot_b → zone 0  robot_c → zone 1
+
+[staged] Phase 1 — forward greedy  (128 iters × 3 robot(s), sigma=0.40×0.70, popsize=32)
+[staged]   Ph1 robot a  zone 2  (uncovered: 4% of target)
+    voronoi warm-start: IoU 0.381 ≤ 0.489, kept current
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 16.4px of uncovered area  (16 samples)
+    stagnation restart #1 at iter 56  (IoU 0.544)
+    stagnation restart #2 at iter 69  (IoU 0.544)
+    stagnation restart #3 at iter 82  (IoU 0.544)
+    stagnation restart #4 at iter 95  (IoU 0.544)
+    [temporal] Δq_max=0.267 rad  Δq_norm_rms=0.044  → direct quintic ✓
+[staged]   → robot a: IoU 0.487 → 0.536  ✓
+    ↑ new global best IoU 0.536  [phase Ph1 robot a]
+[staged]   Ph1 robot b  zone 0  (uncovered: 1% of target)
+    voronoi warm-start: IoU 0.444 ≤ 0.541, kept current
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 3.8px of uncovered area  (16 samples)
+    stagnation restart #1 at iter 67  (IoU 0.584)
+    stagnation restart #2 at iter 80  (IoU 0.584)
+    stagnation restart #3 at iter 93  (IoU 0.584)
+    [temporal] Δq_max=0.235 rad  Δq_norm_rms=0.035  → direct quintic ✓
+[staged]   → robot b: IoU 0.536 → 0.568  ✓
+    ↑ new global best IoU 0.568  [phase Ph1 robot b]
+[staged]   Ph1 robot c  zone 1  (uncovered: 5% of target)
+    voronoi warm-start: IoU 0.489 ≤ 0.580, kept current
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 11.0px of uncovered area  (16 samples)
+    stagnation restart #1 at iter 85  (IoU 0.630)
+    [temporal] Δq_max=0.352 rad  Δq_norm_rms=0.056  → direct quintic ✓
+[staged]   → robot c: IoU 0.568 → 0.612  ✓
+    ↑ new global best IoU 0.612  [phase Ph1 robot c]
+[staged] Phase 1 done — composite IoU: 0.612
+
+[staged] Phase 2 — backward pass  (128 iters × 3 robots, sigma=0.260)
+[staged]   contributions before Phase 2:
+[staged]     robot a: +0.152 IoU
+[staged]     robot b: +0.148 IoU
+[staged]     robot c: +0.125 IoU
+[staged]   Ph2 robot c  zone 1  (uncovered: 10% of target)
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 16.4px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 84  (IoU 0.624)
+    stagnation restart #2 at iter 97  (IoU 0.624)
+    stagnation restart #3 at iter 110  (IoU 0.624)
+    [temporal] Δq_max=0.373 rad  Δq_norm_rms=0.051  → direct quintic ✓
+[staged]   → robot c: candidate 0.609 < current 0.612  ✗ rejected
+[staged]   Ph2 robot b  zone 0  (uncovered: 14% of target)
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 15.4px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 73  (IoU 0.626)
+    stagnation restart #2 at iter 86  (IoU 0.626)
+    stagnation restart #3 at iter 99  (IoU 0.626)
+    stagnation restart #4 at iter 112  (IoU 0.626)
+    [temporal] Δq_max=0.231 rad  Δq_norm_rms=0.030  → direct quintic ✓
+[staged]   → robot b: IoU 0.612 → 0.611  ✓
+[staged]   Ph2 robot a  zone 2  (uncovered: 13% of target)
+    [temporal] λ=0.300  μ=100.0  δ_max=1.20 rad  dof=6
+    init sampling: best coverage score 37.3px of uncovered area  (32 samples)
+    stagnation restart #1 at iter 69  (IoU 0.631)
+    stagnation restart #2 at iter 82  (IoU 0.631)
+    stagnation restart #3 at iter 95  (IoU 0.631)
+    stagnation restart #4 at iter 108  (IoU 0.631)
+    [temporal] Δq_max=0.344 rad  Δq_norm_rms=0.051  → direct quintic ✓
+[staged]   → robot a: IoU 0.611 → 0.615  ✓
+    ↑ new global best IoU 0.615  [phase Ph2 robot a]
+[staged] Phase 2 done — composite IoU: 0.615
+
+[staged] Best snapshot: Phase 2  IoU=0.615
+[staged] Adaptive final budget: warm (0.615)  iters 256→141  popsize 192→192
+[staged] Final refinement — all joints  (141 iters, popsize=192, sigma=0.200)
+    [temporal] λ=0.000  μ=100.0  δ_max=1.20 rad  dof=18
+    stagnation restart #1 at iter 13  (IoU 0.615)  ICP δ=[-5.26371873602327, -5.26371873602327, -5.26371873602327]°
+    stagnation restart #2 at iter 26  (IoU 0.615)  ICP δ=[5.26371873602327, 5.26371873602327, 5.26371873602327]°
+    stagnation restart #3 at iter 39  (IoU 0.615)  ICP δ=[-5.26371873602327, -5.26371873602327, -5.26371873602327]°
+    stagnation restart #4 at iter 52  (IoU 0.615)  ICP δ=[5.26371873602327, 5.26371873602327, 5.26371873602327]°
+    stagnation restart #5 at iter 65  (IoU 0.615)  ICP δ=[-5.26371873602327, -5.26371873602327, -5.26371873602327]°
+    stagnation restart #6 at iter 78  (IoU 0.615)  ICP δ=[5.26371873602327, 5.26371873602327, 5.26371873602327]°
+    stagnation restart #7 at iter 91  (IoU 0.615)  ICP δ=[-5.26371873602327, -5.26371873602327, -5.26371873602327]°
+    stagnation restart #8 at iter 104  (IoU 0.615)  ICP δ=[5.26371873602327, 5.26371873602327, 5.26371873602327]°
+    stagnation restart #9 at iter 117  (IoU 0.615)  ICP δ=[-5.26371873602327, -5.26371873602327, -5.26371873602327]°
+    stagnation restart #10 at iter 130  (IoU 0.615)  ICP δ=[5.26371873602327, 5.26371873602327, 5.26371873602327]°
+    [temporal] Δq_max=0.352 rad  Δq_norm_rms=0.047  → direct quintic ✓
+[staged] Final: candidate dq_max=0.352 rad (reachable), snapshot dq_max=0.352 rad (reachable)
+[staged] Final done — IoU: 0.615  ✓
+[staged] Done — final IoU: 0.615  loss: 0.3852
+[staged] Displacement from prior:  global_max=0.352 rad
+          robot_a: Δq_max=0.344 rad [direct ✓]
+          robot_b: Δq_max=0.231 rad [direct ✓]
+          robot_c: Δq_max=0.352 rad [direct ✓]
+
+  ✓  IoU=0.615  loss=0.3852  evals=49735  time=32s
+
+──────────────────────────────────────────────────────────────
+  Frame 13/13 : f12.png
+──────────────────────────────────────────────────────────────
+[seq] Zone assignment reused  (sim=0.70 ≥ 0.7, saves 72 renders)
+[seq] ICP warm-start: Δθ=2.3°  IoU 0.545 → 0.560
+[staged] Temporal continuity: Ph1/Ph2 weight=0.300  final weight=0.000  (curriculum: IoU-free final pass)
+[staged] Prior quality: warm (0.560)  →  Ph1 sigma×0.70  iters×0.85  init_samples=16
+[staged] Multi-res: Phase 1+2 at 64²px  Final at 128²px
+[staged] Popsize: per-robot phases=32  final=192  (theory optimum for 6 DOF = 10)
+[staged] Hungarian: reusing cached zone assignment  robot_a → zone 2  robot_b → zone 0  robot_c → zone 1
+    ↑ new global best IoU 0.560  [warm-start prior]
+[staged] Greedy phases skipped (skip_greedy=True, prior IoU=0.560)
+
+[staged] Best snapshot: Phase 1  IoU=0.560
+[staged] Adaptive final budget: warm (0.560)  iters 256→141  popsize 192→192
+[staged] Final refinement — all joints  (141 iters, popsize=192, sigma=0.200)
+    [temporal] λ=0.000  μ=100.0  δ_max=1.20 rad  dof=18
+    stagnation restart #1 at iter 79  (IoU 0.654)  ICP δ=[-4.125480443354996, -4.125480443354996, -4.125480443354996]°
+    stagnation restart #2 at iter 92  (IoU 0.654)  ICP δ=[4.125480443354996, 4.125480443354996, 4.125480443354996]°
+    stagnation restart #3 at iter 105  (IoU 0.654)  ICP δ=[-4.125480443354996, -4.125480443354996, -4.125480443354996]°
+    stagnation restart #4 at iter 118  (IoU 0.654)  ICP δ=[4.125480443354996, 4.125480443354996, 4.125480443354996]°
+    [temporal] Δq_max=1.193 rad  Δq_norm_rms=0.164  → direct quintic ✓
+[staged] Final: candidate dq_max=1.193 rad (reachable), snapshot dq_max=0.040 rad (reachable)
+    ↑ new global best IoU 0.654  [final refinement]
+[staged] Final done — IoU: 0.654  ✓
+[staged] Done — final IoU: 0.654  loss: 0.3461
+[staged] Displacement from prior:  global_max=1.193 rad
+          robot_a: Δq_max=1.185 rad [direct ✓]
+          robot_b: Δq_max=1.193 rad [direct ✓]
+          robot_c: Δq_max=0.382 rad [direct ✓]
+
+  ✓  IoU=0.654  loss=0.3461  evals=27073  time=18s
+
+
+==============================================================
+  Summary  (13 frames, 3 robots, ts=20260903_031547)
+==============================================================
+  #    Target                        IoU   Evals   Surr    Time
+  ---- -------------------------- ------  ------  -----  ------
+  1    f00.png                     0.587   48583     0%     35s
+  2    f01.png                     0.638   16897     0%     13s
+  3    f02.png                     0.552   18817     0%     14s
+  4    f03.png                     0.561   49735     0%     35s
+  5    f04.png                     0.632   27073     0%     18s
+  6    f05.png                     0.649   27073     0%     18s
+  7    f06.png                     0.608   49735     0%     32s
+  8    f07.png                     0.680   40519     0%     25s
+  9    f08.png                     0.641   36679     0%     22s
+  10   f09.png                     0.673   38983     0%     24s
+  11   f10.png                     0.662   27073     0%     18s
+  12   f11.png                     0.616   49735     0%     32s
+  13   f12.png                     0.654   27073     0%     18s
+  ──── ────────────────────────── ──────
+  avg                              0.627                   304s
+==============================================================
+
+Summary   : ../../umbra-bench/optimized/pixar_scene_01_lamp_stab_wide3\summary_20260903_031547.json
+CSV       : ../../umbra-bench/optimized/pixar_scene_01_lamp_stab_wide3\summary_20260903_031547.csv
+Deploy    : mjpython deploy.py --urdf urdf/SO101/so101_new_calib.urdf --ts 20260903_031547 --results-dir ../../umbra-bench/optimized/pixar_scene_01_lamp_stab_wide3
+

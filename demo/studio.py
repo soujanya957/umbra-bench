@@ -444,6 +444,12 @@ def night_solve_cmd(targets: list[str], outdir: str) -> list[str]:
              "--urdf", "urdf/SO101/so101_new_calib.urdf", "--targets"]
             + targets +
             ["--n-robots", "3",
+             # Explicit because the default is NOT what we export against:
+             # run_sequence inherits renderer.py ARM_GAP = 0.15 while pack.py
+             # lays the choreography's bases out at pack.ARM_GAP. Leaving it
+             # implicit is what made the Play preview draw a shadow nobody
+             # solved for. Keep this equal to pack.ARM_GAP.
+             "--arm-gap", "0.25",
              "--alpha", "1.0", "--beta", "0.3", "--gamma", "0.0",
              "--final-gamma", "0.0", "--delta", "0.0",
              "--popsize", "192", "--sigma0", "0.4",

@@ -41,7 +41,15 @@ _spec.loader.exec_module(pack)
 sys.argv = _argv
 
 
-def solve_pose(library_id: str, sweep: str) -> np.ndarray:
+def solve_pose(library_id: str, sweep: str):
+    """(q, arm_gap_m) for one library shape's best run.
+
+    The gap travels WITH the pose. A library shape comes from the static
+    sweeps, which record their own rig (0.2) and are not being re-solved;
+    exporting it against demo/pack.py's sequence spacing would place the
+    bases where this pose was never solved. results.json is the authority,
+    with pack.ARM_GAP as the fallback for a sweep too old to record one.
+    """
     rows = {json.loads(l)["id"]: json.loads(l)
             for l in open(BENCH / "metadata.jsonl", encoding="utf-8")}
     if library_id not in rows:
@@ -53,7 +61,9 @@ def solve_pose(library_id: str, sweep: str) -> np.ndarray:
     if not rj.exists():
         sys.exit(f"[!] {library_id}: no solve in {sweep}")
     res = json.loads(rj.read_text(encoding="utf-8"))
-    return np.asarray(res["runs"][res["best_run"]]["q_rad"], dtype=float).ravel()
+    gap = (res.get("rig") or {}).get("arm_gap_m")
+    q = np.asarray(res["runs"][res["best_run"]]["q_rad"], dtype=float).ravel()
+    return q, (float(gap) if gap else pack.ARM_GAP)
 
 
 def rows(sweep: str) -> list:
@@ -98,6 +108,13 @@ def main():
                     metavar="NAME",
                     help="export EVERY solved target of this class "
                          "(e.g. --class bird). Repeatable.")
+    ap.add_argument("--source", default="optimizer", metavar="NAME",
+                    help="WHICH solve of a --sequence to export, using the "
+                         "names the dashboard card shows (optimizer, "
+                         "optimizer_n5, ...). A non-default source is written "
+                         "as <sequence>__<source>.json so it sits beside the "
+                         "shipping clip in Play instead of replacing it. "
+                         "(default: optimizer)")
     ap.add_argument("--list", nargs="?", const="", metavar="QUERY",
                     help="print matching solved library ids and exit; "
                          "no QUERY lists every class")
@@ -148,20 +165,27 @@ def main():
     dest = Path(a.dest)
     dest.mkdir(parents=True, exist_ok=True)
     for lid in a.library_id:
-        q = solve_pose(lid, a.sweep)
-        pack.write_choreo(dest, lid, 5.0, [q])
-        print(f"  {lid} -> {dest / (lid + '.json')}")
+        q, gap = solve_pose(lid, a.sweep)
+        pack.write_choreo(dest, lid, 5.0, [q], arm_gap=gap)
+        print(f"  {lid} -> {dest / (lid + '.json')}  (gap {gap:g} m)")
     for sid in a.sequence:
         # The choreography wants the pose track and nothing else. Going
         # through pack_clip for it also demanded a reassembly -- a VIDEO
         # artifact, since on hardware the rig casts at the fitted position and
         # the fit inverse never happens -- which blocked all 13 generated
         # clips, every one of them solved. clip_poses reads the solve.
-        qs, fps, info = pack.clip_poses(sid, a.fps)
-        pack.write_choreo(dest, sid, fps, qs, force=a.force)
+        qs, fps, info = pack.clip_poses(sid, a.fps, a.source)
+        # Play lists by filename stem, so two fleet sizes under one stem means
+        # the second export silently replaces the first. Only the shipping
+        # source keeps the bare name.
+        name = sid if a.source == "optimizer" else f"{sid}__{a.source}"
+        gap = info["arm_gap_m"]
+        pack.write_choreo(dest, name, fps, qs, force=a.force, arm_gap=gap)
         note = "" if info["reassembled"] else "  [no reassembly: deploy-only]"
-        print(f"  {sid} -> {dest / (sid + '.json')}  "
-              f"({len(qs)} poses @ {fps:g} fps){note}")
+        arms = np.asarray(qs[0]).size // 6
+        print(f"  {sid} [{a.source}] -> {dest / (name + '.json')}  "
+              f"({len(qs)} poses @ {fps:g} fps, {arms} arms, gap {gap:g} m)"
+              f"{note}")
     n = len(a.library_id) + len(a.sequence)
     print(f"{n} clip(s); refresh Play's library to deploy")
 
