@@ -16,26 +16,52 @@ fail=0
 
 # ICRA_scene_01_bird                         3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence ICRA_scene_01_bird || { echo "  FAILED: ICRA_scene_01_bird"; fail=$((fail+1)); }
+# ICRA_scene_01_bird__optimizer_g25          3 arms, gap 0.25
+python demo/export_library_clip.py --sequence ICRA_scene_01_bird --source optimizer_g25 || { echo "  FAILED: ICRA_scene_01_bird__optimizer_g25"; fail=$((fail+1)); }
 # ICRA_scene_01_bird__optimizer_n5           5 arms, gap 0.25
 python demo/export_library_clip.py --sequence ICRA_scene_01_bird --source optimizer_n5 || { echo "  FAILED: ICRA_scene_01_bird__optimizer_n5"; fail=$((fail+1)); }
 # ICRA_scene_01_butterfly                    3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence ICRA_scene_01_butterfly || { echo "  FAILED: ICRA_scene_01_butterfly"; fail=$((fail+1)); }
+# ICRA_scene_01_butterfly__optimizer_g25     3 arms, gap 0.25
+python demo/export_library_clip.py --sequence ICRA_scene_01_butterfly --source optimizer_g25 || { echo "  FAILED: ICRA_scene_01_butterfly__optimizer_g25"; fail=$((fail+1)); }
 # ICRA_scene_01_butterfly__optimizer_n5      5 arms, gap 0.25
 python demo/export_library_clip.py --sequence ICRA_scene_01_butterfly --source optimizer_n5 || { echo "  FAILED: ICRA_scene_01_butterfly__optimizer_n5"; fail=$((fail+1)); }
 # ICRA_scene_01_snake                        3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence ICRA_scene_01_snake || { echo "  FAILED: ICRA_scene_01_snake"; fail=$((fail+1)); }
+# ICRA_scene_01_snake__optimizer_g25         3 arms, gap 0.25
+python demo/export_library_clip.py --sequence ICRA_scene_01_snake --source optimizer_g25 || { echo "  FAILED: ICRA_scene_01_snake__optimizer_g25"; fail=$((fail+1)); }
 # ICRA_scene_01_snake__optimizer_n5          5 arms, gap 0.25
 python demo/export_library_clip.py --sequence ICRA_scene_01_snake --source optimizer_n5 || { echo "  FAILED: ICRA_scene_01_snake__optimizer_n5"; fail=$((fail+1)); }
 # ICRA_scene_01_star                         3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence ICRA_scene_01_star || { echo "  FAILED: ICRA_scene_01_star"; fail=$((fail+1)); }
+# ICRA_scene_01_star__optimizer_g25          3 arms, gap 0.25
+python demo/export_library_clip.py --sequence ICRA_scene_01_star --source optimizer_g25 || { echo "  FAILED: ICRA_scene_01_star__optimizer_g25"; fail=$((fail+1)); }
+# ICRA_scene_01_star__optimizer_n5           5 arms, gap 0.25
+python demo/export_library_clip.py --sequence ICRA_scene_01_star --source optimizer_n5 || { echo "  FAILED: ICRA_scene_01_star__optimizer_n5"; fail=$((fail+1)); }
 # ICRA_scene_03_a                            3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence ICRA_scene_03_a || { echo "  FAILED: ICRA_scene_03_a"; fail=$((fail+1)); }
+# ICRA_scene_03_a__optimizer_g25             3 arms, gap 0.25
+python demo/export_library_clip.py --sequence ICRA_scene_03_a --source optimizer_g25 || { echo "  FAILED: ICRA_scene_03_a__optimizer_g25"; fail=$((fail+1)); }
+# ICRA_scene_03_a__optimizer_n5              5 arms, gap 0.25
+python demo/export_library_clip.py --sequence ICRA_scene_03_a --source optimizer_n5 || { echo "  FAILED: ICRA_scene_03_a__optimizer_n5"; fail=$((fail+1)); }
 # ICRA_scene_03_c                            3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence ICRA_scene_03_c || { echo "  FAILED: ICRA_scene_03_c"; fail=$((fail+1)); }
+# ICRA_scene_03_c__optimizer_g25             3 arms, gap 0.25
+python demo/export_library_clip.py --sequence ICRA_scene_03_c --source optimizer_g25 || { echo "  FAILED: ICRA_scene_03_c__optimizer_g25"; fail=$((fail+1)); }
+# ICRA_scene_03_c__optimizer_n5              5 arms, gap 0.25
+python demo/export_library_clip.py --sequence ICRA_scene_03_c --source optimizer_n5 || { echo "  FAILED: ICRA_scene_03_c__optimizer_n5"; fail=$((fail+1)); }
 # ICRA_scene_03_i                            3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence ICRA_scene_03_i || { echo "  FAILED: ICRA_scene_03_i"; fail=$((fail+1)); }
+# ICRA_scene_03_i__optimizer_g25             3 arms, gap 0.25
+python demo/export_library_clip.py --sequence ICRA_scene_03_i --source optimizer_g25 || { echo "  FAILED: ICRA_scene_03_i__optimizer_g25"; fail=$((fail+1)); }
+# ICRA_scene_03_i__optimizer_n5              5 arms, gap 0.25
+python demo/export_library_clip.py --sequence ICRA_scene_03_i --source optimizer_n5 || { echo "  FAILED: ICRA_scene_03_i__optimizer_n5"; fail=$((fail+1)); }
 # ICRA_scene_03_r                            3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence ICRA_scene_03_r || { echo "  FAILED: ICRA_scene_03_r"; fail=$((fail+1)); }
+# ICRA_scene_03_r__optimizer_g25             3 arms, gap 0.25
+python demo/export_library_clip.py --sequence ICRA_scene_03_r --source optimizer_g25 || { echo "  FAILED: ICRA_scene_03_r__optimizer_g25"; fail=$((fail+1)); }
+# ICRA_scene_03_r__optimizer_n5              5 arms, gap 0.25
+python demo/export_library_clip.py --sequence ICRA_scene_03_r --source optimizer_n5 || { echo "  FAILED: ICRA_scene_03_r__optimizer_n5"; fail=$((fail+1)); }
 # bird                                       3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence bird || { echo "  FAILED: bird"; fail=$((fail+1)); }
 # bird_scene_01_bird                         3 arms, gap 0.15?
@@ -58,32 +84,80 @@ python demo/export_library_clip.py --sequence fabric_scene_01_fabric || { echo "
 python demo/export_library_clip.py --sequence fabric_scene_01_fabric --source optimizer_n5 || { echo "  FAILED: fabric_scene_01_fabric__optimizer_n5"; fail=$((fail+1)); }
 # family_ad_scene_01_I                       3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence family_ad_scene_01_I || { echo "  FAILED: family_ad_scene_01_I"; fail=$((fail+1)); }
+# family_ad_scene_01_I__optimizer_g25        3 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_01_I --source optimizer_g25 || { echo "  FAILED: family_ad_scene_01_I__optimizer_g25"; fail=$((fail+1)); }
+# family_ad_scene_01_I__optimizer_n5         5 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_01_I --source optimizer_n5 || { echo "  FAILED: family_ad_scene_01_I__optimizer_n5"; fail=$((fail+1)); }
 # family_ad_scene_02_F                       3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence family_ad_scene_02_F || { echo "  FAILED: family_ad_scene_02_F"; fail=$((fail+1)); }
+# family_ad_scene_02_F__optimizer_g25        3 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_02_F --source optimizer_g25 || { echo "  FAILED: family_ad_scene_02_F__optimizer_g25"; fail=$((fail+1)); }
+# family_ad_scene_02_F__optimizer_n5         5 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_02_F --source optimizer_n5 || { echo "  FAILED: family_ad_scene_02_F__optimizer_n5"; fail=$((fail+1)); }
 # family_ad_scene_03_F                       3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence family_ad_scene_03_F || { echo "  FAILED: family_ad_scene_03_F"; fail=$((fail+1)); }
+# family_ad_scene_03_F__optimizer_g25        3 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_03_F --source optimizer_g25 || { echo "  FAILED: family_ad_scene_03_F__optimizer_g25"; fail=$((fail+1)); }
+# family_ad_scene_03_F__optimizer_n5         5 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_03_F --source optimizer_n5 || { echo "  FAILED: family_ad_scene_03_F__optimizer_n5"; fail=$((fail+1)); }
 # family_ad_scene_03_I                       3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence family_ad_scene_03_I || { echo "  FAILED: family_ad_scene_03_I"; fail=$((fail+1)); }
+# family_ad_scene_03_I__optimizer_g25        3 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_03_I --source optimizer_g25 || { echo "  FAILED: family_ad_scene_03_I__optimizer_g25"; fail=$((fail+1)); }
+# family_ad_scene_03_I__optimizer_n5         5 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_03_I --source optimizer_n5 || { echo "  FAILED: family_ad_scene_03_I__optimizer_n5"; fail=$((fail+1)); }
 # family_ad_scene_04_M                       3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence family_ad_scene_04_M || { echo "  FAILED: family_ad_scene_04_M"; fail=$((fail+1)); }
 # family_ad_scene_05_I                       3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence family_ad_scene_05_I || { echo "  FAILED: family_ad_scene_05_I"; fail=$((fail+1)); }
+# family_ad_scene_05_I__optimizer_g25        3 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_05_I --source optimizer_g25 || { echo "  FAILED: family_ad_scene_05_I__optimizer_g25"; fail=$((fail+1)); }
+# family_ad_scene_05_I__optimizer_n5         5 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_05_I --source optimizer_n5 || { echo "  FAILED: family_ad_scene_05_I__optimizer_n5"; fail=$((fail+1)); }
 # family_ad_scene_05_M                       3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence family_ad_scene_05_M || { echo "  FAILED: family_ad_scene_05_M"; fail=$((fail+1)); }
+# family_ad_scene_05_M__optimizer_g25        3 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_05_M --source optimizer_g25 || { echo "  FAILED: family_ad_scene_05_M__optimizer_g25"; fail=$((fail+1)); }
+# family_ad_scene_05_M__optimizer_n5         5 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_05_M --source optimizer_n5 || { echo "  FAILED: family_ad_scene_05_M__optimizer_n5"; fail=$((fail+1)); }
 # family_ad_scene_06_A                       3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence family_ad_scene_06_A || { echo "  FAILED: family_ad_scene_06_A"; fail=$((fail+1)); }
+# family_ad_scene_06_A__optimizer_g25        3 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_06_A --source optimizer_g25 || { echo "  FAILED: family_ad_scene_06_A__optimizer_g25"; fail=$((fail+1)); }
+# family_ad_scene_06_A__optimizer_n5         5 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_06_A --source optimizer_n5 || { echo "  FAILED: family_ad_scene_06_A__optimizer_n5"; fail=$((fail+1)); }
 # family_ad_scene_06_F                       3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence family_ad_scene_06_F || { echo "  FAILED: family_ad_scene_06_F"; fail=$((fail+1)); }
+# family_ad_scene_06_F__optimizer_g25        3 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_06_F --source optimizer_g25 || { echo "  FAILED: family_ad_scene_06_F__optimizer_g25"; fail=$((fail+1)); }
+# family_ad_scene_06_F__optimizer_n5         5 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_06_F --source optimizer_n5 || { echo "  FAILED: family_ad_scene_06_F__optimizer_n5"; fail=$((fail+1)); }
 # family_ad_scene_06_I                       3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence family_ad_scene_06_I || { echo "  FAILED: family_ad_scene_06_I"; fail=$((fail+1)); }
+# family_ad_scene_06_I__optimizer_g25        3 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_06_I --source optimizer_g25 || { echo "  FAILED: family_ad_scene_06_I__optimizer_g25"; fail=$((fail+1)); }
+# family_ad_scene_06_I__optimizer_n5         5 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_06_I --source optimizer_n5 || { echo "  FAILED: family_ad_scene_06_I__optimizer_n5"; fail=$((fail+1)); }
 # family_ad_scene_06_L                       3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence family_ad_scene_06_L || { echo "  FAILED: family_ad_scene_06_L"; fail=$((fail+1)); }
+# family_ad_scene_06_L__optimizer_g25        3 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_06_L --source optimizer_g25 || { echo "  FAILED: family_ad_scene_06_L__optimizer_g25"; fail=$((fail+1)); }
+# family_ad_scene_06_L__optimizer_n5         5 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_06_L --source optimizer_n5 || { echo "  FAILED: family_ad_scene_06_L__optimizer_n5"; fail=$((fail+1)); }
 # family_ad_scene_06_L_stab                  3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence family_ad_scene_06_L_stab || { echo "  FAILED: family_ad_scene_06_L_stab"; fail=$((fail+1)); }
 # family_ad_scene_06_M                       3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence family_ad_scene_06_M || { echo "  FAILED: family_ad_scene_06_M"; fail=$((fail+1)); }
+# family_ad_scene_06_M__optimizer_g25        3 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_06_M --source optimizer_g25 || { echo "  FAILED: family_ad_scene_06_M__optimizer_g25"; fail=$((fail+1)); }
+# family_ad_scene_06_M__optimizer_n5         5 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_06_M --source optimizer_n5 || { echo "  FAILED: family_ad_scene_06_M__optimizer_n5"; fail=$((fail+1)); }
 # family_ad_scene_06_Y                       3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence family_ad_scene_06_Y || { echo "  FAILED: family_ad_scene_06_Y"; fail=$((fail+1)); }
+# family_ad_scene_06_Y__optimizer_g25        3 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_06_Y --source optimizer_g25 || { echo "  FAILED: family_ad_scene_06_Y__optimizer_g25"; fail=$((fail+1)); }
+# family_ad_scene_06_Y__optimizer_n5         5 arms, gap 0.25
+python demo/export_library_clip.py --sequence family_ad_scene_06_Y --source optimizer_n5 || { echo "  FAILED: family_ad_scene_06_Y__optimizer_n5"; fail=$((fail+1)); }
 # family_ad_scene_06_Y_stab                  3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence family_ad_scene_06_Y_stab || { echo "  FAILED: family_ad_scene_06_Y_stab"; fail=$((fail+1)); }
 # fish_scene_01_fish                         3 arms, gap 0.15?
@@ -124,6 +198,8 @@ python demo/export_library_clip.py --sequence mushroom_growing_scene_01_mushroom
 python demo/export_library_clip.py --sequence mushroom_growing_scene_01_mushroom --source optimizer_n5 || { echo "  FAILED: mushroom_growing_scene_01_mushroom__optimizer_n5"; fail=$((fail+1)); }
 # pixar_scene_01_lamp                        3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence pixar_scene_01_lamp || { echo "  FAILED: pixar_scene_01_lamp"; fail=$((fail+1)); }
+# pixar_scene_01_lamp__optimizer_g25         3 arms, gap 0.25
+python demo/export_library_clip.py --sequence pixar_scene_01_lamp --source optimizer_g25 || { echo "  FAILED: pixar_scene_01_lamp__optimizer_g25"; fail=$((fail+1)); }
 # pixar_scene_01_lamp__optimizer_n5          5 arms, gap 0.25
 python demo/export_library_clip.py --sequence pixar_scene_01_lamp --source optimizer_n5 || { echo "  FAILED: pixar_scene_01_lamp__optimizer_n5"; fail=$((fail+1)); }
 # pixar_scene_01_lamp_stab                   3 arms, gap 0.15?
@@ -132,20 +208,28 @@ python demo/export_library_clip.py --sequence pixar_scene_01_lamp_stab || { echo
 python demo/export_library_clip.py --sequence pixar_scene_02_R || { echo "  FAILED: pixar_scene_02_R"; fail=$((fail+1)); }
 # pixar_scene_02_lamp                        3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence pixar_scene_02_lamp || { echo "  FAILED: pixar_scene_02_lamp"; fail=$((fail+1)); }
+# pixar_scene_02_lamp__optimizer_g25         3 arms, gap 0.25
+python demo/export_library_clip.py --sequence pixar_scene_02_lamp --source optimizer_g25 || { echo "  FAILED: pixar_scene_02_lamp__optimizer_g25"; fail=$((fail+1)); }
 # pixar_scene_02_lamp__optimizer_n5          5 arms, gap 0.25
 python demo/export_library_clip.py --sequence pixar_scene_02_lamp --source optimizer_n5 || { echo "  FAILED: pixar_scene_02_lamp__optimizer_n5"; fail=$((fail+1)); }
 # pixar_scene_03_I                           3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence pixar_scene_03_I || { echo "  FAILED: pixar_scene_03_I"; fail=$((fail+1)); }
+# pixar_scene_03_I__optimizer_g25            3 arms, gap 0.25
+python demo/export_library_clip.py --sequence pixar_scene_03_I --source optimizer_g25 || { echo "  FAILED: pixar_scene_03_I__optimizer_g25"; fail=$((fail+1)); }
 # pixar_scene_03_I__optimizer_n5             5 arms, gap 0.25
 python demo/export_library_clip.py --sequence pixar_scene_03_I --source optimizer_n5 || { echo "  FAILED: pixar_scene_03_I__optimizer_n5"; fail=$((fail+1)); }
 # pixar_scene_03_lamp                        3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence pixar_scene_03_lamp || { echo "  FAILED: pixar_scene_03_lamp"; fail=$((fail+1)); }
+# pixar_scene_03_lamp__optimizer_g25         3 arms, gap 0.25
+python demo/export_library_clip.py --sequence pixar_scene_03_lamp --source optimizer_g25 || { echo "  FAILED: pixar_scene_03_lamp__optimizer_g25"; fail=$((fail+1)); }
 # pixar_scene_03_lamp__optimizer_n5          5 arms, gap 0.25
 python demo/export_library_clip.py --sequence pixar_scene_03_lamp --source optimizer_n5 || { echo "  FAILED: pixar_scene_03_lamp__optimizer_n5"; fail=$((fail+1)); }
 # pixar_scene_03_lamp_stab                   3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence pixar_scene_03_lamp_stab || { echo "  FAILED: pixar_scene_03_lamp_stab"; fail=$((fail+1)); }
 # pixar_scene_04_lamp                        3 arms, gap 0.15?
 python demo/export_library_clip.py --sequence pixar_scene_04_lamp || { echo "  FAILED: pixar_scene_04_lamp"; fail=$((fail+1)); }
+# pixar_scene_04_lamp__optimizer_g25         3 arms, gap 0.25
+python demo/export_library_clip.py --sequence pixar_scene_04_lamp --source optimizer_g25 || { echo "  FAILED: pixar_scene_04_lamp__optimizer_g25"; fail=$((fail+1)); }
 # pixar_scene_04_lamp__optimizer_n5          5 arms, gap 0.25
 python demo/export_library_clip.py --sequence pixar_scene_04_lamp --source optimizer_n5 || { echo "  FAILED: pixar_scene_04_lamp__optimizer_n5"; fail=$((fail+1)); }
 # plant                                      3 arms, gap 0.15?
