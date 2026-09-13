@@ -3,6 +3,8 @@
 
     fleet-shadow python demo/ensemble_mujoco.py --ensemble pixar_scene_03
     ... --snapshot out.png        # offscreen render instead of a window
+    ... --record out.mp4 --size 1920x1080   # offscreen film, H.264 if available
+    ... --snapshot side.png --at 2 --cam=-135,-14,8,0,0.8,1.0 --size 3840x2160
 
 Reads an ensemble manifest (demo/make_ensemble.py) plus its choreography
 clips and builds ONE MuJoCo scene: per element a rigid rig of three SO-101
@@ -25,6 +27,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
@@ -89,7 +92,11 @@ def build(man):
     a_rig = max(-e.get("light", {}).get("ddepth", -1.2)
                 for e in man["entries"])
     lats = [-x for e in man["entries"] for x in e["lat_path_m"]]
-    tbl_near, tbl_far = 0.12, max(y_mids) + a_rig + 0.4
+    # a manifest's "mujoco" block may pull the near edge back: at 0.12 the
+    # tabletop catches every ray from the lowest ~0.14 m of the arms, which
+    # can be half of a letter
+    tbl_near = float(man.get("mujoco", {}).get("table_near_m", 0.12))
+    tbl_far = max(y_mids) + a_rig + 0.4
     spec.worldbody.add_geom(
         type=mujoco.mjtGeom.mjGEOM_BOX,
         pos=[(max(lats) + min(lats)) / 2, (tbl_near + tbl_far) / 2,
@@ -118,10 +125,15 @@ def build(man):
         grp.add_joint(name=f"grp{i}_lift",
                       type=mujoco.mjtJoint.mjJNT_SLIDE, axis=[0, 0, 1])
         arms = []
-        for j, dz in enumerate((0.0, 0.2, 0.4)):
+        # an entry may carry its solve's own arm count and spacing (sequence
+        # solves ran 0.15 or 0.25 and up to five arms, the letter library
+        # three at 0.2); the mid arm stays on the group origin either way
+        gap = float(e.get("arm_gap_m", 0.2))
+        n_arms = int(e.get("n_arms", 3))
+        for j in range(n_arms):
             # SR101 (base.x 0) nearest the light in the manifest frame;
             # z -> y flips depth order, same rig
-            frame = grp.add_frame(pos=[0, 0.2 - dz, 0])
+            frame = grp.add_frame(pos=[0, ((n_arms - 1) / 2 - j) * gap, 0])
             pfx = f"e{i}r{j}_"
             # attach prefixes the child IN PLACE: fresh spec per arm
             spec.attach(mujoco.MjSpec.from_file(str(SO101_XML)),
@@ -186,6 +198,42 @@ def lift_at(e, t, fps):
     return path_at(e.get("lift_path_m") or [], e, t, fps)
 
 
+@contextmanager
+def video_writer(path, width, height, fps):
+    """-> write(rgb_frame). H.264 (crf 18, yuv420p) through imageio-ffmpeg
+    when the env has it: thin arm edges stay crisp at 1080p/4K and the file
+    plays in a browser. Otherwise OpenCV's mp4v, as this script always wrote."""
+    try:
+        import imageio_ffmpeg
+    except ImportError:
+        imageio_ffmpeg = None
+    if imageio_ffmpeg is not None:
+        gen = imageio_ffmpeg.write_frames(
+            str(path), (width, height), fps=fps, codec="libx264", quality=None,
+            pix_fmt_out="yuv420p", macro_block_size=1,
+            output_params=["-crf", "18", "-preset", "medium"])
+        gen.send(None)
+        try:
+            yield lambda rgb: gen.send(np.ascontiguousarray(rgb).tobytes())
+        finally:
+            gen.close()
+        return
+    import cv2
+    vw = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), fps,
+                         (width, height))
+    try:
+        yield lambda rgb: vw.write(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
+    finally:
+        vw.release()
+
+
+# camera presets, (azimuth, elevation). front faces the wall from the arms'
+# side; left/right are three-quarter views from the audience's left/right,
+# arms and wall shadows both in frame; side is the pure profile, wall edge-on
+VIEWS = {"front": (-90, -12), "left": (-135, -14), "right": (-45, -14),
+         "side": (0, -6)}
+
+
 def main():
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -200,12 +248,25 @@ def main():
                          "without a screen")
     ap.add_argument("--at", type=float, default=1.0)
     ap.add_argument("--cam", default=None,
-                    help="az,el,dist,lx,ly,lz override")
+                    help="az,el,dist,lx,ly,lz override (write --cam=-135,... "
+                         "when it starts with a minus)")
+    ap.add_argument("--view", default="front", choices=sorted(VIEWS),
+                    help="camera preset framed on this ensemble's stage; "
+                         "--cam still overrides")
     ap.add_argument("--regen", default=None,
                     help="project:scene -- refresh the manifest first")
     ap.add_argument("--light", default=None,
                     help="cutoff,exponent,diffuse,fill override")
+    ap.add_argument("--size", default="1280x720",
+                    help="WxH of the --record / --snapshot frames, e.g. "
+                         "1920x1080 or 3840x2160 (even numbers)")
     a = ap.parse_args()
+    try:
+        size = tuple(int(v) for v in a.size.lower().split("x"))
+    except ValueError:
+        size = ()
+    if len(size) != 2 or min(size) <= 0 or size[0] % 2 or size[1] % 2:
+        ap.error(f"--size wants even WxH, e.g. 1920x1080 (got {a.size!r})")
 
     if a.light:
         v = [float(x) for x in a.light.split(",")]
@@ -219,6 +280,9 @@ def main():
                         "--project", proj, "--scene", sc], check=True)
     import mujoco
     man, clips = load(a.ensemble)
+    if not a.light:
+        # a scene may carry its own lamp settings; --light still wins
+        LIGHT.update(man.get("mujoco", {}).get("light", {}))
     model, rigs, base_diffuse = build(man)
     data = mujoco.MjData(model)
     fps = man["fps"]
@@ -265,41 +329,55 @@ def main():
 
     def default_cam(cam):
         lats = [-e["lat_path_m"][0] for e in man["entries"]]
-        cam.lookat = [float(np.mean(lats)), 0.6, 1.0]
-        cam.distance = 7.0
-        cam.azimuth = -90           # from the arms' side, facing the wall
-        cam.elevation = -12
+        if a.view == "front":
+            cam.lookat = [float(np.mean(lats)), 0.6, 1.0]
+            cam.distance = 7.0
+        else:
+            # oblique and side presets aim between the wall and the trios, so
+            # arms and shadows share the frame; a wider stage backs the camera
+            # off, and a lone trio gets a close-up instead of an empty stage
+            y_rig = float(np.mean([SCREEN_Z - e["depth_m"]
+                                   for e in man["entries"]]))
+            if len(man["entries"]) == 1:
+                cam.lookat = [float(np.mean(lats)), 0.5 * y_rig, 0.9]
+                cam.distance = 4.0
+            else:
+                cam.lookat = [float(np.mean(lats)), 0.6 * y_rig, 1.0]
+                cam.distance = max(5.5, 1.1 * (max(lats) - min(lats)) + 4.5)
+        cam.azimuth, cam.elevation = VIEWS[a.view]
         if a.cam:
             v = [float(x) for x in a.cam.split(",")]
             cam.azimuth, cam.elevation, cam.distance = v[0], v[1], v[2]
             if len(v) == 6:
                 cam.lookat = v[3:6]
 
-    if a.record:
-        import cv2
-        ren = mujoco.Renderer(model, height=720, width=1280)
+    if a.record or a.snapshot:
+        # build() compiles a 1280x720 offscreen buffer; grow it to the
+        # requested frame before a Renderer is made against it
+        width, height = size
+        model.vis.global_.offwidth = max(model.vis.global_.offwidth, width)
+        model.vis.global_.offheight = max(model.vis.global_.offheight, height)
+        ren = mujoco.Renderer(model, height=height, width=width)
         cam = mujoco.MjvCamera()
         default_cam(cam)
-        vw = cv2.VideoWriter(a.record, cv2.VideoWriter_fourcc(*"mp4v"),
-                             30, (1280, 720))
+
+    if a.record:
         n = int(total * 30) + 30            # a second of held ending
-        for k in range(n):
-            pose_at(min(k / 30.0, total - 1e-3))
-            ren.update_scene(data, camera=cam)
-            vw.write(cv2.cvtColor(ren.render(), cv2.COLOR_RGB2BGR))
-        vw.release()
-        print(f"recorded {n} frames ({n / 30:.1f}s) -> {a.record}")
+        with video_writer(a.record, width, height, 30) as write:
+            for k in range(n):
+                pose_at(min(k / 30.0, total - 1e-3))
+                ren.update_scene(data, camera=cam)
+                write(ren.render())
+        print(f"recorded {n} frames ({n / 30:.1f}s, {width}x{height}) "
+              f"-> {a.record}")
         return
 
     if a.snapshot:
         pose_at(min(a.at, total - 1e-3))
-        ren = mujoco.Renderer(model, height=720, width=1280)
-        cam = mujoco.MjvCamera()
-        default_cam(cam)
         ren.update_scene(data, camera=cam)
         from PIL import Image
         Image.fromarray(ren.render()).save(a.snapshot)
-        print(f"snapshot t={a.at:.2f}s -> {a.snapshot}")
+        print(f"snapshot t={a.at:.2f}s ({width}x{height}) -> {a.snapshot}")
         return
 
     import mujoco.viewer
