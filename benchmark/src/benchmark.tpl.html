@@ -1501,7 +1501,7 @@ $("#clearPicks").addEventListener("click", () => { st.picks = []; store.set("pic
    Everything here is computed from the same payload the dashboard uses, on the
    big-budget sweep, so the figures cannot drift from the cards.              */
 const SRC = { digits:"glyph", letters_upper:"glyph", letters_lower:"glyph",
-  animals:"nameable", objects:"nameable", vehicles:"nameable", figures:"nameable",
+  animals:"nameable", objects:"nameable",
   abstract:"abstract", hand_shadow:"hand" };
 const SRC_ORDER = ["glyph","nameable","abstract","hand"];
 const SRC_LABEL = { glyph:"glyph (generated)", nameable:"MPEG-7 nameable",
@@ -1723,7 +1723,7 @@ function renderBench(){
        <code>${DATA.targets_dir || "targets"}</code>.</div>`;
   const tbl=document.createElement("div"); tbl.className="fig";
   tbl.innerHTML=`<h3>What is in it</h3>${stratTable()}
-    <div class="cap">Counts over all 546 targets. Cells under 10 are marked: <b>S4 × holed = 8</b> (thick
+    <div class="cap">Counts over all 562 targets. Cells under 10 are marked: <b>S4 × holed = 8</b> (thick
     shapes rarely have holes) and <b>abstract × holed = 0</b>, so the primary and secondary axes cannot be
     fully crossed, and the null-control subset cannot probe topology at all. <b>HaSPeR hand-expert has 10
     items total</b> — the human-expert reference, and the smallest group in the benchmark.</div>`;
@@ -1731,8 +1731,8 @@ function renderBench(){
 }
 
 /* ── CLIP recognizability ─────────────────────────────────────────────────────
-   Subset-level, because the class list is per subset and chance runs from 0.500
-   (figures, 2 classes) to 0.038 (letters, 26). Absolute top-1 is not comparable
+   Subset-level, because the class list is per subset and chance varies with its
+   size (as low as 0.038 for letters, 26 classes). Absolute top-1 is not comparable
    across those rows; top1/chance and the ratio against the target are. */
 function clipBlock(){
   const rows = DATA.clip_summary || [];
