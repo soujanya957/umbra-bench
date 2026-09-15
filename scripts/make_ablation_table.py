@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Emit the paper's ablation table (checkmark form) from optimized/ablation-probe10.
 
-    python3 scripts/make_ablation_table.py > figures/tab_ablation.tex
+    python3 scripts/make_ablation_table.py > figures/tab_ablation.tex           # compact
+    python3 scripts/make_ablation_table.py --check > figures/tab_ablation_check.tex   # checkmark form
 
 One row per solver configuration; a check in a column means that component is
 on, so each row's composition is explicit. Columns are in pipeline order
@@ -74,9 +75,49 @@ def row(data, n, v, ref, label):
     marks = [CK if c in on else (RM if c in base else "") for c in COLS]
     return f"{label} & " + " & ".join(marks) + f" & ${iou:.3f}$ & {dl} & {rend:.1f}k \\\\"
 
+def compact(d3, d5):
+    """Seven rows, two delta columns. `added`: each component on top of the rows
+    above it, starting from a monolithic CMA-ES; `removed`: that component alone
+    taken out of UMBRA. The N=5 and sequence-budget results are one footer row each."""
+    g3 = sorted(set.intersection(*(set(c) for c in d3.values() if c)))
+    g5 = sorted(set.intersection(*(set(c) for c in d5.values() if c)))
+    mean = lambda d, v, gs: st.mean(d[v][g][0] for g in gs)
+    rend = lambda d, v, gs: st.mean(d[v][g][1] for g in gs) / 1000
+    delta = lambda d, v, ref, gs: st.mean(d[v][g][0] - d[ref][g][0] for g in gs)
+    fmt = lambda x: "$0$" if abs(x) < 5e-4 else f"${x:+.3f}$"
+    ROWS = [  # number, label, (added variant, its predecessor), (removed variant) or None
+        ("3, 6", "arm-by-arm sweep, joint stage", ("fwd_joint", "flat"), None),
+        ("1", "zone assignment", ("plus_assign", "fwd_joint"), "full_no_assign"),
+        ("2", "aimed start", ("plus_voronoi", "plus_assign"), "full_no_voronoi"),
+        ("4", "backward sweep", ("plus_backward", "plus_voronoi"), "full_no_backward"),
+        ("5", "ICP-guided restart", ("plus_icp", "plus_backward"), "full_no_icp"),
+        ("7", "FD polish", ("full", "plus_icp"), "full_no_fd"),
+    ]
+    print(r"\begin{tabular}{@{}rlrrr@{}}")
+    print(r"\toprule")
+    print(r" & & \multicolumn{2}{c}{$\Delta$ IoU when} & \\")
+    print(r"\cmidrule(lr){3-4}")
+    print(r" & component & added & removed & renders \\")
+    print(r"\midrule")
+    print(f" & monolithic CMA-ES, IoU ${mean(d3,'flat',g3):.3f}$ & & & {rend(d3,'flat',g3):.1f}k \\\\")
+    for num, lab, (v, ref), rm in ROWS:
+        a = fmt(delta(d3, v, ref, g3))
+        r = fmt(delta(d3, rm, "full", g3)) if rm else ""
+        print(f"{num} & {lab} & {a} & {r} & {rend(d3,v,g3):.1f}k \\\\")
+    print(f" & \\textsc{{umbra}}, IoU ${mean(d3,'full',g3):.3f}$ & & & {rend(d3,'full',g3):.1f}k \\\\")
+    print(r"\midrule")
+    print(f" & $N{{=}}5$: monolithic ${mean(d5,'flat',g5):.3f}$, \\textsc{{umbra}} ${mean(d5,'full',g5):.3f}$ & & & {rend(d5,'full',g5):.1f}k \\\\")
+    gl = sorted(set(d3["full_long"]) & set(d3["full_long_no_icp"]))
+    print(f"5 & sequence budget, restart direction random & & {fmt(delta(d3,'full_long_no_icp','full_long',gl))} & {rend(d3,'full_long',gl):.0f}k \\\\")
+    print(r"\bottomrule")
+    print(r"\end{tabular}")
+
+
 def main():
     d3 = load(os.path.join(ROOT, "optimized", "ablation-probe10"), 3)
     d5 = load(os.path.join(ROOT, "optimized", "ablation-probe10"), 5)
+    if "--check" not in sys.argv:
+        return compact(d3, d5)
     ncol = 1 + len(COLS) + 3
     hdr = " & ".join(r"\rot{" + f"{i+1}. {HEAD[c]}" + "}" for i, c in enumerate(COLS))
     print(r"\begin{tabular}{@{}l" + "c" * len(COLS) + r"rrr@{}}")

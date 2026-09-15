@@ -1,31 +1,19 @@
-\begin{tabular}{@{}lcccccccrrr@{}}
+\begin{tabular}{@{}rlrrr@{}}
 \toprule
- & \rot{1. zone assign.} & \rot{2. aimed start} & \rot{3. arm-by-arm} & \rot{4. backward} & \rot{5. ICP-guided restart} & \rot{6. joint stage} & \rot{7. FD polish} & IoU & $\Delta$ & renders \\
+ & & \multicolumn{2}{c}{$\Delta$ IoU when} & \\
+\cmidrule(lr){3-4}
+ & component & added & removed & renders \\
 \midrule
-\multicolumn{11}{@{}l@{}}{\makebox[0pt][l]{\itshape Adding to a monolithic CMA-ES, $N{=}3$ (each row vs.\ the row above)}} \\
-monolithic &  &  &  &  &  &  &  & $0.693$ &  & 4.5k \\
- &  &  & \ck &  &  & \ck &  & $0.708$ & $+0.015$ & 3.0k \\
- & \ck &  & \ck &  &  & \ck &  & $0.710$ & $+0.001$ & 3.0k \\
- & \ck & \ck & \ck &  &  & \ck &  & $0.698$ & $-0.011$ & 3.0k \\
- & \ck & \ck & \ck & \ck &  & \ck &  & $0.718$ & $+0.020$ & 4.5k \\
- & \ck & \ck & \ck & \ck & \ck & \ck &  & $0.718$ & $0$ & 4.5k \\
-\textsc{umbra} & \ck & \ck & \ck & \ck & \ck & \ck & \ck & $0.722$ & $+0.004$ & 4.7k \\
-\addlinespace[2pt]
-\multicolumn{11}{@{}l@{}}{\makebox[0pt][l]{\itshape Removing one component from \textsc{umbra}, $N{=}3$ (vs.\ \textsc{umbra})}} \\
- & \rmv & \ck & \ck & \ck & \ck & \ck & \ck & $0.728$ & $+0.006$ & 4.7k \\
- & \ck & \rmv & \ck & \ck & \ck & \ck & \ck & $0.720$ & $-0.002$ & 4.7k \\
- & \ck & \ck & \ck & \rmv & \ck & \ck & \ck & $0.702$ & $-0.021$ & 3.2k \\
- & \ck & \ck & \ck & \ck & \rmv & \ck & \ck & $0.722$ & $0$ & 4.7k \\
- & \ck & \ck & \ck & \ck & \ck & \ck & \rmv & $0.718$ & $-0.004$ & 4.5k \\
-\addlinespace[2pt]
-\multicolumn{11}{@{}l@{}}{\makebox[0pt][l]{\itshape Same at $N{=}5$}} \\
-monolithic &  &  &  &  &  &  &  & $0.742$ &  & 6.6k \\
-\textsc{umbra} & \ck & \ck & \ck & \ck & \ck & \ck & \ck & $0.758$ & $+0.017$ & 6.9k \\
- & \ck & \ck & \ck & \ck & \rmv & \ck & \ck & $0.758$ & $0$ & 6.9k \\
- & \ck & \ck & \ck & \ck & \ck & \ck & \rmv & $0.757$ & $-0.001$ & 6.6k \\
-\addlinespace[2pt]
-\multicolumn{11}{@{}l@{}}{\makebox[0pt][l]{\itshape Sequence budget, $N{=}3$: restarts fire; $\rmv$ = random direction}} \\
-\textsc{umbra} & \ck & \ck & \ck & \ck & \ck & \ck & \ck & $0.739$ &  & 15.0k \\
- & \ck & \ck & \ck & \ck & \rmv & \ck & \ck & $0.736$ & $-0.004$ & 15.0k \\
+ & monolithic CMA-ES, IoU $0.693$ & & & 4.5k \\
+3, 6 & arm-by-arm sweep, joint stage & $+0.015$ &  & 3.0k \\
+1 & zone assignment & $+0.001$ & $+0.006$ & 3.0k \\
+2 & aimed start & $-0.011$ & $-0.002$ & 3.0k \\
+4 & backward sweep & $+0.020$ & $-0.021$ & 4.5k \\
+5 & ICP-guided restart & $0$ & $0$ & 4.5k \\
+7 & FD polish & $+0.004$ & $-0.004$ & 4.7k \\
+ & \textsc{umbra}, IoU $0.722$ & & & 4.7k \\
+\midrule
+ & $N{=}5$: monolithic $0.742$, \textsc{umbra} $0.758$ & & & 6.9k \\
+5 & sequence budget, restart direction random & & $-0.004$ & 15k \\
 \bottomrule
 \end{tabular}
