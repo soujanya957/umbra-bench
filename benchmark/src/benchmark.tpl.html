@@ -512,10 +512,6 @@ table.gref td.note{color:var(--muted); font-size:11px}
       <div class="lbl">View</div>
       <div class="seg" id="segPage">
         <button data-v="results" aria-pressed="true">results</button>
-        <button data-v="bench" aria-pressed="false">analysis</button>
-        <button data-v="sequences" aria-pressed="false">sequences</button>
-        <button data-v="teleop" aria-pressed="false">teleop</button>
-        <button data-v="guide" aria-pressed="false">guide</button>
       </div>
     </div>
 
@@ -533,8 +529,6 @@ table.gref td.note{color:var(--muted); font-size:11px}
         <button data-v="overlay" aria-pressed="true" title="shadow against the target the optimizer was actually given — after --fit-target scaled and shifted it">overlay</button>
         <button data-v="shadow" aria-pressed="false">shadow</button>
         <button data-v="target" aria-pressed="false" title="the target as given to the optimizer, i.e. after the fit">target</button>
-        <button data-v="trip" aria-pressed="false">all&nbsp;3</button>
-        <button data-v="human" aria-pressed="false" title="the hand-cast shadow, where one exists">human</button>
       </div>
       <div class="legend" id="legend">
         <div class="row"><i class="sw" style="background:#0000ff"></i> agreement</div>
@@ -550,38 +544,16 @@ table.gref td.note{color:var(--muted); font-size:11px}
     </div>
 
     <div class="grp" data-only="results">
-      <div class="lbl">Reference set</div>
-      <label class="telrow"><input type="checkbox" id="telOnly">
-        <span>hand-cast only <b id="telN">0</b></span></label>
-    </div>
-
-    <div class="grp" data-only="results">
       <div class="lbl">Sort</div>
       <select class="field mono" id="sort">
         <option value="iou-desc">IoU ↑ — most area agreement</option>
         <option value="iou-asc">IoU ↑ — least area agreement</option>
         <option value="nsd-desc">NSD ↑ — outline lands closest</option>
         <option value="nsd-asc">NSD ↑ — outline worst placed</option>
-        <option value="pw-asc">pw_h1 ↓ — topology best kept</option>
-        <option value="pw-desc">pw_h1 ↓ — topology most broken</option>
         <option value="hu-asc">Hu ↓ — shape closest, pose ignored</option>
         <option value="hu-desc">Hu ↓ — shape furthest, pose ignored</option>
-        <option value="disagree">where IoU and NSD disagree most</option>
         <option value="clip-desc">CLIP — most recognisable</option>
         <option value="clip-asc">CLIP — least recognisable</option>
-        <option value="cliptop1-desc">CLIP — identified top-1 first</option>
-        <option value="cliptop5-desc">CLIP — identified top-5 first</option>
-        <option value="cliptgt-desc">CLIP target — most legible targets</option>
-        <option value="cliptgt-asc">CLIP target — targets CLIP cannot read</option>
-        <option value="clipretain-desc">CLIP vs target — most of the ceiling kept</option>
-        <option value="clipover-desc">CLIP vs target — shadow beat its target</option>
-        <option value="tc-desc">shape IoU — best shape, size &amp; place ignored</option>
-        <option value="tc-asc">shape IoU — worst shape</option>
-        <option value="asp-desc">aspect error — most stretched</option>
-        <option value="delta-desc">Δ big − small — biggest gain</option>
-        <option value="stroke-asc">stroke width — thinnest first</option>
-        <option value="subset">subset, then IoU</option>
-        <option value="id">sample id</option>
       </select>
     </div>
 
@@ -681,7 +653,7 @@ const store = {
    page:"rescue" from before that view was removed would have every view hidden
    and no button pressed -- a blank page with no way back except clearing storage.
    Anything not on this list falls back to the dashboard. */
-const PAGES = ["results", "bench", "sequences", "teleop", "guide"];
+const PAGES = ["results"];
 /* The teleop set is read here, ahead of the dashboard, because the dashboard uses it:
    a target somebody has actually cast by hand is a different kind of row, and
    the grid says so rather than making you switch views to find out. */
@@ -694,7 +666,6 @@ for(const ts of (TELEOP.sets || [TELEOP]))
 
 const st = {
   page:  (p => PAGES.includes(p) ? p : "results")(store.get("page", "results")),
-  telOnly: store.get("telOnly", false),
   sweep: store.get("sweep","big"),
   view:  store.get("view", "overlay"),
   // Reconcile the remembered selection with the payload instead of trusting it.
@@ -740,7 +711,7 @@ store.set("subsKnown", DATA.subsets);
 })();
 // `fit` and `centred` were separate plates for one release; a reader who left
 // one selected would restore a view that no longer exists and see nothing.
-if(!["overlay","shadow","target","trip","human"].includes(st.view)) st.view = "overlay";
+if(!["overlay","shadow","target"].includes(st.view)) st.view = "overlay";
 const byId = new Map(S.map(s => [s.id, s]));
 
 /* ── derived helpers ─────────────────────────────────────────────────── */
@@ -754,7 +725,6 @@ function filtered(){
   const q = st.q.trim().toLowerCase();
   return S.filter(s => {
     if(!st.subs.has(s.subset)) return false;
-    if(st.telOnly && !TELBY.has(s.id)) return false;
     if(iou(s) == null) return false;               // no results yet — nothing to browse
     if(st.lo != null){
       const v = mval(s, mkey());
@@ -967,27 +937,16 @@ const io = new IntersectionObserver((ents) => {
 function plate(s){
   const e = sw(s), wrap = document.createElement("div");
   wrap.className = "plate";
-  const tel = TELBY.get(s.id);
   // Every plate works in the fitted frame: `tgt` is the target the optimizer was
   // given, which on a --fit-target sweep is the authored shape scaled ~0.83 and
   // shifted ~14px. Showing the authored target instead put `target` and
-  // `overlay` in different coordinate systems, so `all 3` compared two frames at
-  // once and every card read as mis-registered. Unfitted sweeps have no `w`, and
-  // there the authored target IS what was cast, so the fallback is exact.
+  // `overlay` in different coordinate systems and every card read as
+  // mis-registered. Unfitted sweeps have no `w`, and there the authored target
+  // IS what was cast, so the fallback is exact.
   const tgt = (e && e.w) || s.t;
   const mk = { target: () => imgEl(tgt), shadow: () => e && e.s ? imgEl(e.s) : blankEl(),
-               overlay: () => e && e.s ? cvEl(tgt, e.s) : blankEl(),
-               human: () => tel ? imgEl(tel.mask) : blankEl("no hand-cast shadow") };
-  if(st.view === "trip"){ wrap.append(mk.target(), mk.shadow(), mk.overlay()); }
-  else { wrap.append(mk[st.view]()); }
-  if(tel && st.view !== "human"){
-    // A marker, not a metric. Whether the human did better is not yet answerable
-    // -- the pose was never recorded, so mask and target share no alignment.
-    const t = document.createElement("span");
-    t.className = "telflag"; t.textContent = "hand-cast";
-    t.title = tel.capture + " — switch the plate to “human” to see it";
-    wrap.append(t);
-  }
+               overlay: () => e && e.s ? cvEl(tgt, e.s) : blankEl() };
+  wrap.append(mk[st.view]());
   return wrap;
 }
 function imgEl(b64){
@@ -1120,7 +1079,7 @@ function detailKey(e){ if(e.key === "Escape") closeDetail(); }
 function openDetail(id){
   closeDetail();
   const s = byId.get(id); if(!s) return;
-  const e = sw(s), tel = TELBY.get(id);
+  const e = sw(s);
   const back = document.createElement("div");
   back.className = "dback"; back.id = "detail";
   back.addEventListener("click", (ev) => { if(ev.target === back) closeDetail(); });
@@ -1136,7 +1095,7 @@ function openDetail(id){
   x.addEventListener("click", closeDetail);
   head.append(x);
 
-  // plates: target, shadow, overlay -- plus the hand-cast one where it exists
+  // plates: target, shadow, overlay
   const plates = document.createElement("div"); plates.className = "dplates";
   const tgt = (e && e.w) || s.t;
   const cell = (lab, node) => {
@@ -1154,7 +1113,6 @@ function openDetail(id){
     paintOverlay(cv, tgt, e.s).catch(()=>{});
     plates.append(cell("overlay — blue agrees, cyan missed, magenta spilled", cv));
   }
-  if(tel) plates.append(cell("hand-cast (human)", imgEl(tel.mask)));
 
   // numbers, both sweeps at once
   const sec = document.createElement("div"); sec.className = "dsec";
@@ -1169,10 +1127,7 @@ function openDetail(id){
     <h4>Geometry — against the target the optimizer was given</h4>
     <table class="dtab"><thead><tr><th></th>${slots.map(k =>
       `<th>${(DATA.sweep_dirs||{})[k] || k}</th>`).join("")}</tr></thead><tbody>
-      ${mrow("IoU","iou")}${mrow("NSD","nsd")}${mrow("boundary IoU","boundary_iou")}
-      ${mrow("clDice","cldice")}${mrow("pw_h1","pw_h1")}${mrow("Hu distance","hu_distance",2)}
-      ${mrow("shape IoU (size &amp; place removed)","tc_iou")}
-      ${mrow("aspect error","tc_aspect_error")}
+      ${mrow("IoU","iou")}${mrow("NSD","nsd")}${mrow("Hu distance","hu_distance",2)}
     </tbody></table>
 
     <h4>Recognizability — CLIP, ranked in ${s.clip_n || "?"} classes of this subset</h4>
@@ -1185,18 +1140,7 @@ function openDetail(id){
     <div class="note">True class <b>${s.clip_true ?? s.cls ?? "?"}</b>, chance
       ${s.clip_n ? (1/s.clip_n).toFixed(3) : "—"}. Ratio shadow/target
       <b>${f(e && e.clip_ratio)}</b>. The similarity beside each guess is a raw
-      cosine, not a confidence — it does not sum to 1 across candidates.</div>
-
-    <h4>Fit — why the shadow is not the size or place of the authored target</h4>
-    <table class="dtab"><thead><tr><th></th>${slots.map(k =>
-      `<th>${(DATA.sweep_dirs||{})[k] || k}</th>`).join("")}</tr></thead><tbody>
-      ${mrow("scale","fit_scale",4)}${mrow("dx (px @128)","fit_dx",2)}${mrow("dy (px @128)","fit_dy",2)}
-      ${mrow("uncastable before","uncastable_before")}${mrow("uncastable after","uncastable_after")}
-      ${mrow("best IoU reported","best")}${mrow("mean over seeds","mean")}${mrow("seconds","sec",1)}
-    </tbody></table>
-    <div class="note">Images are 128&nbsp;px upscaled — that is the resolution the
-      sweep rendered at and every metric above was computed on, so there is no finer
-      detail to show.</div>`;
+      cosine, not a confidence — it does not sum to 1 across candidates.</div>`;
 
   sheet.append(head, plates, sec);
   back.append(sheet);
@@ -1391,20 +1335,8 @@ function seg(sel, key, after){
   });
   [...box.querySelectorAll("button")].forEach(x => x.setAttribute("aria-pressed", String(x.dataset.v === st[key])));
 }
-{
-  const box = $("#telOnly");
-  box.checked = st.telOnly;
-  // Counted against what actually has results, not against the 28 linked rows:
-  // the v2 re-run is still pending, so some hand-cast targets have nothing to
-  // show yet and a count that ignored that would not match the grid.
-  $("#telN").textContent = S.filter(x => TELBY.has(x.id) && iou(x) != null).length;
-  box.addEventListener("change", () => {
-    st.telOnly = box.checked; store.set("telOnly", st.telOnly);
-    renderHist(); renderGrid();
-  });
-}
 seg("#segSweep", "sweep", () => { renderHist(); renderGrid(); renderReel(); });
-seg("#segView",  "view",  () => { renderGrid(); $("#legend").style.display = ["overlay","trip"].includes(st.view) ? "" : "none"; });
+seg("#segView",  "view",  () => { renderGrid(); $("#legend").style.display = st.view === "overlay" ? "" : "none"; });
 
 (function themeSeg(){
   const box = $("#segTheme"), cur = store.get("theme", "auto");
