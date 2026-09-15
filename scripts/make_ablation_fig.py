@@ -41,7 +41,7 @@ def deltas(v, ref):
 ORANGE = "#eb6834"
 sem = lambda v: st.stdev(v) / len(v) ** 0.5
 
-fig, ax = plt.subplots(figsize=(3.45, 1.7))
+fig, ax = plt.subplots(figsize=(3.45, 1.4))
 ys = list(range(len(COMPONENTS)))[::-1]
 h = 0.36
 ax.axvspan(-SPREAD, SPREAD, color=GRID, alpha=0.55, lw=0, zorder=0)
@@ -59,14 +59,13 @@ for y, (lab, bu, lo) in zip(ys, COMPONENTS):
             label="loss when removed" if y == ys[1] else None)
 ax.set_yticks(ys); ax.set_yticklabels([r[0] for r in COMPONENTS])
 ax.set_ylim(-0.6, len(COMPONENTS) - 0.4)
-ax.set_xlim(-0.025, 0.045)
-ax.set_xticks([-0.02, 0, 0.02, 0.04]); ax.set_xticklabels(["$-$0.02", "0", "+0.02", "+0.04"])
-ax.set_xlabel("contribution to IoU (mean over 10 glyphs, s.e.m.)")
+ax.set_xlim(-0.025, 0.03)
+ax.set_xticks([-0.02, 0, 0.02]); ax.set_xticklabels(["$-$0.02", "0", "+0.02"])
+ax.set_xlabel("$\\Delta$ IoU")
 ax.tick_params(axis="y", length=0)
 ax.spines["left"].set_visible(False)
 ax.grid(axis="x", color=GRID, lw=0.5); ax.set_axisbelow(True)
-ax.legend(frameon=False, loc="upper right", handlelength=1.2, borderaxespad=0.2, ncol=2, columnspacing=1.0, bbox_to_anchor=(1.0, -0.42))
-fig.subplots_adjust(left=0.33, right=0.99, top=0.98, bottom=0.33)
+fig.subplots_adjust(left=0.33, right=0.99, top=0.98, bottom=0.2)
 for ext in ("pdf", "png"):
     fig.savefig(os.path.join(OUT, f"fig_ablation.{ext}"), bbox_inches="tight", pad_inches=0.02)
 for lab, bu, lo in COMPONENTS:
