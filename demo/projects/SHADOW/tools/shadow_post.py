@@ -18,14 +18,22 @@ The letters are laid out on a clean wall with a uniform gap, bottom-aligned by
 default. Per-letter dx/dy/scale/darkness can be set in an adjust JSON, and
 every letter is also written as an RGBA layer for manual compositing.
 
+The default close-up is a flat grey wall with hard black letters. To match the
+stage views, --light pool lays the letters in one broad warm wash, --light glow
+puts a soft spotlight pool behind each letter on a dark wall (summed like
+lamps and rolled off so overlaps glow), --soft blurs each shadow's edge into a
+penumbra, and a --darkness below 1 keeps light in the umbra.
+
   <fleet-shadow python> shadow_post.py --manifest M.json [--clip-dir DIR] [--out DIR]
         [--adjust adjust.json] [--darkness 0.88] [--wide hero.png] [--wide2 left.png]
+        [--light flat|pool|glow] [--soft SIGMA_PX] [--canvas-scale 1.5]
 """
 import argparse
 import json
 import sys
 from pathlib import Path
 
+import cv2
 import mujoco
 import numpy as np
 from PIL import Image, ImageFilter
@@ -108,6 +116,37 @@ def wall(h, w, base=222, vignette=0.10):
     return np.clip(base * (1.0 - vignette * np.clip(r, 0, 1.5) ** 2), 0, 255)
 
 
+def pool(h, w, base=236.0, edge=0.42, tint=(1.0, 0.985, 0.95)):
+    """A broad soft wash like the relit stage views: brightest behind the words,
+    falling off toward the edges and corners, faintly warm. RGB float."""
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    r2 = ((xx - w / 2) / (0.60 * w)) ** 2 + ((yy - 0.50 * h) / (0.80 * h)) ** 2
+    lum = base * (edge + (1.0 - edge) * np.exp(-1.8 * r2))
+    return np.clip(lum[..., None] * np.asarray(tint, np.float32), 0, 255)
+
+
+def glow(h, w, centres, sigma_x, sigma_y, y0, ambient=24.0, gain=0.95, tint=(1.0, 0.975, 0.92)):
+    """A soft spotlight pool behind each letter on a dark wall, like the lamps of
+    the physical render: pools add, and a soft knee rolls the sum off so overlaps
+    glow instead of clipping. Separable, so it stays cheap on a wide canvas."""
+    xs = np.arange(w, dtype=np.float32)
+    ys = np.arange(h, dtype=np.float32)
+    gx = sum(np.exp(-0.5 * ((xs - cx) / sigma_x) ** 2) for cx in centres)
+    gy = np.exp(-0.5 * ((ys - y0) / sigma_y) ** 2)
+    light = gy[:, None] * gx[None, :]
+    lum = ambient + (255.0 - ambient) * (1.0 - np.exp(-gain * light))
+    return np.clip(lum[..., None] * np.asarray(tint, np.float32), 0, 255)
+
+
+def soften(c, sigma):
+    """A penumbra: blur the matte, padding with open wall so edges fade to light."""
+    if sigma <= 0:
+        return c
+    p = int(3 * sigma) + 1
+    padded = cv2.copyMakeBorder(c.astype(np.float32), p, p, p, p, cv2.BORDER_CONSTANT, value=1.0)
+    return cv2.GaussianBlur(padded, (0, 0), sigma)[p:-p, p:-p]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--manifest", required=True)
@@ -119,6 +158,10 @@ def main():
     ap.add_argument("--wide", default=None, help="hero scene render to stitch above the close-up")
     ap.add_argument("--wide2", default=None, help="optional second view stitched beside --wide")
     ap.add_argument("--reuse", action="store_true", help="reuse existing per-letter mattes in --out")
+    ap.add_argument("--light", default="flat", choices=("flat", "pool", "glow"),
+                    help="close-up wall: flat grey, one soft warm wash, or a glowing pool per letter")
+    ap.add_argument("--soft", type=float, default=0.0, help="penumbra: Gaussian sigma in layer pixels (0 = hard edges)")
+    ap.add_argument("--canvas-scale", type=float, default=1.5, help="close-up height, in multiples of the tallest letter")
     a = ap.parse_args()
     out = Path(a.out)
     (out / "layers").mkdir(parents=True, exist_ok=True)
@@ -172,25 +215,39 @@ def main():
         placed.append((el, np.asarray(img, dtype=np.float32) / 255.0, x + int(k.get("dx", 0)), int(k.get("dy", 0)),
                        float(k.get("darkness", a.darkness)), k.get("align", "base")))
         x += img.width + gap
-    Hc = int(max(p[1].shape[0] for p in placed) * 1.5)
+    max_h = max(p[1].shape[0] for p in placed)
+    Hc = int(max_h * a.canvas_scale)
     Wc = x
-    canvas = wall(Hc, Wc)
-    base_y = int(Hc * 0.82)
+    if a.light == "pool":
+        canvas = pool(Hc, Wc)
+        base_y = int(0.5 * Hc + 0.5 * max_h)        # the words sit in the middle of the wash
+    elif a.light == "glow":
+        base_y = int(0.5 * Hc + 0.5 * max_h)
+        centres = [px + p.shape[1] / 2 for _, p, px, _, _, _ in placed]
+        pitch = float(np.median(np.diff(centres))) if len(centres) > 1 else float(max_h)
+        # narrow enough that each letter's pool still reads, dim enough not to flatten into a band
+        canvas = glow(Hc, Wc, centres, sigma_x=0.42 * pitch, sigma_y=0.5 * max_h, y0=base_y - 0.5 * max_h,
+                      ambient=16.0, gain=0.7)
+    else:
+        canvas = np.repeat(wall(Hc, Wc)[..., None], 3, axis=2)
+        base_y = int(Hc * 0.82)
     layout = {}
     for el, c, px, dy, dark, align in placed:
+        c = soften(c, a.soft)
         h, w = c.shape
         py = (base_y - int(med_h / 2) - h // 2 if align == "center" else base_y - h) + dy
         py = max(0, min(Hc - h, py))
         region = canvas[py:py + h, px:px + w]
         mm = 1.0 - dark * (1.0 - c)
-        canvas[py:py + h, px:px + w] = region * mm
+        canvas[py:py + h, px:px + w] = region * mm[..., None]
         layout[el] = {"x": px, "y": py, "w": w, "h": h, "darkness": dark, "align": align}
-    close = Image.fromarray(canvas.astype(np.uint8)).convert("RGB")
+    close = Image.fromarray(np.clip(canvas, 0, 255).astype(np.uint8), "RGB")
     close = close.filter(ImageFilter.GaussianBlur(0.6))
     tw = 3840
     close = close.resize((tw, round(close.height * tw / close.width)), Image.LANCZOS)
     close.save(out / "SHADOW_close_composite.png")
-    (out / "layout.json").write_text(json.dumps({"gap_px": gap, "letters": layout}, indent=1), encoding="utf-8")
+    (out / "layout.json").write_text(json.dumps({"gap_px": gap, "light": a.light, "soft": a.soft,
+                                                 "letters": layout}, indent=1), encoding="utf-8")
     print("close-up composite:", close.size)
 
     if a.wide:

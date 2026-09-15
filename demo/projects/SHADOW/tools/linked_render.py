@@ -63,6 +63,9 @@ def main():
     ap.add_argument("--env-exponent", type=float, default=4.0, help="--relight: spot exponent of the wash plates")
     ap.add_argument("--env-cutoff", type=float, default=70.0, help="--relight: spot cutoff of the wash plates")
     ap.add_argument("--arm-gain", type=float, default=2.5, help="--relight: lift the arms to sit in the wash")
+    ap.add_argument("--equal-lamps", action="store_true",
+                    help="give every lamp the same diffuse; build() dims lamps by crowding, "
+                         "which leaves the end letters brightest")
     a = ap.parse_args()
     W, H = (int(v) for v in a.size.lower().split("x"))
 
@@ -78,6 +81,8 @@ def main():
         model.light_exponent[:] = a.exponent
     if a.cutoff is not None:
         model.light_cutoff[:] = a.cutoff
+    if a.equal_lamps:
+        model.light_diffuse[:] = model.light_diffuse.mean(axis=0)
     data = mujoco.MjData(model)
 
     # static pose: frame 0 of each clip, rig at its first lateral/lift
