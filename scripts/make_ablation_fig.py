@@ -38,30 +38,35 @@ COMPONENTS = [  # label, build-up (variant, ref), leave-one-out (variant, ref)
 def deltas(v, ref):
     return [data[v][g][0] - data[ref][g][0] for g in glyphs]
 
-fig, axes = plt.subplots(1, 2, figsize=(3.45, 1.55), sharey=True,
-                         gridspec_kw=dict(wspace=0.12))
+ORANGE = "#eb6834"
+sem = lambda v: st.stdev(v) / len(v) ** 0.5
+
+fig, ax = plt.subplots(figsize=(3.45, 1.7))
 ys = list(range(len(COMPONENTS)))[::-1]
-for ax, col, title in ((axes[0], 1, "added, in order"), (axes[1], 2, "removed from UMBRA")):
-    ax.axvspan(-SPREAD, SPREAD, color=GRID, alpha=0.55, lw=0, zorder=0)
-    ax.axvline(0, color=MUTED, lw=0.6, zorder=1)
-    for y, row in zip(ys, COMPONENTS):
-        pair = row[col]
-        if pair is None:
-            ax.text(0, y, "(= monolithic)", ha="center", va="center", fontsize=5.8, color=MUTED)
-            continue
-        d = deltas(*pair)
-        ax.barh(y, st.mean(d), height=0.5, color=BLUE, alpha=0.35, lw=0, zorder=2)
-        ax.plot(d, [y] * len(d), "o", ms=2.6, mfc=BLUE, mec="white", mew=0.5, zorder=3)
-    ax.set_title(title, pad=3, fontsize=6.8)
-    ax.set_xlim(-0.07, 0.07)
-    ax.set_xticks([-0.05, 0, 0.05]); ax.set_xticklabels(["$-$0.05", "0", "+0.05"])
-    ax.tick_params(axis="y", length=0)
-    ax.spines["left"].set_visible(False)
-    ax.grid(axis="x", color=GRID, lw=0.5); ax.set_axisbelow(True)
-axes[0].set_yticks(ys); axes[0].set_yticklabels([r[0] for r in COMPONENTS])
-axes[0].set_ylim(-0.6, len(COMPONENTS) - 0.4)
-fig.supxlabel("paired $\\Delta$ IoU per glyph (bar: mean; band: seed spread)", fontsize=6.6, color=INK, y=0.01)
-fig.subplots_adjust(left=0.33, right=0.99, top=0.88, bottom=0.24)
+h = 0.36
+ax.axvspan(-SPREAD, SPREAD, color=GRID, alpha=0.55, lw=0, zorder=0)
+ax.axvline(0, color=MUTED, lw=0.6, zorder=1)
+for y, (lab, bu, lo) in zip(ys, COMPONENTS):
+    d = deltas(*bu)
+    ax.barh(y + h / 2, st.mean(d), height=h, color=BLUE, lw=0, zorder=2,
+            xerr=sem(d), error_kw=dict(elinewidth=0.7, capsize=1.5, ecolor=INK),
+            label="gain when added" if y == ys[0] else None)
+    if lo is None:
+        continue
+    d = [-x for x in deltas(*lo)]  # loss when removed, sign flipped: right = helps
+    ax.barh(y - h / 2, st.mean(d), height=h, color=ORANGE, lw=0, zorder=2,
+            xerr=sem(d), error_kw=dict(elinewidth=0.7, capsize=1.5, ecolor=INK),
+            label="loss when removed" if y == ys[1] else None)
+ax.set_yticks(ys); ax.set_yticklabels([r[0] for r in COMPONENTS])
+ax.set_ylim(-0.6, len(COMPONENTS) - 0.4)
+ax.set_xlim(-0.025, 0.045)
+ax.set_xticks([-0.02, 0, 0.02, 0.04]); ax.set_xticklabels(["$-$0.02", "0", "+0.02", "+0.04"])
+ax.set_xlabel("contribution to IoU (mean over 10 glyphs, s.e.m.)")
+ax.tick_params(axis="y", length=0)
+ax.spines["left"].set_visible(False)
+ax.grid(axis="x", color=GRID, lw=0.5); ax.set_axisbelow(True)
+ax.legend(frameon=False, loc="upper right", handlelength=1.2, borderaxespad=0.2, ncol=2, columnspacing=1.0, bbox_to_anchor=(1.0, -0.42))
+fig.subplots_adjust(left=0.33, right=0.99, top=0.98, bottom=0.33)
 for ext in ("pdf", "png"):
     fig.savefig(os.path.join(OUT, f"fig_ablation.{ext}"), bbox_inches="tight", pad_inches=0.02)
 for lab, bu, lo in COMPONENTS:
