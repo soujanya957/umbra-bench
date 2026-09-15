@@ -114,10 +114,13 @@ def compact(d3, d5):
     print(f" & $N{{=}}5$: monolithic ${mean(d5,'flat',g5):.3f}$, \\textsc{{umbra}} ${mean(d5,'full',g5):.3f}$ & {fmt(delta(d5,'full','flat',g5))} & & {rend(d5,'full',g5):.1f}k \\\\")
     # aimed start at a quarter of the budget (aimed_start_probe.sh, tiny, N=3)
     da = load(os.path.join(ROOT, "optimized", "aimed-start-probe10"), 3)
-    for b, lab in (("tiny", "quarter"), ("small", "half")):
-        if f"full-{b}" in da and f"no_aimed-{b}" in da:
-            ga = sorted(set(da[f"full-{b}"]) & set(da[f"no_aimed-{b}"]))
-            print(f"3 & aimed start removed, {lab} budget & & {fmt(delta(da,f'no_aimed-{b}',f'full-{b}',ga))} & {rend(da,f'full-{b}',ga):.1f}k \\\\")
+    # no zones means nothing to aim at, so no_zones-tiny removes 2 and 3 together
+    for v, num, lab in (("no_zones-tiny", "2, 3", "zone assignment and aimed start removed"),
+                        ("no_aimed-tiny", "3", "aimed start removed")):
+        if "full-tiny" in da and v in da:
+            ga = sorted(set(da["full-tiny"]) & set(da[v]))
+            if len(ga) == 10:
+                print(f"{num} & {lab}, quarter budget & & {fmt(delta(da,v,'full-tiny',ga))} & {rend(da,'full-tiny',ga):.1f}k \\\\")
     gl = sorted(set(d3["full_long"]) & set(d3["full_long_no_icp"]))
     print(f"5 & restart direction random, sequence budget & & {fmt(delta(d3,'full_long_no_icp','full_long',gl))} & {rend(d3,'full_long',gl):.0f}k \\\\")
     print(r"\bottomrule")
