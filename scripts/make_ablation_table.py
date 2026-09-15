@@ -54,7 +54,7 @@ BLOCKS = [  # (heading, n, [(variant, ref, label)])
     (r"Same at $N{=}5$", 5, [
         ("flat", None, "monolithic"), ("full", "flat", r"\textsc{umbra}"),
         ("full_no_icp", "full", ""), ("full_no_fd", "full", "")]),
-    (r"Sequence budget, $N{=}3$, $3.2\times$ the renders: restarts fire; $\rmv$ = random direction", 3, [
+    (r"Sequence budget, $N{=}3$: restarts fire; $\rmv$ = random direction", 3, [
         ("full_long", None, r"\textsc{umbra}"), ("full_long_no_icp", "full_long", "")]),
 ]
 
@@ -86,7 +86,8 @@ def main():
     for bi, (head, n, rows) in enumerate(BLOCKS):
         if bi:
             print(r"\addlinespace[2pt]")
-        print(r"\multicolumn{" + str(ncol) + r"}{@{}l}{\itshape " + head + r"} \\")
+        # zero-width box: a long heading overhangs instead of stretching the last column
+        print(r"\multicolumn{" + str(ncol) + r"}{@{}l@{}}{\makebox[0pt][l]{\itshape " + head + r"}} \\")
         data = d5 if n == 5 else d3
         for v, ref, label in rows:
             print(row(data, n, v, ref, label))
