@@ -1,0 +1,758 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>demo design studio</title>
+<style>
+  :root{--bg:#101216;--panel:#181b21;--line:#2a2f38;--ink:#e6e9ee;--ink2:#9aa3b0;
+        --acc:#5ec8f5;--ok:#57d98f;--warn:#f5b85e;--bad:#f56e6e}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:13px/1.5 "IBM Plex Sans",system-ui,sans-serif}
+  .mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+  header{display:flex;gap:14px;align-items:baseline;padding:12px 18px;
+         border-bottom:1px solid var(--line)}
+  header h1{font-size:15px;margin:0}
+  header .proj{color:var(--acc);font-weight:600}
+  main{display:grid;grid-template-columns:minmax(0,8fr) minmax(0,4fr);
+       gap:14px;padding:14px 18px;align-items:start}
+  #side{position:sticky;top:10px;max-height:calc(100vh - 20px);overflow-y:auto}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+          padding:12px 14px;margin-bottom:14px}
+  h2{font-size:12px;margin:0 0 10px;color:var(--ink2);text-transform:uppercase;
+     letter-spacing:.06em}
+  select,input[type=text]{background:#0c0e12;color:var(--ink);border:1px solid var(--line);
+         border-radius:5px;padding:5px 8px;font:inherit}
+  button{background:#232833;color:var(--ink);border:1px solid var(--line);
+         border-radius:5px;padding:5px 10px;font:inherit;cursor:pointer}
+  button:hover{border-color:var(--acc)}
+  button.primary{border-color:var(--acc)}
+  button:disabled{opacity:.4;cursor:default}
+  .chipbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .chip{padding:3px 12px;border-radius:12px;border:1px solid var(--line);
+        cursor:pointer;font-size:12px;background:#20242d}
+  .chip.on{border-color:var(--acc);color:var(--acc);font-weight:600}
+  .tabs{display:flex;gap:2px;margin:0 0 10px;align-items:center}
+  .tabs .tab{padding:5px 16px;border:1px solid var(--line);cursor:pointer;
+             border-radius:6px 6px 0 0;color:var(--ink2);font-size:12px}
+  .tabs .tab.on{color:var(--ink);border-bottom-color:var(--panel);
+                background:#20242d;font-weight:600}
+  table{width:100%;border-collapse:collapse}
+  td,th{padding:3px 6px;text-align:left;border-bottom:1px solid var(--line);
+        font-size:12px;white-space:nowrap}
+  th{color:var(--ink2);font-weight:500}
+  #seqs td:nth-child(3){max-width:200px;overflow:hidden;text-overflow:ellipsis}
+  #seqs{display:block;overflow-x:auto}
+  #seqs button{padding:2px 7px;font-size:11.5px}
+  .lane-static{color:var(--ok)} .lane-translation{color:var(--warn)}
+  .lane-dynamic{color:var(--acc)}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:4px;background:#3a4150}
+  .dot.on{background:var(--ok)}
+  #lchips{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0}
+  #lchips .lc{padding:2px 10px;border-radius:10px;border:1px solid var(--line);
+              cursor:pointer;font-size:12px;background:#20242d}
+  #lchips .lc.on{border-color:var(--acc);color:var(--acc)}
+  #lstrip{display:flex;flex-wrap:wrap;gap:2px;margin:6px 0}
+  #lstrip .fq{width:12px;height:12px;border-radius:2px;background:#3a4150;
+              cursor:pointer;border:1px solid transparent}
+  #lstrip .fq.lab{background:var(--acc)}
+  #lstrip .fq.msk{background:var(--ok)}
+  #lstrip .fq.cur{border-color:#fff}
+  #lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));
+       gap:8px;max-height:calc(100vh - 480px);overflow-y:auto;margin-top:8px}
+  #sheet{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+  .cell{cursor:pointer;text-align:center}
+  .cell img{width:100%;image-rendering:pixelated;background:#fff;border-radius:4px;
+            border:1px solid var(--line)}
+  .cell:hover img{border-color:var(--acc)}
+  .cell.sel img{border-color:var(--warn);border-width:2px}
+  .cell.unsolved img{opacity:.45}
+  .cell .nm{font-size:10px;color:var(--ink2);overflow:hidden;white-space:nowrap;
+            text-overflow:ellipsis}
+  #log{background:#0a0c0f;border-radius:6px;padding:10px;height:170px;
+       overflow-y:auto;white-space:pre-wrap;font-size:11.5px;color:#b7c0cc}
+  .busy{color:var(--warn)}
+  .hint{font-size:12px;color:var(--ink2)}
+  .toast{position:fixed;bottom:16px;right:16px;background:var(--acc);color:#04222f;
+         padding:8px 14px;border-radius:6px;font-weight:600;display:none;z-index:9}
+</style>
+<header>
+  <h1>demo design studio</h1>
+  <div>project <span class="proj mono" id="proj">—</span></div>
+  <div id="jobline" class="mono"></div>
+</header>
+<main>
+<div><!-- left: the workflow -->
+  <section>
+    <h2>video → project</h2>
+    <div style="display:flex;gap:8px">
+      <select id="video" style="flex:1"></select>
+      <button onclick="run('trim', vid())">0 · trim on white</button>
+      <button onclick="run('scenes', vid())" class="primary"
+        title="switches to this video's project: labels are archived per project and restored when you return; trims (_01/_02) continue their project">1 · scenes (start/switch)</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>scene</h2>
+    <div class="chipbar" id="scenebar"></div>
+  </section>
+
+  <section>
+    <div class="tabs">
+      <span class="tab on" data-t="edit">2 · edit — points &amp; masks</span>
+      <span class="tab" data-t="sheet">review — contact sheet</span>
+      <span class="tab" data-t="output">output — play</span>
+      <span style="flex:1"></span>
+      <button onclick="run('label')" title="the matplotlib window, same file">native window</button>
+      <button onclick="run('segment')" class="primary"
+              title="segment + build sequences + index, one batch">3 · segment (GPU)</button>
+    </div>
+
+    <div id="v-edit">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+        <button onclick="lgo(-1)">&larr;</button>
+        <span id="lpos" class="mono">–</span>
+        <button onclick="lgo(1)">&rarr;</button>
+        <button onclick="lnextEmpty()">next unlabelled</button>
+        <input type="text" id="llabel" placeholder="label" style="width:130px">
+        <button onclick="lundo()">undo</button>
+        <button onclick="lcopyPrev()">copy prev</button>
+        <button onclick="lreuse()">reuse…</button>
+        <button id="lmasks" onclick="ltoggleMasks()">masks: on</button>
+        <button onclick="ldropFrame()" style="border-color:var(--bad)"
+                title="remove this frame from the whole project: scene png, labels, masks">drop frame</button>
+        <span id="lsum" class="mono hint"></span>
+      </div>
+      <div id="lchips"></div>
+      <div id="lstrip"></div>
+      <canvas id="lcanvas" style="width:100%;border:1px solid var(--line);
+              border-radius:6px;cursor:crosshair"></canvas>
+      <div class="hint">left = include, right/shift = exclude · one frame per scene
+        per object is enough — segment tracks it; later clicks are corrections ·
+        masks view = the pipeline's own overlay (bbox + label + tint) ·
+        saves on every click</div>
+    </div>
+
+    <div id="v-sheet" style="display:none">
+      <div id="sheet"></div>
+      <div class="hint" style="margin-top:6px">one tile per frame, every mask
+        tinted. click a tile to fix it in the edit tab.</div>
+    </div>
+
+    <div id="v-output" style="display:none">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+        <select id="oseq" style="width:auto"></select>
+        <button onclick="oplay()">play</button>
+        <button title="whole scene at once, native MuJoCo window: every element's trio + its own light, shared screen"
+          onclick="SCENE === 'all' ? toast('pick one scene in the SCENE bar first')
+                                   : run('ensemble', SCENE)">&#9654; ensemble (mujoco)</button>
+        <button title="stream this scene's clips to the PHYSICAL fleet, in arrangement order, via the robot UI's deploy server (:8001). Opens a console window; closing it = E-STOP (fleet freezes, torque held)."
+          onclick="deployRobot()">&#8674; deploy to robot</button>
+        <span id="ovids" class="mono hint"></span>
+      </div>
+      <canvas id="ocanvas" style="width:100%;border:1px solid var(--line);
+              border-radius:6px;display:none"></canvas>
+    </div>
+  </section>
+
+  <section>
+    <h2>4 · sequences → assign each element
+      <label style="float:right;font-weight:400;text-transform:none">
+        <input type="checkbox" id="seqall" onchange="refresh()"> all projects</label></h2>
+    <span id="librobot" style="display:none">
+      <button style="margin-bottom:6px"
+        title="write this shadow's choreography into the robot UI's library (fleet-shadow choreographies/) — a library shape exports its pose, a solved sequence its whole motion"
+        onclick="run('export_lib', LASTLIB)">&rarr; robot</button>
+      <button style="margin-bottom:6px"
+        title="stream JUST this shape/sequence to the physical fleet now — its choreography is written first if it is missing. Opens a console window; closing it = E-STOP."
+        onclick="deployLib()">&#8674; deploy this</button>
+      <button style="margin-bottom:6px" id="vidbtn"
+        title="render THIS clip on its own — target | shadow | overlay, per-frame IoU, at 1/3 speed — and play it here. 7 · compose is the project film and needs footage; this needs only a solve."
+        onclick="seqVideo()">&#9654; video</button>
+    </span>
+    <div id="seqvid" style="display:none;margin:6px 0 8px">
+      <img id="seqvidimg" alt="" style="max-width:100%;border:1px solid var(--line);border-radius:6px;background:#fff">
+      <div class="hint" id="seqvidcap"></div>
+    </div>
+    <div id="seldisp" class="mono" style="color:var(--warn);margin-bottom:6px">
+      no library shape selected — click one in the rail, then a row's <b>lib</b></div>
+    <table id="seqs"></table>
+    <div id="seqhint" class="hint" style="margin-top:6px"></div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button onclick="run('route')">5 · route lanes</button>
+      <button onclick="solveScene()" class="primary" id="solvescene">6 · solve + mount scene</button>
+      <button onclick="run('solve_all')">6b · solve + mount all</button>
+      <button onclick="run('reassemble')" title="mount only: re-cast library picks and solved elements without solving anything">re-mount</button>
+      <button onclick="run('compose')" class="primary">7 · compose video</button>
+      <button onclick="run('pack')">8 · pack (deploy)</button>
+      <button onclick="run('score')">score</button>
+      <button onclick="run('benchmark')">benchmark</button>
+    </div>
+  </section>
+</div>
+
+<div id="side"><!-- right rail: sticky -->
+  <section>
+    <h2>terminal</h2>
+    <div id="log" class="mono"></div>
+  </section>
+  <section>
+    <h2>library — click to select</h2>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input type="text" id="q" style="flex:1"
+             placeholder="class: K, candle, crab… (exact class first)">
+      <label style="white-space:nowrap;color:var(--ink2);font-size:11px">
+        <input type="checkbox" id="qunsolved"> unsolved too</label>
+    </div>
+    <div id="lib"></div>
+    <div class="hint" style="margin-top:6px">solved shadows only by default.
+      click = select (highlighted); the rows' <b>lib</b> buttons assign it.
+      nothing to paste.</div>
+  </section>
+</div>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+const $ = s => document.querySelector(s);
+let LIB = [], S = null, SCENE = "all", TAB = "edit", LASTLIB = null, LASTKIND = null;
+let LF = [], LFall = [], LI = 0, KP = {frames: {}, decisions: {}};
+let SHOW_MASKS = true;
+const MASKC = new Map();          // fid -> {overlay: Image|null}
+const vid = () => $("#video").value;
+
+function toast(t){
+  const el = $("#toast"); el.textContent = t; el.style.display = "block";
+  setTimeout(() => el.style.display = "none", 2600);
+}
+
+/* ---- jobs ------------------------------------------------------------- */
+async function run(step, arg){
+  const r = await fetch("/api/run", {method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({step, arg})});
+  const j = await r.json();
+  if(j.error) toast(j.error); else if(j.note) toast(j.note);
+  poll();
+}
+function solveScene(){
+  if(SCENE === "all"){ toast("pick a scene first (scene bar)"); return; }
+  run("solve_scene", SCENE);
+}
+let timer = null;
+function poll(){
+  clearInterval(timer);
+  timer = setInterval(async () => {
+    await refresh();
+    if(!S.job.running){
+      clearInterval(timer);
+      const fid = LF[LI] && LF[LI].fid;
+      await linit(fid);
+      if(TAB === "sheet") grefresh();
+      orefresh();
+      vidshow();
+    }
+  }, 2000);
+}
+
+/* ---- scene bar -------------------------------------------------------- */
+function scenebar(){
+  const scs = [...new Set(LFall.map(f => f.scene))].sort();
+  const bar = $("#scenebar");
+  bar.innerHTML = ['all', ...scs].map(sc =>
+    `<span class="chip ${sc === SCENE ? "on" : ""}" data-sc="${sc}">${sc}</span>`
+  ).join("") || '<span class="hint">no scenes yet — run 1 · scenes</span>';
+  bar.querySelectorAll(".chip").forEach(c => c.addEventListener("click", () => {
+    SCENE = c.dataset.sc;
+    applyScene();
+  }));
+  $("#solvescene").textContent = SCENE === "all"
+    ? "6 · solve + mount scene (pick one)" : `6 · solve + mount ${SCENE}`;
+}
+function applyScene(){
+  LF = SCENE === "all" ? LFall : LFall.filter(f => f.scene === SCENE);
+  LI = Math.min(LI, Math.max(0, LF.length - 1));
+  scenebar();
+  if(LF.length) lshow();
+  if(TAB === "sheet") grefresh();
+  if(TAB === "output") orefresh();
+  refresh();
+}
+
+/* ---- state / board ---------------------------------------------------- */
+async function refresh(){
+  S = await fetch("/api/state").then(r => r.json());
+  $("#proj").textContent = S.project || "—";
+  const vs = $("#video");
+  if(vs.options.length !== S.videos.length)
+    vs.innerHTML = S.videos.map(v => `<option>${v}</option>`).join("");
+  const showAll = $("#seqall").checked;
+  const sceneOf = id => (id.match(/_(scene_\d+)_/) || [])[1] || "";
+  let rows = S.sequences.filter(q => showAll || q.project === S.project);
+  if(SCENE !== "all") rows = rows.filter(q => sceneOf(q.id) === SCENE);
+  $("#seqs").innerHTML = "<tr><th>element</th><th>lane</th>"
+    + "<th>assignment</th><th>re</th><th></th></tr>"
+    + rows.map(q => `<tr>
+        <td class="mono" title="${q.id}">${showAll ? q.id :
+            q.id.replace((S.project || "") + "_", "")}</td>
+        <td class="lane-${q.lane || "dynamic"}" style="cursor:pointer"
+            title="click to override the lane (auto - static - translation - dynamic); * = your override, survives re-route"
+            onclick="cycleLane('${q.id}', '${q.lane || ""}', ${q.lane_override ? 1 : 0})">${q.lane || "?"}${q.lane_override ? "*" : ""}</td>
+        <td class="mono" style="color:${q.resolved ? "var(--ok)" : "var(--warn)"}">${
+          q.assign === "library" ? "lib: " + (q.library_id || "?")
+          : q.assign === "sequence" ? "seq: " + (q.donor || "?")
+          : q.assign === "solve" ? (q.solved ? "solved" : "to solve") : "—"}</td>
+        <td><span class="dot ${q.reassembled ? "on" : ""}"></span></td>
+        <td style="white-space:nowrap">
+          <button onclick="assign('${q.id}','solve')">solve</button>
+          <button onclick="assign('${q.id}','library')">lib</button>
+          <button onclick="assign('${q.id}','sequence')" title="the selected library SEQUENCE stands in, timing re-aligned">seq</button>
+          <button onclick="assign('${q.id}',null)" title="clear">✕</button>
+          <button onclick="oshow('${q.id}')" title="play">▶</button>
+        </td></tr>`).join("");
+  const un = rows.filter(q => !q.resolved).length;
+  $("#seqhint").textContent = rows.length
+    ? (un ? `${un} element(s) unassigned/unsolved here — assign all, then 6 solves AND mounts`
+          : "all resolved here — 6 (or re-mount) then 7 · compose")
+    : "";
+  const j = S.job;
+  $("#jobline").innerHTML = j.running
+    ? `<span class="busy">running: ${j.step} … ${j.elapsed}s</span>`
+    : (j.step ? `last: ${j.step} ${j.rc === 0 ? "✓" : "exit " + j.rc}` : "");
+  if(j.running || j.step){
+    $("#log").textContent = (await fetch("/api/log").then(r => r.json())).log;
+    $("#log").scrollTop = $("#log").scrollHeight;
+  }
+}
+
+/* ---- assignment ------------------------------------------------------- */
+async function assign(seq, mode){
+  const body = {seq, mode};
+  if(mode === "library"){
+    if(!LASTLIB){ toast("click a library shape first (right rail)"); return; }
+    if(LASTKIND === "seq"){ toast("that selection is a SEQUENCE — use the seq button"); return; }
+    body.library_id = LASTLIB;
+  }
+  if(mode === "sequence"){
+    if(!LASTLIB || LASTKIND !== "seq"){
+      toast("select a SEQUENCE in the library first (badge ▶)"); return; }
+    body.donor = LASTLIB;
+  }
+  const r = await fetch("/api/assign", {method: "POST",
+    headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  if(!r.ok){ toast((await r.json()).error); return; }
+  if(mode === "solve") run("solve", seq); else refresh();
+}
+
+/* ---- tabs ------------------------------------------------------------- */
+document.querySelectorAll(".tabs .tab").forEach(t =>
+  t.addEventListener("click", () => {
+    TAB = t.dataset.t;
+    document.querySelectorAll(".tabs .tab").forEach(x =>
+      x.classList.toggle("on", x === t));
+    for(const v of ["edit", "sheet", "output"])
+      $("#v-" + v).style.display = v === TAB ? "" : "none";
+    if(TAB === "sheet") grefresh();
+    if(TAB === "output") orefresh();
+  }));
+
+/* ---- contact sheet (review) ------------------------------------------ */
+async function grefresh(){
+  const items = await fetch("/api/gallery").then(r => r.json());
+  const here = SCENE === "all" ? items : items.filter(m => m.scene === SCENE);
+  $("#sheet").innerHTML = here.map(m => `
+    <div class="cell" data-fid="${m.fid}"
+         title="${m.fid} (${m.scene}): ${m.labels.join(", ")}">
+      <img loading="lazy" src="/maskthumb/${m.fid}?t=${Date.now()}">
+      <div class="nm">${m.fid} · ${m.labels.length} obj</div>
+    </div>`).join("") || '<span class="hint">no masks in this scene yet</span>';
+  $("#sheet").querySelectorAll(".cell").forEach(c =>
+    c.addEventListener("click", () => {
+      const at = LF.findIndex(f => f.fid === c.dataset.fid);
+      if(at >= 0) LI = at;
+      document.querySelector('[data-t="edit"]').click();
+      lshow();
+    }));
+}
+
+/* ---- output (play) ---------------------------------------------------- */
+let OUT = null, OTIMER = null;
+async function orefresh(){
+  OUT = await fetch("/api/output").then(r => r.json());
+  const names = Object.keys(OUT.reassembled)
+    .filter(n => SCENE === "all" || n.includes("_" + SCENE + "_"));
+  $("#oseq").innerHTML = names.map(n => `<option>${n}</option>`).join("")
+    || "<option>— nothing reassembled here —</option>";
+  $("#ovids").innerHTML = (OUT.videos.length
+    ? "video: " + OUT.videos.map(v => v.name).join(" ") : "no video yet")
+    + (OUT.choreo && OUT.choreo.length
+       ? ` · deploy: packages/${OUT.package}/choreo (${OUT.choreo.length})`
+       : " · deploy: run 8 · pack");
+}
+function oplay(){
+  clearInterval(OTIMER);
+  const d = OUT && OUT.reassembled[$("#oseq").value];
+  if(!d) return;
+  const cv = $("#ocanvas"); cv.style.display = "block";
+  const g = cv.getContext("2d");
+  const stamp = Date.now();               // fresh frames after every re-mount
+  let i = 0;
+  const step = () => {
+    const im = new Image();
+    im.onload = () => { cv.width = im.naturalWidth; cv.height = im.naturalHeight;
+                        g.drawImage(im, 0, 0); };
+    im.src = `projects/${OUT.project}/out/reassembled/` +
+             `${$("#oseq").value}/${d.frames[i]}?t=${stamp}`;
+    i = (i + 1) % d.frames.length;
+  };
+  step();
+  OTIMER = setInterval(step, 1000 / (d.fps || 5));
+}
+function oshow(seq){
+  document.querySelector('[data-t="output"]').click();
+  setTimeout(() => {
+    const sel = $("#oseq");
+    if([...sel.options].some(o => o.value === seq)){ sel.value = seq; oplay(); }
+    else toast("not reassembled yet — 6 mounts after solving, or re-mount");
+  }, 250);
+}
+
+/* ---- labeller (edit tab) --------------------------------------------- */
+const limg = new Image();
+const lcv = $("#lcanvas");
+
+async function linit(keepFid){
+  LFall = await fetch("/api/frames").then(r => r.json());
+  KP = await fetch("/api/keypoints").then(r => r.json());
+  MASKC.clear();
+  LF = SCENE === "all" ? LFall : LFall.filter(f => f.scene === SCENE);
+  const at = keepFid ? LF.findIndex(f => f.fid === keepFid) : -1;
+  LI = at >= 0 ? at : Math.min(LI, Math.max(0, LF.length - 1));
+  scenebar();
+  if(LF.length) lshow();
+}
+function lcur(){ return LF[LI]; }
+function lobjs(){
+  const f = lcur();
+  return (KP.frames[f.fid] && KP.frames[f.fid].objects) || {};
+}
+function lchips(){
+  const seen = {};
+  Object.values(KP.frames || {}).forEach(f =>
+    Object.keys(f.objects || {}).forEach(l => seen[l] = (seen[l] || 0) + 1));
+  const cur = $("#llabel").value;
+  $("#lchips").innerHTML = Object.keys(seen).sort().map(l =>
+    `<span class="lc ${l === cur ? "on" : ""}" data-l="${l}">${l}` +
+    `<span style="opacity:.55"> ×${seen[l]}</span></span>`).join("");
+  document.querySelectorAll("#lchips .lc").forEach(c =>
+    c.addEventListener("click", () => { $("#llabel").value = c.dataset.l;
+                                        lchips(); ldraw(); }));
+}
+function lstrip(){
+  const el = $("#lstrip");
+  let html = "", prev = null;
+  LF.forEach((f, i) => {
+    if(prev && f.scene !== prev) html += '<span style="width:8px"></span>';
+    prev = f.scene;
+    const cls = ["fq", f.masked ? "msk" : (f.labelled ? "lab" : ""),
+                 i === LI ? "cur" : ""].join(" ");
+    html += `<span class="${cls}" data-i="${i}" title="${f.fid} (${f.scene})"></span>`;
+  });
+  el.innerHTML = html;
+  el.querySelectorAll(".fq").forEach(q =>
+    q.addEventListener("click", () => { LI = +q.dataset.i; lshow(); }));
+}
+function lshow(){
+  const f = lcur();
+  if(!f) return;
+  lstrip(); lchips();
+  $("#lpos").textContent = `${LI + 1}/${LF.length}  ${f.fid} (${f.scene})`;
+  limg.onload = ldraw;
+  limg.src = "/" + f.file;
+}
+function ltoggleMasks(){
+  SHOW_MASKS = !SHOW_MASKS;
+  $("#lmasks").textContent = "masks: " + (SHOW_MASKS ? "on" : "off");
+  ldraw();
+}
+async function loverlayFor(fid){
+  if(MASKC.has(fid)) return MASKC.get(fid);
+  const info = await fetch("/api/masks/" + fid).then(r => r.json());
+  const entry = {overlay: null};
+  if(info.overlay){
+    entry.overlay = await new Promise(res => {
+      const im = new Image();
+      im.onload = () => res(im);
+      im.onerror = () => res(null);
+      im.src = "/" + info.overlay + "?t=" + Date.now();
+    });
+  }
+  MASKC.set(fid, entry);
+  return entry;
+}
+const hue = n => `hsl(${[...n].reduce((a, c) => a + c.charCodeAt(0), 0) * 47 % 360},90%,60%)`;
+async function ldraw(){
+  lcv.width = limg.naturalWidth; lcv.height = limg.naturalHeight;
+  const g = lcv.getContext("2d");
+  // masks view = the pipeline's own overlay jpg: bbox + label tag + tint,
+  // exactly what sits in letters_sam2_small/overlay/ on disk
+  let base = limg;
+  if(SHOW_MASKS){
+    const e = await loverlayFor(lcur().fid);
+    if(e.overlay) base = e.overlay;
+  }
+  g.drawImage(base, 0, 0, lcv.width, lcv.height);
+  const objs = lobjs();
+  for(const n of Object.keys(objs).sort()){
+    const c = hue(n), o = objs[n];
+    g.fillStyle = g.strokeStyle = c;
+    g.lineWidth = 3; g.font = "bold 22px monospace";
+    o.points.forEach(([x, y], i) => {
+      g.beginPath();
+      if(o.labels[i]){ g.arc(x, y, 9, 0, 7); g.fill(); }
+      else { g.moveTo(x-8,y-8); g.lineTo(x+8,y+8); g.moveTo(x+8,y-8);
+             g.lineTo(x-8,y+8); g.stroke(); }
+      g.fillText(n, x + 12, y - 8);
+    });
+  }
+  $("#lsum").textContent = Object.keys(objs).sort()
+    .map(n => `${n}:${objs[n].points.length}`).join("  ") || "";
+  const dec = (KP.decisions[lcur().scene] || {})[$("#llabel").value];
+  if(dec) $("#lsum").textContent += `  reuse:${dec.reuse}`;
+}
+async function ldropFrame(){
+  const f = lcur();
+  if(!f) return;
+  if(!confirm(`drop ${f.fid} from the project? removes the frame, its labels ` +
+              "and its masks. re-run 3 afterwards to rebuild sequences."))
+    return;
+  const r = await fetch("/api/dropframe", {method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({fid: f.fid})});
+  const j = await r.json();
+  if(j.error){ toast(j.error); return; }
+  toast("dropped " + f.fid + " — " + j.note);
+  await linit();
+}
+
+async function lsave(){
+  const f = lcur();
+  await fetch("/api/keypoints", {method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({fid: f.fid, scene: f.scene, file: f.file,
+                          objects: lobjs()})});
+}
+function laddPoint(ev, positive){
+  ev.preventDefault();
+  const lab = $("#llabel").value.trim();
+  if(!lab){ toast("type or click a label first"); return; }
+  const r = lcv.getBoundingClientRect();
+  const x = Math.round((ev.clientX - r.left) / r.width * lcv.width * 10) / 10;
+  const y = Math.round((ev.clientY - r.top) / r.height * lcv.height * 10) / 10;
+  const f = lcur();
+  KP.frames[f.fid] = KP.frames[f.fid] ||
+    {file: f.file, scene: f.scene, objects: {}};
+  const o = KP.frames[f.fid].objects[lab] =
+    KP.frames[f.fid].objects[lab] || {points: [], labels: []};
+  o.points.push([x, y]); o.labels.push(positive ? 1 : 0);
+  lcur().labelled = true;
+  lstrip(); lchips(); ldraw(); lsave();
+}
+lcv.addEventListener("click", ev => laddPoint(ev, !ev.shiftKey));
+lcv.addEventListener("contextmenu", ev => laddPoint(ev, false));
+function lgo(d){ LI = Math.max(0, Math.min(LF.length - 1, LI + d)); lshow(); }
+function lnextEmpty(){
+  for(let j = LI + 1; j < LF.length; j++){
+    const fr = KP.frames[LF[j].fid];
+    if(!fr || !Object.keys(fr.objects || {}).length){ LI = j; lshow(); return; }
+  }
+  toast("no unlabelled frames after this one");
+}
+function lundo(){
+  const objs = lobjs();
+  let best = null;
+  for(const n in objs)
+    if(!best || objs[n].points.length > objs[best].points.length) best = n;
+  if(!best || !objs[best].points.length) return;
+  objs[best].points.pop(); objs[best].labels.pop();
+  if(!objs[best].points.length) delete objs[best];
+  MASKC.delete(lcur().fid);
+  ldraw(); lsave();
+}
+function lcopyPrev(){
+  if(LI === 0) return;
+  const prev = KP.frames[LF[LI - 1].fid];
+  if(!prev){ toast("previous frame has no points"); return; }
+  const f = lcur();
+  KP.frames[f.fid] = {file: f.file, scene: f.scene,
+                      objects: JSON.parse(JSON.stringify(prev.objects))};
+  ldraw(); lsave();
+}
+async function lreuse(){
+  const lab = $("#llabel").value.trim();
+  if(!lab){ toast("set a label first"); return; }
+  const cur = (KP.decisions[lcur().scene] || {})[lab];
+  const dft = LASTLIB || (cur ? cur.reuse : "");
+  const id = prompt(`reuse element id for '${lab}' in ${lcur().scene}` +
+                    " (empty clears)", dft);
+  if(id === null) return;
+  await fetch("/api/decision", {method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({scene: lcur().scene, label: lab, reuse: id || null})});
+  KP = await fetch("/api/keypoints").then(r => r.json());
+  ldraw();
+}
+document.addEventListener("keydown", ev => {
+  if(ev.target.tagName === "INPUT") return;
+  if(ev.key === "ArrowRight") lgo(1);
+  if(ev.key === "ArrowLeft") lgo(-1);
+  if(ev.key === "u") lundo();
+  if(ev.key === "c") lcopyPrev();
+});
+
+/* ---- library rail ----------------------------------------------------- */
+// Bumped on every renderLib, and used as the seqanim cache-buster. A re-solve
+// re-renders the rail, so the new URLs pull fresh bytes; within one render the
+// animation ticker reuses the same URL per frame index and stays cached rather
+// than refetching 20x a second. The server-side THUMBS cache is keyed on the
+// frame's mtime, so the two layers agree on what "fresh" means.
+let SEQV = Date.now();
+function renderLib(){
+  SEQV = Date.now();
+  const q = $("#q").value.trim().toLowerCase();
+  let pool = $("#qunsolved").checked ? LIB : LIB.filter(e => e.solved);
+  let hits;
+  if(!q) hits = pool;
+  else {
+    hits = pool.filter(e => e.cls.toLowerCase() === q);
+    if(!hits.length) hits = pool.filter(e => e.cls.toLowerCase().startsWith(q));
+    if(!hits.length) hits = pool.filter(e => e.id.toLowerCase().includes(q));
+  }
+  $("#lib").innerHTML = hits.slice(0, 96).map(e => `
+    <div class="cell ${e.solved ? "" : "unsolved"} ${e.id === LASTLIB ? "sel" : ""}"
+         data-id="${e.id}" data-kind="${e.kind || ""}"
+         title="${e.id}${e.solved ? "" : " (unsolved)"}${e.kind === "seq" ? " — sequence" : ""}">
+      <img loading="lazy" ${e.kind === "seq"
+             ? `class="seqanim" data-seq="${e.stem}" data-nf="${e.nf || 1}"
+                src="/seqanim/${e.stem}/0?v=${SEQV}"`
+             : `src="/thumb/${e.subset}/${e.stem}"`}>
+      <div class="nm">${e.kind === "seq" ? "▶ " : ""}${e.cls}</div>
+    </div>`).join("");
+  $("#lib").querySelectorAll(".cell").forEach(c =>
+    c.addEventListener("click", () => {
+      LASTLIB = c.dataset.id;
+      LASTKIND = c.dataset.kind || null;
+      document.querySelectorAll("#lib .cell.sel").forEach(x =>
+        x.classList.remove("sel"));
+      c.classList.add("sel");
+      $("#librobot").style.display = "";
+      $("#seldisp").textContent = "selected: " + LASTLIB +
+        "   (each lib button assigns this)";
+      navigator.clipboard.writeText(c.dataset.id);
+    }));
+}
+$("#q").addEventListener("input", renderLib);
+$("#qunsolved").addEventListener("change", renderLib);
+fetch("/api/library").then(r => r.json()).then(l => { LIB = l; renderLib(); });
+
+/* ---- boot ------------------------------------------------------------- */
+linit(); refresh(); orefresh();
+setInterval(refresh, 6000);
+
+/* The default fleet string comes from the server: the arm ids in
+   leRobot-control/configs/umbra_bench.json, each port from the most recently
+   saved config that has one. A port is /dev/tty.usbmodem<serial> on macOS and
+   COM<n> on Windows, so there is no useful literal to fall back to. */
+function askArms(){
+  const dflt = (S && S.deploy_arms) || '';
+  if(!dflt) toast('no ports in the fleet configs — type them in');
+  return prompt('fleet ports  (ID|PORT|MODEL|CONN, comma-separated — ' +
+                'remembered for next time)', dflt);
+}
+
+async function deploy(arg, what){
+  const arms = askArms();
+  if(!arms) return;
+  const r = await fetch('/api/run', {method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({step: 'deploy_robot',
+                          arg: Object.assign({arms}, arg)})});
+  const j = await r.json();
+  if(j.error) toast(j.error);
+  else toast((j.note || 'deploy console opened') +
+             ' — closing that window = E-STOP  [' + what + ']');
+}
+
+async function deployRobot(){
+  if(SCENE === 'all'){ toast('pick one scene in the SCENE bar first'); return; }
+  deploy({scene: SCENE}, SCENE);
+}
+
+/* One library shape or one solved sequence, straight to the arms: no
+   package, no arrangement. The server writes the choreography first when it
+   is not in choreographies/ yet. */
+/* One clip as a film. compose (7) is the PROJECT film -- reassembled
+   elements aligned by source frame id -- so a generated motion, which has no
+   footage behind it, was previously unwatchable outside a 96px rail thumb.
+   The page shows the .gif because mp4v (the codec 10_compose_video settled
+   on) does not decode in a <video> tag; the .mp4 is written beside it. */
+let VIDWANT = null;
+function seqVideo(){
+  if(!LASTLIB){ toast('click a shape or sequence in the library rail first');
+    return; }
+  if(LASTKIND !== 'seq'){
+    toast(LASTLIB + ' is a static shape — it has one pose, not a motion');
+    return; }
+  VIDWANT = LASTLIB;
+  $('#seqvidcap').textContent = 'rendering ' + LASTLIB + '…';
+  $('#seqvid').style.display = '';
+  $('#seqvidimg').removeAttribute('src');
+  run('seq_video', LASTLIB);
+}
+function vidshow(){
+  if(!VIDWANT) return;
+  const sid = VIDWANT, url = '/seqvideo/' + sid + '_compare.gif?t=' + Date.now();
+  const im = $('#seqvidimg');
+  im.onload = () => {
+    $('#seqvidcap').innerHTML = sid + ' — target | shadow | overlay, 1/3 speed, '
+      + '2x. <a href="/seqvideo/' + sid + '_compare.mp4" download>mp4</a> '
+      + 'and the gif are in demo/out/seqvideo/.';
+  };
+  im.onerror = () => { $('#seqvidcap').textContent =
+    sid + ': no film written — check the log above.'; };
+  im.src = url;
+}
+
+async function deployLib(){
+  if(!LASTLIB){ toast('click a shape or sequence in the library rail first');
+                return; }
+  deploy({library: LASTLIB}, LASTLIB);
+}
+
+async function cycleLane(sid, cur, overridden){
+  const order = ["static", "translation", "dynamic"];
+  let next;
+  if(!overridden) next = order[(order.indexOf(cur) + 1) % 3];
+  else {
+    const i = order.indexOf(cur);
+    next = (i === 2) ? null : order[i + 1];   // past dynamic -> back to auto
+  }
+  const r = await fetch("/api/lane", {method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({seq: sid, lane: next})});
+  const j = await r.json();
+  if(j.error) toast(j.error);
+  else toast(next ? `lane -> ${next} (override)` : "lane -> auto (router decides)");
+  refresh();
+}
+
+/* ---- sequence motion preview: library seq thumbs play their frames ---- */
+let SEQTICK = 0;
+setInterval(() => {
+  const imgs = document.querySelectorAll("img.seqanim");
+  if(!imgs.length) return;
+  SEQTICK++;
+  imgs.forEach(im => {
+    const nf = +im.dataset.nf || 1;
+    if(nf > 1) im.src = `/seqanim/${im.dataset.seq}/${SEQTICK % nf}?v=${SEQV}`;
+  });
+}, 350);
+</script>

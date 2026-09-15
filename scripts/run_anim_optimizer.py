@@ -230,7 +230,7 @@ def main():
 
     outroot = a.out or os.path.join(a.bench, "optimized", "anim-optimizer")
 
-    seqs = [json.loads(l) for l in open(os.path.join(a.bench, "sequences.jsonl"))]
+    seqs = [json.loads(l) for l in open(os.path.join(a.bench, "sequences_paper.jsonl"))]
     if a.groups:
         seqs = [s for s in seqs if s["group"] in a.groups]
     if a.only:

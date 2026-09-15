@@ -1,0 +1,47 @@
+# umbra-bench — evaluation dependencies
+#
+# Verified 2026-09-01 on a clean env: every metric in scripts/metrics.py (18 keys)
+# and every attribute in scripts/shape_attributes.py (33 fields, persistent-homology
+# included) computes, with no field falling back to None for a missing package.
+# Reproduced optimized/big-budget-fitted/digits/0_dejavusans-bold: iou 0.8134 vs the
+# 0.813 recorded in its results.json.
+#
+#   pip install -r requirements-eval.txt
+#
+# Lanes are separated because they cost very different amounts to install. The
+# metrics lane is the only one every other lane depends on.
+
+# ── Lane 1: metrics (scripts/compute_metrics.py) ──────────────────────────────
+# Pure CPU, no GPU, no model download. This is the lane README's example command
+# uses. Pillow comes from pip and NOT from conda: the conda build's _imaging DLL
+# collides with pip-installed torch on Windows (same reason environment.yml in
+# fleet-shadow-art pins it this way), and lane 3 installs torch.
+numpy
+scipy
+pillow
+opencv-python-headless
+scikit-image
+gudhi                 # persistent homology: every ph_* attribute + pw_h0/pw_h1
+POT                   # gudhi.wasserstein backend; without it pw_* return None
+pandas                # scripts/make_corr_figures.py, _build_browser_payload.py
+matplotlib            # figures and galleries
+
+# ── Lane 2: optimizer sweep (scripts/run_base_optimizer.py) ───────────────────
+# Needs fleet-shadow-art/motion-aware-shadow on disk; pass its path with --repo.
+# Renders through MuJoCo's offscreen GL, so it wants a working GL context.
+mujoco>=3.0.0
+cma
+scikit-learn          # only for the --use-surrogate ablation
+
+# ── Lane 3: recognizability (scripts/semantic_metrics.py) ─────────────────────
+# clip_retrieval() downloads ViT-B-32 / laion2b_s34b_b79k on first use (~600 MB).
+# On an NVIDIA box install torch from the CUDA index FIRST, then this file:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu124
+torch
+open_clip_torch
+
+# ── Lane 4: teleop segmentation (scripts/segment_teleop.py) ───────────────────
+# SAM2 is not on PyPI under this name; install from source and fetch a checkpoint:
+#   pip install "git+https://github.com/facebookresearch/sam2.git"
+# Left commented so the file installs cleanly without network access to GitHub.
+# sam2

@@ -1,0 +1,727 @@
+#!/usr/bin/env python3
+"""pack.py — one demo, one folder: images, video, and what the robots need.
+
+    python demo/pack.py --name family \\
+        --clip family_ad_scene_06_A --clip family_ad_scene_06_L_stab \\
+        --library teleop_candle_01_mask
+
+Assembly is manual by design; what is NOT manual is hunting through
+optimized/ and out/ for the pieces. A package collects, per element,
+exactly the three things a show is made of:
+
+    elements/<id>/frames/       canvas PNGs (clips) or the silhouette (library)
+    elements/<id>/joints.csv    the robot poses -- one row per frame,
+                                arm0_q0..arm2_q5, RADIANS, 3 arms x 6 dof
+    elements/<id>/meta.json     fps, source frame ids, lane, fit, provenance
+    video/                      the composited scene mp4s, if already built
+    package.json + README.md    the inventory and the units caveat
+
+Clips come from each project's out/reassembled/ (run 08_reassemble first) and their
+joints from optimized/<id>/frame_*/best_q.npy. Library elements -- the point
+of the library is reuse, so a static shape that the benchmark already solved
+is pulled, never re-solved -- come from optimized/<sweep>/<subset>/<stem>/:
+the best run's q_rad and the rendered silhouette.
+
+Joints are solver-space radians against urdf/SO101/so101_new_calib.urdf with
+the solve's own stage layout (recorded in meta.json). The physical-rig unit
+mapping and base placement are the deploy gate documented in README section C;
+the package carries everything that is knowable without the lab.
+"""
+from __future__ import annotations
+
+import argparse
+import ast
+import csv
+import glob
+import math
+import re
+import json
+import os
+import shutil
+import sys
+from pathlib import Path
+
+import numpy as np
+
+ROOT = Path(__file__).resolve().parent
+BENCH = ROOT.parent
+
+# The solver rig behind every solve in this repo (run logs: light_y=1.00
+# wall_y=-2.40, arms ARM_GAP apart, light 0.30 high, arm 0 nearest the
+# light), mapped into the UI frame per Shadow_robot_ui/render_server/
+# optimize.py's documented transform: base.x = -depth, lightH = h + tableY
+# (0.55). This is what makes the Play preview's shadow geometry match the
+# solve instead of whatever stage the UI happens to have open.
+#
+# ARM_GAP is 0.25 as of the 2026-09-08 re-solve. It was a hardcoded 0.2 here
+# while run_sequence.py inherited renderer.py's 0.15, so every demo clip was
+# solved at one spacing and exported at another -- the Play preview drew a
+# shadow the optimiser had never been asked for, and the comment above claimed
+# the opposite. Bases are DERIVED from it now, so the two can only disagree by
+# someone passing --arm-gap without changing this constant. A clip solved
+# before that change is stale here: re-solve rather than re-export it.
+ARM_GAP = 0.25
+# What every solve before CONFIG.json existed ran at: night_solve_cmd never
+# passed --arm-gap, so they all inherited renderer.py's default. Kept as a
+# named constant because it is the archive's spacing, not a fallback guess.
+LEGACY_ARM_GAP = 0.15
+CHOREO_SCENE = {"lightX": -1.0, "lightY": 0, "lightH": 0.85, "screenX": 2.4}
+CHOREO_BASES = [{"x": round(ARM_GAP * i, 6), "y": 0, "z": 0, "yaw": 0}
+                for i in range(3)]
+
+
+def latest_ts(run: Path) -> str | None:
+    js = sorted(run.glob("summary_*.json"))
+    return js[-1].stem[len("summary_"):] if js else None
+
+
+def recorded_run(sid: str, source: str = "optimizer"):
+    """(run_dir, ts) for the solve the SCORER actually read, or None.
+
+    `results/sequence_metrics_<sid>.csv` records the shadow path each metric was
+    computed from, and that run is not always `optimized/<sid>`: star_spin's
+    numbers come from `optimized/bigstar_star_spin/` (the scale-0.85 variant).
+    Reconstructing the path by convention instead made three surfaces disagree
+    -- the dashboard drew the recorded run while the studio preview and this
+    exporter both drew `optimized/<sid>`, so the card showed one solve and the
+    deploy shipped another, with no way to see that from either.
+
+    The CSV is canonical: it is what the numbers on the card were computed
+    against, so the picture, the metrics and the deploy all describe one solve.
+    Falls back to the conventional path when no CSV row names a run, which is
+    every clip scored before this and all but one after.
+
+    EVERY results/sequence_metrics_*.csv is searched, not just the one named
+    after `sid`. sequence_metrics.py tags its output file after the --run
+    DIRECTORY, so a second solve of one clip lands in a differently-named file
+    -- `optimizer_n5` for star_spinning lives in sequence_metrics_star_n5.csv.
+    Looking only at the sid-named file found the shipping solve and reported
+    every variant as unscored. Rows are matched on (sequence_id, source), the
+    same key _build_sequences_payload.read_solves() uses, so what the card
+    calls a solve and what this exports are the same thing; newest file wins a
+    duplicate, also as there.
+    """
+    best = None
+    pat = re.compile(r"optimized[\\/]([^\\/]+)[\\/]frame_\d+_(\d{8}_\d{6})")
+    for csv_path in sorted(glob.glob(str(BENCH / "results"
+                                        / "sequence_metrics_*.csv")),
+                           key=os.path.getmtime):
+        try:
+            with open(csv_path, encoding="utf-8") as f:
+                for r in csv.DictReader(f):
+                    if r.get("sequence_id") != sid or r.get("source") != source:
+                        continue
+                    m = pat.search((r.get("shadow") or "").replace("\\", "/"))
+                    if m:
+                        run = BENCH / "optimized" / m.group(1)
+                        if run.is_dir():
+                            best = (run, m.group(2))
+                            break
+        except (OSError, csv.Error):
+            continue
+    return best
+
+
+def write_joints(path: Path, rows: list[np.ndarray]):
+    n_arms = rows[0].size // 6
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["frame"] + [f"arm{a}_q{j}" for a in range(n_arms)
+                                for j in range(6)])
+        for i, q in enumerate(rows):
+            w.writerow([i] + [f"{v:.6f}" for v in np.asarray(q).ravel()])
+
+
+DEFAULT_CLIP_FPS = 5.0
+
+
+def reassembly_of(sid: str):
+    """(dir, reassembly.json) for a reassembled clip, or (None, None)."""
+    proj = sid.split("_scene_")[0]
+    for d in (ROOT / "projects" / proj / "out" / "reassembled" / sid,
+              ROOT / "out" / "reassembled" / sid):     # pre-migration layout
+        if (d / "reassembly.json").exists():
+            return d, json.loads((d / "reassembly.json")
+                                 .read_text(encoding="utf-8"))
+    return None, None
+
+
+def seq_row(sid: str) -> dict | None:
+    """The sequences.jsonl record for `sid`, the index the track is built on."""
+    p = BENCH / "sequences.jsonl"
+    if not p.exists():
+        return None
+    for line in p.read_text(encoding="utf-8").splitlines():
+        if line.strip() and json.loads(line).get("id") == sid:
+            return json.loads(line)
+    return None
+
+
+def clip_poses(sid: str, fps: float | None = None, source: str = "optimizer"):
+    """The pose track for a solved sequence -- what a DEPLOY needs, no more.
+
+    `source` picks WHICH solve, and matches the names the dashboard shows on a
+    card: one clip can carry several (optimizer, optimizer_n5, optimizer_v0).
+    They are not variants of one run -- a 5-arm solve is a different rig -- so
+    exporting the wrong one ships poses for arms that are not there. Default
+    stays `optimizer`: the shipping solve, and the only one deploy assumes.
+
+    Reassembly is a VIDEO step: 08_reassemble.py inverts the clip fit to put
+    the shadow back where the ad drew it on the 1920x1080 canvas. On hardware
+    the rig casts at the FITTED position and that inverse never happens
+    (README section C), so requiring reassembly.json before a choreography
+    could be written blocked every clip that has no footage behind it -- all
+    13 generated motions, each one fully solved, none with a canvas to be put
+    back on. The poses come from the solve and the frame count from
+    sequences.jsonl; reassembly.json is read only where it exists, for the fps
+    the footage was sampled at and the held-static replication.
+
+    Returns (qs, fps, info).
+    """
+    rec = recorded_run(sid, source)
+    if rec is not None:
+        run, ts = rec
+    else:
+        # Only the shipping source may fall back to the conventional path. A
+        # named variant that no CSV row claims has NOT been scored, and
+        # silently handing back optimized/<sid> would export the 3-arm solve
+        # under the name of the 5-arm one.
+        if source != "optimizer":
+            sys.exit(f"[!] {sid}: no solve recorded for source {source!r} -- "
+                     f"score it first:\n"
+                     f"    python scripts/sequence_metrics.py --run "
+                     f"<run_dir> --sequence {sid} --source {source}")
+        run = BENCH / "optimized" / sid
+        ts = latest_ts(run)
+    if ts is None:
+        sys.exit(f"[!] {sid}: no solve in optimized/{sid} -- solve the clip "
+                 f"first (demo/README.md, 'Routing, then solving')")
+    qs = [np.load(p) for p in sorted(run.glob(f"frame_*_{ts}/best_q.npy"))]
+    if not qs:
+        sys.exit(f"[!] {sid}: no best_q.npy under optimized/{sid}")
+    re_dir, r = reassembly_of(sid)
+    row = seq_row(sid)
+    n_frames = int((r or {}).get("n_frames")
+                   or (row or {}).get("n_frames") or len(qs))
+    # A held clip repeats one pose; a solved clip must match frame for frame.
+    # Only a DECLARED hold replicates -- inferring one from a single pose
+    # would turn a half-finished solve into a clip that looks complete.
+    if (r or {}).get("held_static") and len(qs) == 1:
+        qs = qs * n_frames
+    if len(qs) != n_frames:
+        sys.exit(f"[!] {sid}: {len(qs)} poses for {n_frames} frames")
+    if fps is None:
+        fps = (r or {}).get("fps") or DEFAULT_CLIP_FPS
+    return qs, float(fps), {
+        "n_frames": n_frames, "ts": ts, "run": run, "re_dir": re_dir,
+        "reassembled": r is not None, "reassembly": r,
+        "held_static": bool((r or {}).get("held_static")),
+        "loop": bool(((row or {}).get("target_motion") or {}).get("loop")),
+        "arm_gap_m": run_arm_gap(run),
+    }
+
+
+def run_arm_gap(run: Path) -> float:
+    """The spacing THIS run was solved at, so its export can describe the rig
+    it actually used rather than whichever one the constant happens to name.
+
+    CONFIG.json is written by the batch driver from the solver's own argv.
+    Without one the run predates that, and every solve before it went through
+    night_solve_cmd, which never passed --arm-gap and so inherited renderer.py
+    ARM_GAP = 0.15. That is a fact about those runs, not a guess -- which is
+    what makes the archive exportable instead of needing 35 re-solves.
+    """
+    try:
+        c = json.loads((run / "CONFIG.json").read_text(encoding="utf-8"))
+        return float(c["arm_gap_m"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return LEGACY_ARM_GAP
+
+
+def pack_clip(sid: str, dest: Path):
+    qs, _fps, info = clip_poses(sid)
+    re_dir, r, run = info["re_dir"], info["reassembly"], info["run"]
+    if re_dir is None:
+        sys.exit(f"[!] {sid}: no reassembly -- run "
+                 f"'python demo/08_reassemble.py --sequence {sid}' first")
+    (dest / "frames").mkdir(parents=True)
+    for p in sorted(re_dir.glob("f*.png")):
+        shutil.copyfile(p, dest / "frames" / p.name)
+    write_joints(dest / "joints.csv", qs)
+    pack_clip.last_qs, pack_clip.last_fps = qs, None
+    summ = json.loads(sorted(run.glob("summary_*.json"))[-1]
+                      .read_text(encoding="utf-8"))
+    (dest / "meta.json").write_text(json.dumps({
+        "kind": "clip", "sequence": sid, "n_frames": r["n_frames"],
+        "fps": r["fps"], "source_frame_ids": r.get("source_frame_ids"),
+        "held_static": r.get("held_static", False),
+        "stabilized_from": r.get("stabilized_from"),
+        "trajectory_applied": r.get("trajectory_applied", False),
+        "fit_applied_by_solver": r.get("fit_applied_by_solver"),
+        "avg_iou": summ.get("avg_iou"), "scene": summ.get("scene"),
+        "config": summ.get("config"),
+        "urdf": summ.get("urdf"), "n_arms": summ.get("n_robots"),
+    }, indent=1), encoding="utf-8")
+    pack_clip.last_fps = r["fps"]
+    return r["n_frames"]
+
+
+def pack_library(stem: str, sweep: str, dest: Path):
+    live = {json.loads(l)["id"]: json.loads(l)
+            for l in open(BENCH / "metadata.jsonl", encoding="utf-8")}
+    if stem not in live:
+        sys.exit(f"[!] {stem}: not in metadata.jsonl -- the library is the "
+                 "benchmark, and this id is not a row of it")
+    rec = live[stem]
+    subset, tstem = rec["subset"], Path(rec["target"]).stem
+    tdir = BENCH / "optimized" / sweep / subset / tstem
+    rj = tdir / "results.json"
+    if not rj.exists():
+        sys.exit(f"[!] {stem}: no solve at {tdir} -- solved sweeps are "
+                 f"big-budget-grounded / small-budget-grounded")
+    res = json.loads(rj.read_text(encoding="utf-8"))
+    best = res["runs"][res["best_run"]]
+    (dest / "frames").mkdir(parents=True)
+    shutil.copyfile(tdir / f"{tstem}_best.png", dest / "frames" / "silhouette.png")
+    shutil.copyfile(BENCH / rec["target"], dest / "frames" / "target.png")
+    write_joints(dest / "joints.csv", [np.asarray(best["q_rad"])])
+    pack_library.last_qs = [np.asarray(best["q_rad"], dtype=float).ravel()]
+    # The sweep's own rig, so the choreography's bases match the pose. The
+    # static sweeps are 0.2 and are not being re-solved onto the sequence
+    # spacing; exporting them at ARM_GAP would misplace every library shape.
+    pack_library.last_gap = float((res.get("rig") or {}).get("arm_gap_m")
+                                  or ARM_GAP)
+    (dest / "meta.json").write_text(json.dumps({
+        "kind": "library_static", "id": stem, "class": rec.get("class"),
+        "subset": subset, "sweep": sweep,
+        "best_iou": res.get("best_iou"), "rig": res.get("rig"),
+        "optimizer": res.get("optimizer"),
+        "fit": res.get("fit"), "prompt": rec.get("prompt"),
+    }, indent=1), encoding="utf-8")
+    return 1
+
+
+CHOREO_HZ = 30
+
+
+def interp_frames(qs, src_hz: float):
+    """Linear per-joint interpolation from solve keyframes up to CHOREO_HZ.
+
+    The deploy loop sends each frame raw at 1/hz with no interpolation of its
+    own (verified in render_server/deploy.py), so a 5 Hz clip commands up to
+    68 deg of travel in one 200 ms tick -- and the Arrange compiler resamples
+    nearest-neighbour, making it 33 ms. Shipping 30 Hz with the solver poses
+    as keyframes keeps the same motion, smooth on hardware and in Play.
+    """
+    qs = [np.asarray(q, dtype=float).ravel() for q in qs]
+    if len(qs) < 2:
+        return qs
+    steps = max(1, int(round(CHOREO_HZ / max(src_hz, 0.1))))
+    out = []
+    for a, b in zip(qs, qs[1:]):
+        for t in range(steps):
+            out.append(a + (b - a) * (t / steps))
+    out.append(qs[-1])
+    return out
+
+
+_JOINT_LIMITS = "unset"
+# The UI checkout sits NEXT TO this repo (everything else here resolves it
+# that way: pack's choreo hand-off, deploy_to_robot, studio's MAS). A path
+# under ~/Documents/GitHub was true on one machine only, and on any other the
+# joint-limit audit silently skipped itself. Keep that machine working via
+# the fallback list, and let DEPLOY_MODEL_XML env-var override both.
+_UI_XML = "Shadow_robot_ui/assets/SO101_urdf/so101_new_calib.xml"
+DEPLOY_MODEL_XML = next(
+    (p for p in (
+        Path(os.environ["DEPLOY_MODEL_XML"])
+        if os.environ.get("DEPLOY_MODEL_XML") else None,
+        BENCH.parent / "fleet-shadow-art" / _UI_XML,
+        Path.home() / "Documents/GitHub/fleet-shadow-art" / _UI_XML,
+        Path.home() / "GitHub/fleet-shadow-art" / _UI_XML,
+    ) if p is not None and p.exists()),
+    BENCH.parent / "fleet-shadow-art" / _UI_XML)
+
+
+def joint_limits():
+    """(6,2) lo/hi array for the deploy model's actuated joints, in the
+    envelope's q order, read from the UI's own MJCF so the numbers can
+    never drift from what deploy actually loads. None when the checkout
+    is not present (the check is then skipped, not faked)."""
+    global _JOINT_LIMITS
+    if not isinstance(_JOINT_LIMITS, str):
+        return _JOINT_LIMITS
+    order = ["shoulder_pan", "shoulder_lift", "elbow_flex",
+             "wrist_flex", "wrist_roll", "gripper"]
+    try:
+        x = DEPLOY_MODEL_XML.read_text(encoding="utf-8")
+        found = {}
+        for mt in re.finditer(r"<joint[^>]*>", x):
+            nm = re.search(r'name="([^"]+)"', mt.group(0))
+            rg = re.search(r'range="([^"]+)"', mt.group(0))
+            if nm and rg and nm.group(1) in order:
+                found[nm.group(1)] = [float(v) for v in rg.group(1).split()]
+        _JOINT_LIMITS = (np.array([found[k] for k in order])
+                         if len(found) == 6 else None)
+    except OSError:
+        _JOINT_LIMITS = None
+    return _JOINT_LIMITS
+
+
+FLEET_SHADOW_ART = next(
+    (Path(c) for c in (
+        os.environ.get("FLEET_SHADOW_ART"),
+        str(BENCH.parent / "fleet-shadow-art"),
+        os.path.expanduser("~/dev/fleet-shadow-art"),
+        os.path.expanduser("~/Documents/GitHub/fleet-shadow-art"),
+     ) if c and os.path.isdir(os.path.join(c, "motion-aware-shadow"))),
+    BENCH.parent / "fleet-shadow-art")
+
+
+def large_q_jump_deg() -> float | None:
+    """`motion_planner.LARGE_Q_JUMP` in degrees, READ from the other repo.
+
+    The planner's own bound, never a copy kept here -- the same rule
+    scripts/sequence_metrics.py follows, and for the same reason: a threshold
+    duplicated in two repos is a threshold that will disagree with itself.
+    That module cannot simply be imported for it (it pulls scipy, which the
+    deploy env has no reason to carry), so the ~20 lines are repeated and the
+    NUMBER is not. motion_planner imports mujoco at module level, so a failed
+    import falls back to reading the constant out of the source with `ast`.
+    Returns None when the checkout is absent: the check is then skipped and
+    said to be skipped, never silently passed.
+    """
+    ms = str(FLEET_SHADOW_ART / "motion-aware-shadow")
+    try:
+        sys.path.insert(0, ms)
+        from motion_planner import LARGE_Q_JUMP        # type: ignore
+        return math.degrees(float(LARGE_Q_JUMP))
+    except Exception:
+        pass
+    finally:
+        if ms in sys.path:
+            sys.path.remove(ms)
+    try:
+        tree = ast.parse(Path(ms, "motion_planner.py").read_text(encoding="utf-8"))
+        for node in tree.body:
+            if isinstance(node, ast.Assign):
+                for t in node.targets:
+                    if isinstance(t, ast.Name) and t.id == "LARGE_Q_JUMP":
+                        return math.degrees(float(ast.literal_eval(node.value)))
+    except (OSError, SyntaxError, ValueError):
+        pass
+    return None
+
+
+def transition_check(qs: list[np.ndarray]) -> dict:
+    """Per-joint travel between consecutive SOLVER keyframes, against the
+    planner's bound.
+
+    On the keyframes, not on the 30 Hz envelope: interpolation divides a
+    291 deg swing into 48 deg steps and makes an unperformable clip look
+    smooth. It is the keyframe-to-keyframe demand the arms cannot meet --
+    SEQUENCES.md section 0, where a clip averaging 0.6679 per-frame IoU needed
+    291 deg from one joint between two individually-good frames.
+
+    Interior transitions only. The envelope holds the first and last pose for
+    a second at each end and never performs a wrap, so a looping clip's
+    last-to-first step is not something this file asks anyone to execute.
+    """
+    thr = large_q_jump_deg()
+    if len(qs) < 2:
+        return {"thr_deg": thr, "dq_max_deg": [], "over": []}
+    Q = np.degrees(np.stack([np.asarray(q, dtype=float).ravel() for q in qs]))
+    dq = np.abs(np.diff(Q, axis=0)).max(axis=1)
+    over = [] if thr is None else [i for i, d in enumerate(dq) if d > thr]
+    return {"thr_deg": thr, "dq_max_deg": [float(d) for d in dq], "over": over}
+
+
+def write_choreo(dest: Path, name: str, hz: float, qs: list[np.ndarray],
+                 force: bool = False, arm_gap: float | None = None):
+    """The unified clip envelope Shadow_robot_ui consumes, one file per element.
+
+    Dropping this into fleet-shadow-art/choreographies/ is the whole deploy
+    hand-off: Play lists it by filename stem, previews it against the scene
+    block, and streams robots[].frames to the arms as-is -- solver radians,
+    uncalibrated (the driver applies per-arm visual offsets at send time).
+    Name and filename stem must match and may only use [A-Za-z0-9_-].
+
+    Every choreography this repo writes goes through here, so the feasibility
+    gate goes here too: a clip whose keyframes demand more per-joint travel
+    than the planner's LARGE_Q_JUMP is not written unless `force` is set. It is
+    a physical bound, not a smoothness preference, and the clip that motivates
+    it -- star_spin, 4 of 4 transitions over it, one at 291 deg -- reads as a
+    perfectly good result by every per-frame number on the card.
+    """
+    chk = transition_check(qs)
+    if chk["over"] and not force:
+        thr, dq = chk["thr_deg"], chk["dq_max_deg"]
+        steps = ", ".join(f"f{i:02d}->f{i + 1:02d} {dq[i]:.1f}deg"
+                          for i in chk["over"])
+        sys.exit(
+            f"[!] {name}: {len(chk['over'])}/{len(dq)} transitions exceed the "
+            f"planner's {thr:.1f}deg per-joint bound -- NOT written.\n"
+            f"    {steps}\n"
+            f"    The arms cannot perform this clip; per-frame IoU cannot see "
+            f"it (SEQUENCES.md section 0).\n"
+            f"    Re-solve with a temporal barrier "
+            f"(run_sequence.py --reachability-penalty 100), or pass --force to "
+            f"export it anyway for a Play preview, where nothing moves.")
+    if chk["over"]:
+        thr = chk["thr_deg"]
+        print(f"    {name}: [!] FORCED -- {len(chk['over'])}/"
+              f"{len(chk['dq_max_deg'])} transitions over the {thr:.1f}deg "
+              f"bound; preview only, do not run on hardware")
+    elif chk["thr_deg"] is None:
+        print(f"    {name}: [!] feasibility unchecked -- no fleet-shadow-art "
+              f"checkout at {FLEET_SHADOW_ART} (skipped, not passed)")
+    src_hz = hz
+    qs = interp_frames(qs, src_hz)
+    # a single-pose clip needs a BODY between the crossfade holds: without
+    # one, an interior element spends its whole span blending with its
+    # neighbours and is on screen alone for a single frame (measured 0.03 s
+    # by umbra-bench-16). 1.5 s of display keeps every letter readable.
+    if len(qs) == 1:
+        qs = [np.asarray(qs[0], dtype=float)] * int(1.5 * CHOREO_HZ)
+    hz = CHOREO_HZ
+    # 1 s of held pose at BOTH ends: the arrangement crossfades consecutive
+    # elements by overlapping exactly this window, so every seam is a pure
+    # static-to-static morph (~0.15 rad/frame) instead of a hard snap --
+    # the compiler blends overlapping spans per joint, which is correct
+    # behavior when the overlap is deliberate (umbra-bench-16's measurement:
+    # un-held seams commanded up to 263 deg in one 33 ms frame).
+    hold = [np.asarray(qs[0], dtype=float)] * CHOREO_HZ
+    tail = [np.asarray(qs[-1], dtype=float)] * CHOREO_HZ
+    qs = hold + [np.asarray(q, dtype=float) for q in qs] + tail
+    n_arms = np.asarray(qs[0]).size // 6
+    # The bases must describe the rig THIS pose was solved on, and the two
+    # sources in this repo do not agree: sequence clips are solved at
+    # ARM_GAP (0.25) while the static benchmark sweeps recorded 0.2 in their
+    # own results.json. Taking it from the caller keeps each export honest
+    # instead of making one of them silently wrong -- the exact failure the
+    # 0.15/0.2 split was.
+    gap = ARM_GAP if arm_gap is None else float(arm_gap)
+    robots = []
+    for i in range(n_arms):
+        robots.append({
+            "id": f"SR{101 + i}", "model": "so-101",
+            "base": {"x": round(gap * i, 6), "y": 0, "z": 0, "yaw": 0},
+            # cutout must stay null: with one set, the UI reinterprets q5 as a
+            # rod-servo spin and drives only five joints
+            "cutout": None, "cutout_id": None, "cutout_rot": 0, "mount": None,
+            "start_frame": 0,
+            "frames": [[round(float(v), 6) for v in
+                        np.asarray(q).ravel()[i * 6:(i + 1) * 6]] for q in qs],
+        })
+    # step check on every pack: a pose change preserves structure but not
+    # step sizes (a re-solve tripled one clip's max step) -- surface it here
+    # so nothing crosses the 0.21 rad/frame deploy comfort line unseen
+    if len(qs) > 1:
+        step = float(np.abs(np.diff(np.stack(qs), axis=0)).max())
+        flag = "  [!] near/over 0.21 rad" if step > 0.2 else ""
+        print(f"    {name}: max step {step:.4f} rad{flag}")
+    # limit-margin check: some solves settle EXACTLY on a joint stop and the
+    # letters hold that pose statically for seconds. deploy.py streams frames
+    # unclamped, so a real arm whose calibration zero is slightly off the
+    # model would stall against its stop -- make zero-margin poses visible.
+    lims = joint_limits()
+    if lims is not None and qs:
+        JN = ["pan", "lift", "elbow", "wrist_flex", "wrist_roll", "gripper"]
+        Q = np.stack(qs).reshape(len(qs), -1, 6)
+        per_j = np.minimum((Q - lims[None, None, :, 0]).min(axis=(0, 1)),
+                           (lims[None, None, :, 1] - Q).min(axis=(0, 1)))
+        worst = int(per_j.argmin())
+        if per_j[worst] < 0.01:
+            tight = [JN[k] for k in range(6) if per_j[k] < 0.01]
+            print(f"    {name}: [!] {'/'.join(tight)} within "
+                  f"{max(float(per_j[worst]), 0):.4f} rad of a joint stop "
+                  "-- zero hardware margin if calibration drifts")
+    clip = {"name": name, "stage": None,
+            "source": {"method": "umbra-bench demo/pack.py"},
+            "hz": int(round(hz)), "n_frames": len(qs), "kind": "clip",
+            "scene": CHOREO_SCENE, "robots": robots}
+    dest.mkdir(parents=True, exist_ok=True)
+    (dest / f"{name}.json").write_text(json.dumps(clip), encoding="utf-8")
+
+
+PKG_README = """# demo package: {name}
+
+Self-contained material for one show. Per element:
+
+* `frames/` -- for a clip: 1-bit 1920x1080 canvas frames, dark = shadow,
+  already at authored position/scale; align elements by `source_frame_ids`
+  in `meta.json`, never by frame index. For a library element: the solver's
+  rendered `silhouette.png` (128 px solver frame -- placement is yours) and
+  the authored `target.png`.
+* `joints.csv` -- one row per frame: `arm0_q0..arm{{A}}_q5`, **radians**,
+  6 dof per arm, against the URDF named in `meta.json` and the stage layout
+  recorded there. A library element has a single row (a held pose).
+* `meta.json` -- fps, provenance, fit, IoU.
+
+`video/` holds the already-composited scene mp4s if they were built.
+
+## Robot deploy: `choreo/`
+
+One `choreo/<element>.json` per element, in the exact "unified clip envelope"
+Shadow_robot_ui consumes. To deploy:
+
+1. copy `choreo/*.json` into `fleet-shadow-art/choreographies/`
+2. start the UI (`Shadow_robot_ui/start.sh`) and open **Play** -- each element
+   lists by filename; preview, arrange on the timeline, deploy.
+
+The scene block carries the solve's own rig (light 1.0 m in front of arm 0,
+arms 0.2 m apart in depth, screen 2.4 m behind, mapped into the UI frame), so
+the preview's shadow geometry matches the solve. Joints are UNCALIBRATED
+solver radians -- the arm driver applies each robot's visual offsets at send
+time; do not pre-apply them. Serial ports are an operator setting in the
+Robot console, never part of a clip. Robot ids are SR101 (nearest the light),
+SR102, SR103; if your stage config names differ, Play remaps positionally and
+says so in the status bar.
+
+**Deploy caveat (unchanged from demo/README.md section C):** solver joints are
+model-space. Physical playback still needs the lab's base placement, the
+Play/render_server stage JSON, and the SR10x unit mapping -- the three
+TODO-user facts. Everything knowable without the lab is in this folder.
+
+Combine shadows by union (`np.minimum` on greyscale). Manual assembly is the
+intended path.
+"""
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--name", required=True)
+    ap.add_argument("--clip", action="append", default=[],
+                    help="sequence id (reassembled + solved)")
+    ap.add_argument("--library", action="append", default=[],
+                    help="metadata.jsonl id of a static library element")
+    ap.add_argument("--sweep", default="big-budget-grounded",
+                    help="which sweep a library element's solve is pulled from")
+    ap.add_argument("--no-video", action="store_true",
+                    help="skip copying demo/out/video into the package")
+    ap.add_argument("--force", action="store_true",
+                    help="overwrite an existing package of this name")
+    a = ap.parse_args()
+    if not a.clip and not a.library:
+        ap.error("an empty show: give --clip and/or --library")
+
+    pkg = ROOT / "packages" / a.name
+    if pkg.exists():
+        if not a.force:
+            sys.exit(f"[!] {pkg} exists -- --force to overwrite")
+        shutil.rmtree(pkg)
+
+    elements = {}
+    for sid in a.clip:
+        n = pack_clip(sid, pkg / "elements" / sid)
+        write_choreo(pkg / "choreo", sid, pack_clip.last_fps or 5.0,
+                     pack_clip.last_qs)
+        elements[sid] = {"kind": "clip", "n_frames": n}
+        print(f"  clip     {sid:<28} {n} frames + choreo")
+    # several elements may reuse the same library entry; pack it once
+    seen_lib = set()
+    a.library = [x for x in a.library
+                 if not (x in seen_lib or seen_lib.add(x))]
+    for lid in a.library:
+        n = pack_library(lid, a.sweep, pkg / "elements" / lid)
+        write_choreo(pkg / "choreo", lid, 5.0, pack_library.last_qs,
+                     arm_gap=pack_library.last_gap)
+        elements[lid] = {"kind": "library_static", "sweep": a.sweep}
+        print(f"  library  {lid:<28} 1 pose ({a.sweep}, gap "
+              f"{pack_library.last_gap:g} m) + choreo")
+
+    # Scene replay: one UI arrangement per scene, elements offset by when
+    # they enter the shot (source frame ids at the footage's 25 fps). Copy
+    # these into fleet-shadow-art/arrangements/ next to the choreo files --
+    # Play's Arrange loader compiles them into a single timeline.
+    by_scene = {}
+
+    def slot(sid, seg_name, entry, dur):
+        m = re.search(r"_(scene_\d+)", sid)
+        if m:
+            by_scene.setdefault(m.group(1), []).append((seg_name, entry, dur))
+
+    for sid in a.clip:
+        mj = pkg / "elements" / sid / "meta.json"
+        if not mj.exists():
+            continue
+        meta = json.loads(mj.read_text(encoding="utf-8"))
+        ids = meta.get("source_frame_ids") or []
+        if ids:
+            slot(sid, sid, int(str(ids[0]).lstrip("f")),
+                 meta.get("n_frames", 1) / float(meta.get("fps") or 5.0))
+    # library/sequence-assigned elements enter the scene timeline too: the
+    # seg references the stand-in clip by name; a single-pose library clip
+    # is short, and the hold gap keeps its pose up for the rest of the slot
+    ass_file = BENCH / "demo" / "projects" / a.name / "assignments.json"
+    if ass_file.exists():
+        for sid, ass in sorted(json.loads(
+                ass_file.read_text(encoding="utf-8")).items()):
+            sj = BENCH / "sequences" / sid / "source.json"
+            if not sj.exists():
+                continue
+            src = json.loads(sj.read_text(encoding="utf-8"))
+            ids = src.get("frame_ids") or []
+            if not ids:
+                continue
+            dur = len(sorted((BENCH / "sequences" / sid).glob("f*.png")))                 / float(src.get("fps") or 5.0)
+            stand_in = (ass.get("library_id") if ass.get("mode") == "library"
+                        else ass.get("donor") if ass.get("mode") == "sequence"
+                        else None)
+            if not stand_in:
+                continue
+            if not (pkg / "choreo" / f"{stand_in}.json").exists():
+                print(f"  [!] arrangement skips {sid}: stand-in {stand_in} "
+                      "has no choreo in this package")
+                continue
+            slot(sid, stand_in, int(str(ids[0]).lstrip("f")), dur)
+    # Offsets are CUMULATIVE durations in footage order, never raw entry
+    # times: all clips drive the same three arms, and the UI's overlap
+    # semantics is a per-joint linear BLEND (a crossfade feature), so
+    # co-present entry times would command meaningless in-between poses.
+    # Three arms play one element at a time; a 0.5 s gap between elements
+    # holds the last pose, which the compiler treats as a safe hold.
+    XFADE = 1.0          # matches the held second at each clip end
+    for scene, entries in sorted(by_scene.items()):
+        segs, t = [], 0.0
+        for seg_name, entry, dur in sorted(entries, key=lambda x: x[1]):
+            cj = pkg / "choreo" / f"{seg_name}.json"
+            c = json.loads(cj.read_text(encoding="utf-8"))
+            # the CLIP's real span, not the element's footage duration --
+            # slots sized from footage left pixar scenes 60-84% dead air
+            clip_dur = c["n_frames"] / float(c["hz"])
+            segs.append({"name": seg_name, "offset": round(t, 3)})
+            t += clip_dur - XFADE
+        arr = {"name": f"{a.name}_{scene}", "segs": segs, "musicOffset": 0.0}
+        d = pkg / "choreo" / "arrangements"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"{a.name}_{scene}.json").write_text(json.dumps(arr, indent=1),
+                                                  encoding="utf-8")
+    if by_scene:
+        print(f"  arrange  {len(by_scene)} scene timeline(s) -> choreo/arrangements/")
+
+    if a.no_video:
+        vids = []
+    else:
+        vids = sorted(set(
+            list((ROOT / "out" / "video").glob(f"{a.name}*.mp4"))
+            + list((ROOT / "projects" / a.name / "out" / "video").glob("*.mp4"))))
+    if vids:
+        (pkg / "video").mkdir()
+        for v in vids:
+            shutil.copyfile(v, pkg / "video" / v.name)
+        print(f"  video    {len(vids)} mp4(s)")
+
+    (pkg / "package.json").write_text(json.dumps({
+        "name": a.name, "elements": elements,
+        "video": [v.name for v in vids],
+    }, indent=1), encoding="utf-8")
+    (pkg / "README.md").write_text(PKG_README.format(name=a.name),
+                                   encoding="utf-8")
+    total = sum(f.stat().st_size for f in pkg.rglob("*") if f.is_file())
+    print(f"\npackage -> {pkg}  ({total / 1e6:.1f} MB)")
+
+
+if __name__ == "__main__":
+    main()

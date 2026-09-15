@@ -1,0 +1,2863 @@
+<title>Umbra Bench</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* ── tokens ─────────────────────────────────────────────────────────────────
+   Palette inherited from the benchmark's own GIF tooling (make_phrase_gif.py):
+   BG 24,24,28 · ACCENT 168,214,255 · MUTED 150,150,160 · INK 17,17,20.
+   --screen stays white in BOTH themes on purpose: it is the projection wall,
+   and a shadow mask has to read as dark-on-lit.                             */
+:root{
+  --ground:#eef0f3; --panel:#ffffff; --panel-2:#f6f7f9; --screen:#ffffff;
+  --ink:#17171a; --ink-2:#4a4a55; --muted:#7c7c88;
+  --line:#d8dade; --line-2:#e8eaee;
+  --accent:#1f6396; --accent-soft:#d6e9fb; --accent-ink:#123f61;
+  --hit:#0000ff; --miss:#00ffff; --spill:#ff00ff;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
+  --shadow:0 1px 2px rgba(16,20,28,.06), 0 4px 14px rgba(16,20,28,.05);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#18181c; --panel:#212127; --panel-2:#1c1c21; --screen:#ffffff;
+    --ink:#e9e9ef; --ink-2:#b4b4c0; --muted:#8a8a96;
+    --line:#33333c; --line-2:#2a2a32;
+    --accent:#a8d6ff; --accent-soft:#20303f; --accent-ink:#cfe6fb;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#18181c; --panel:#212127; --panel-2:#1c1c21; --screen:#ffffff;
+  --ink:#e9e9ef; --ink-2:#b4b4c0; --muted:#8a8a96;
+  --line:#33333c; --line-2:#2a2a32;
+  --accent:#a8d6ff; --accent-soft:#20303f; --accent-ink:#cfe6fb;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.3);
+}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}   /* beats the component display rules below */
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font:400 14px/1.5 "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.mono{font-family:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric:tabular-nums}
+.lbl{
+  font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:10px; font-weight:500;
+  letter-spacing:.09em; text-transform:uppercase; color:var(--muted);
+}
+button, select, input{font:inherit; color:inherit}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:3px}
+
+/* ── shell ─────────────────────────────────────────────────────────────── */
+.app{display:grid; grid-template-columns:250px minmax(0,1fr); min-height:100vh}
+@media (max-width:900px){ .app{grid-template-columns:1fr} .rail{position:static!important; height:auto!important; border-right:none!important; border-bottom:1px solid var(--line)} }
+
+.rail{
+  position:sticky; top:0; height:100vh; overflow-y:auto;
+  background:var(--panel-2); border-right:1px solid var(--line);
+  padding:18px 16px 24px; display:flex; flex-direction:column; gap:20px;
+}
+.brand{display:flex; flex-direction:column; gap:3px}
+.brand h1{margin:0; font-size:16px; font-weight:600; letter-spacing:-.01em}
+.brand p{margin:0; font-size:11.5px; color:var(--muted); line-height:1.45}
+
+.grp{display:flex; flex-direction:column; gap:8px}
+.chips{display:flex; flex-wrap:wrap; gap:5px}
+.chip{
+  border:1px solid var(--line); background:var(--panel); color:var(--ink-2);
+  border-radius:999px; padding:3px 9px; cursor:pointer;
+  font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.02em;
+  transition:background .12s, border-color .12s, color .12s;
+}
+.chip:hover{border-color:var(--accent)}
+.chip[aria-pressed="true"]{background:var(--accent-soft); border-color:var(--accent); color:var(--accent-ink); font-weight:500}
+.chip .ct{opacity:.55; margin-left:5px}
+
+.seg{display:flex; flex-wrap:wrap; border:1px solid var(--line); border-radius:6px;
+  overflow:hidden; background:var(--panel)}
+.seg button{
+  flex:1 1 auto; min-width:52px; border:0; background:transparent; padding:6px 4px; cursor:pointer;
+  font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.03em; color:var(--ink-2);
+}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent-soft); color:var(--accent-ink); font-weight:600}
+
+.field{width:100%; padding:7px 9px; border:1px solid var(--line); border-radius:6px; background:var(--panel); font-size:12.5px}
+select.field{cursor:pointer}
+
+.legend{display:flex; flex-direction:column; gap:5px; padding:10px; border:1px solid var(--line); border-radius:7px; background:var(--panel)}
+.legend .row{display:flex; align-items:center; gap:7px; font-size:11px; color:var(--ink-2)}
+.sw{width:11px; height:11px; border-radius:2px; border:1px solid rgba(0,0,0,.28); flex:none}
+
+/* ── main ──────────────────────────────────────────────────────────────── */
+.main{display:flex; flex-direction:column; min-width:0}
+.top{
+  position:sticky; top:0; z-index:20; background:var(--panel);
+  border-bottom:1px solid var(--line); padding:12px 20px;
+  display:flex; align-items:center; gap:20px; flex-wrap:wrap;
+}
+.count{display:flex; align-items:baseline; gap:7px}
+.count b{font-family:"IBM Plex Mono",monospace; font-size:22px; font-weight:600; letter-spacing:-.02em; font-variant-numeric:tabular-nums}
+
+.dist{display:flex; flex-direction:column; gap:3px; flex:1; min-width:260px; max-width:520px}
+.dist .hd{display:flex; justify-content:space-between; align-items:baseline}
+.dist svg{width:100%; height:44px; display:block; cursor:crosshair; touch-action:none}
+.bar{fill:var(--line)}
+.bar.on{fill:var(--accent)}
+
+/* four-metric readout — recomputed over whatever the filters currently show */
+.readout{
+  /* One column per PANEL entry, however many that is. It was repeat(4,...) and
+     the panel is no longer four, which left a row of empty cells the moment
+     CLIP was added. auto-flow:column tracks the array instead of restating its
+     length in CSS. */
+  display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); gap:1px;
+  background:var(--line); border-bottom:1px solid var(--line);
+}
+.ro{background:var(--panel-2); padding:9px 20px 10px; display:flex; flex-direction:column; gap:2px; min-width:0}
+.ro .k{display:flex; align-items:baseline; gap:5px}
+.ro .k em{font-style:normal; font-size:10px; color:var(--accent); font-family:"IBM Plex Mono",monospace}
+.ro .v{font-family:"IBM Plex Mono",monospace; font-size:19px; font-weight:600; letter-spacing:-.02em; font-variant-numeric:tabular-nums}
+.ro .sp{font-family:"IBM Plex Mono",monospace; font-size:10px; color:var(--muted); font-variant-numeric:tabular-nums}
+.ro .wh{font-size:10.5px; color:var(--muted); line-height:1.35}
+@media (max-width:760px){
+  .readout{grid-auto-flow:row; grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+/* ── expanded card ───────────────────────────────────────────────────────────
+   The grid is a browsing surface: at 176px a shadow reads as a blob and the
+   overlay's disagreement colours are single pixels. This is where a single
+   sample is actually looked at. */
+.dback{position:fixed; inset:0; z-index:50; background:rgba(0,0,0,.55);
+  display:grid; place-items:center; padding:24px; overflow:auto}
+.dsheet{background:var(--panel); border:1px solid var(--line); border-radius:10px;
+  max-width:1040px; width:100%; max-height:calc(100vh - 48px); overflow:auto;
+  box-shadow:0 18px 60px rgba(0,0,0,.35)}
+.dhead{display:flex; align-items:baseline; gap:12px; padding:14px 18px;
+  border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--panel); z-index:1}
+.dhead .did{font-family:"IBM Plex Mono",monospace; font-size:14px; font-weight:600}
+.dhead .dsub{font-size:11px; color:var(--muted)}
+.dhead .dx{margin-left:auto; cursor:pointer; border:1px solid var(--line);
+  background:var(--panel-2); border-radius:6px; padding:3px 10px; font-size:12px; color:var(--ink-2)}
+.dplates{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; padding:16px 18px}
+.dp{display:flex; flex-direction:column; gap:5px}
+.dp .lab{font-size:10px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted)}
+/* Upscaled from the 128px the metrics were computed on. Pixelated, not smoothed:
+   smoothing would invent edge detail the measurement never saw. */
+.dp img, .dp canvas{width:100%; aspect-ratio:1; image-rendering:pixelated;
+  border:1px solid var(--line-2); border-radius:6px; background:#fff}
+.dp .miss{aspect-ratio:1; display:grid; place-items:center; border:1px dashed var(--line);
+  border-radius:6px; color:var(--muted); font-size:11px; text-align:center; padding:8px}
+.dsec{padding:0 18px 16px}
+.dsec h4{margin:14px 0 7px; font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted)}
+.dsec .note{font-size:11px; color:var(--muted); line-height:1.5; margin-top:6px}
+table.dtab{border-collapse:collapse; width:100%; font-family:"IBM Plex Mono",monospace; font-size:11.5px}
+table.dtab th, table.dtab td{padding:4px 8px; text-align:right; border-bottom:1px solid var(--line-2)}
+table.dtab th:first-child, table.dtab td:first-child{text-align:left; font-family:"IBM Plex Sans",sans-serif}
+table.dtab thead th{color:var(--muted); font-weight:500; font-size:10px; letter-spacing:.05em; text-transform:uppercase}
+.guess{font-family:"IBM Plex Mono",monospace; font-size:11px}
+.guess b{color:var(--accent)}
+
+.grid{
+  padding:18px 20px 200px;
+  display:grid; gap:14px;
+  grid-template-columns:repeat(auto-fill, minmax(168px, 1fr));
+}
+.card{
+  background:var(--panel); border:1px solid var(--line); border-radius:9px;
+  overflow:hidden; box-shadow:var(--shadow); display:flex; flex-direction:column;
+  transition:border-color .12s, transform .12s;
+}
+.card:hover{border-color:var(--accent); transform:translateY(-1px)}
+.card.picked{border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft), var(--shadow)}
+.plate{background:var(--screen); position:relative; display:flex; gap:1px; border-bottom:1px solid var(--line-2)}
+.plate>*{width:100%; aspect-ratio:1/1; display:block; image-rendering:auto}
+.plate canvas, .plate img{background:#fff}
+.star{
+  position:absolute; top:5px; right:5px; z-index:2; width:23px; height:23px;
+  border-radius:5px; border:1px solid var(--line); background:rgba(255,255,255,.93);
+  cursor:pointer; display:grid; place-items:center; padding:0; line-height:1;
+  font-size:12px; color:#666; transition:background .12s;
+}
+.star:hover{background:#fff; color:var(--accent)}
+.card.picked .star{background:var(--hit); border-color:var(--hit); color:#fff}
+.meta{padding:8px 9px 9px; display:flex; flex-direction:column; gap:6px}
+.idline{display:flex; align-items:baseline; justify-content:space-between; gap:6px}
+.sid{font-family:"IBM Plex Mono",monospace; font-size:10px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.iou{font-family:"IBM Plex Mono",monospace; font-size:17px; font-weight:600; letter-spacing:-.02em; font-variant-numeric:tabular-nums; flex:none}
+.mrow{display:grid; grid-template-columns:repeat(2,1fr); gap:4px; border-top:1px solid var(--line-2); padding-top:6px}
+.m{display:flex; flex-direction:column; gap:1px}
+/* metric names are code identifiers — keep their real case so they match METRICS.md */
+.m span{font-family:"IBM Plex Mono",monospace; font-size:9px; letter-spacing:.04em; color:var(--muted)}
+.ro .lbl{text-transform:none; letter-spacing:.03em; font-size:11px; color:var(--ink-2)}
+.m b{font-family:"IBM Plex Mono",monospace; font-size:11.5px; font-weight:500; font-variant-numeric:tabular-nums; color:var(--ink-2)}
+/* The one panel cell that is a control. The caret is the only affordance that
+   survives at 9px, so it carries the whole "this opens" signal. */
+.mclip{cursor:pointer; border-radius:4px; margin:-2px -4px; padding:2px 4px}
+.mclip:hover{background:var(--panel)}
+.mclip:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+.mclip .cx{font-style:normal; display:inline-block; transition:transform .12s}
+.mclip.open .cx{transform:rotate(180deg)}
+.clipex{grid-column:1/-1; margin-top:6px; padding-top:6px; border-top:1px solid var(--line-2)}
+.clipl{list-style:none; margin:0 0 4px; padding:0; display:flex; flex-direction:column; gap:3px}
+.clipl li{display:grid; grid-template-columns:12px 1fr 46px 34px; align-items:center; gap:5px;
+  font-size:10.5px; color:var(--ink-2)}
+.clipl .cn{font-family:"IBM Plex Mono",monospace; font-size:9px; color:var(--muted)}
+.clipl .cl{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.clipl .cb{height:4px; border-radius:2px; background:var(--line-2); overflow:hidden}
+.clipl .cb i{display:block; height:100%; background:var(--s3)}
+.clipl .cs{font-family:"IBM Plex Mono",monospace; font-size:9.5px;
+  font-variant-numeric:tabular-nums; color:var(--muted); text-align:right}
+/* The true class, wherever it landed -- the row a reader is looking for. */
+.clipl li.hit .cl{font-weight:700; color:var(--ink)}
+.clipl li.hit .cb i{background:var(--s1)}
+
+/* ── filmstrip ─────────────────────────────────────────────────────────── */
+/* ── benchmark view ─────────────────────────────────────────────────────── */
+.bench{padding:22px 26px 60px; max-width:960px; display:flex; flex-direction:column; gap:26px}
+.bench h2{margin:0 0 4px; font-size:17px; font-weight:600; letter-spacing:-.01em; text-wrap:balance}
+.bench h3{margin:0 0 3px; font-size:13.5px; font-weight:600}
+.bench p{margin:0; font-size:13px; line-height:1.6; color:var(--ink-2); max-width:66ch}
+.bench .fig{background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:16px 18px 14px; box-shadow:var(--shadow)}
+.bench .cap{margin-top:9px; font-size:11.5px; line-height:1.5; color:var(--muted); max-width:78ch}
+.bench .cap b{color:var(--ink-2); font-weight:600}
+.axis-note{display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border-radius:7px;
+  background:var(--panel-2); border:1px solid var(--line-2)}
+.axis-note .tag{flex:none; font-family:"IBM Plex Mono",monospace; font-size:9.5px; letter-spacing:.06em;
+  text-transform:uppercase; padding:2px 7px; border-radius:999px; background:var(--accent-soft); color:var(--accent-ink)}
+.axis-note div{font-size:12.5px; line-height:1.55; color:var(--ink-2)}
+
+table.strat{border-collapse:collapse; font-family:"IBM Plex Mono",monospace; font-size:11.5px;
+  font-variant-numeric:tabular-nums; width:100%}
+table.strat th, table.strat td{padding:5px 9px; text-align:right; border-bottom:1px solid var(--line-2)}
+table.strat th:first-child, table.strat td:first-child{text-align:left; font-family:"IBM Plex Sans",sans-serif}
+table.strat thead th{color:var(--muted); font-weight:500; font-size:10px; letter-spacing:.05em; text-transform:uppercase}
+table.strat tr.tot td{border-top:1px solid var(--line); border-bottom:none; font-weight:600}
+table.strat td.warn{color:#c2410c; font-weight:600}
+:root[data-theme="dark"] table.strat td.warn{color:#fb923c}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) table.strat td.warn{color:#fb923c}}
+.tblwrap{overflow-x:auto}
+
+.legend-row{display:flex; flex-wrap:wrap; gap:12px; margin-bottom:6px}
+.legend-row span{display:flex; align-items:center; gap:5px; font-size:11px; color:var(--ink-2)}
+.legend-row i{width:9px; height:9px; border-radius:50%; flex:none}
+
+.pair{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+@media (max-width:680px){ .pair{grid-template-columns:1fr} }
+.pcard{border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--panel-2)}
+.pcard .trip{display:flex; gap:1px; background:var(--screen)}
+.pcard .trip>*{width:100%; aspect-ratio:1/1; display:block}
+.pcard .cd{padding:8px 10px; display:flex; flex-direction:column; gap:4px}
+.pcard .cd .nm{font-family:"IBM Plex Mono",monospace; font-size:10px; color:var(--muted)}
+.pcard .cd .nums{display:flex; gap:14px}
+.pcard .cd .nums div{display:flex; flex-direction:column}
+.pcard .cd .nums span{font-family:"IBM Plex Mono",monospace; font-size:9px; color:var(--muted); letter-spacing:.04em}
+.pcard .cd .nums b{font-family:"IBM Plex Mono",monospace; font-size:15px; font-weight:600; font-variant-numeric:tabular-nums}
+.pcard .cd .nums b.hot{color:#c2410c}
+:root[data-theme="dark"] .pcard .cd .nums b.hot{color:#fb923c}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .pcard .cd .nums b.hot{color:#fb923c}}
+.trip-lbl{display:flex; gap:1px; margin-top:2px}
+.trip-lbl span{width:100%; text-align:center; font-family:"IBM Plex Mono",monospace; font-size:8.5px;
+  letter-spacing:.05em; text-transform:uppercase; color:var(--muted)}
+
+/* ── reference set, in the benchmark view ────────────────────────────────── */
+.telbench{margin:22px 0 4px; padding:16px 18px; border:1px solid var(--line-2);
+  border-radius:9px; background:var(--panel)}
+.telbench h3{margin:0 0 7px; font-size:14.5px; font-weight:600}
+.telbench h3 code{font-family:"IBM Plex Mono",monospace; font-size:11.5px; font-weight:400;
+  color:var(--muted); background:var(--panel-2); padding:2px 6px; border-radius:4px}
+.telbench>p{margin:0 0 12px; font-size:13px; line-height:1.6; color:var(--ink-2); max-width:76ch}
+.telcov{display:flex; gap:8px; flex-wrap:wrap}
+.telcov>div{display:flex; align-items:baseline; gap:7px; padding:6px 11px; border-radius:6px;
+  background:var(--panel-2); border:1px solid var(--line-2)}
+.telcov span{font-size:11.5px; color:var(--muted)}
+.telcov b{font-family:"IBM Plex Mono",monospace; font-size:14px}
+
+/* ── pipeline steps ──────────────────────────────────────────────────────── */
+.steps{display:flex; flex-direction:column; gap:2px; max-width:82ch}
+.step{display:flex; gap:14px; padding:13px 14px; border:1px solid var(--line-2);
+  border-radius:8px; background:var(--panel)}
+.stepn{flex:0 0 26px; height:26px; display:grid; place-items:center; border-radius:50%;
+  background:var(--accent-soft); color:var(--accent-ink); font-weight:600; font-size:12px;
+  font-family:"IBM Plex Mono",monospace}
+.stepb{min-width:0; flex:1}
+.stepb h3{margin:2px 0 5px; font-size:13.5px; font-weight:600}
+.stepb p{margin:0; font-size:12.5px; line-height:1.6; color:var(--ink-2)}
+.stepb code{font-family:"IBM Plex Mono",monospace; font-size:11.5px;
+  background:var(--panel-2); padding:1px 4px; border-radius:3px}
+.cmd{margin:9px 0 0; padding:9px 11px; border-radius:6px; background:var(--panel-2);
+  border:1px solid var(--line-2); overflow-x:auto; font-family:"IBM Plex Mono",monospace;
+  font-size:11.5px; line-height:1.65; color:var(--ink-2); white-space:pre}
+
+/* ── the hand-cast reference set, where it surfaces in the dashboard ─────────── */
+/* .plate>* sizes the image slots; the badge is not one of them. */
+.telflag{position:absolute; left:6px; bottom:6px; z-index:2; width:auto!important;
+  aspect-ratio:auto!important;
+  font-family:"IBM Plex Mono",monospace; font-size:9.5px; letter-spacing:.03em;
+  padding:2px 6px; border-radius:4px; background:var(--accent-soft);
+  color:var(--accent-ink); border:1px solid var(--line); pointer-events:none}
+.telrow{display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink-2);
+  cursor:pointer; user-select:none}
+.telrow b{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--muted); font-weight:500}
+
+/* ── full-width pane: shared by the teleop view ─────────────────────────── */
+.rescue{padding:22px 26px 60px; max-width:1180px; display:flex; flex-direction:column; gap:18px}
+.floorbar{display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:7px;
+  background:var(--panel-2); border:1px solid var(--line-2); font-size:12.5px; color:var(--ink-2)}
+.floorbar b{font-family:"IBM Plex Mono",monospace; font-size:15px; color:var(--ink)}
+.tallybar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:10px;
+  padding:9px 12px; border:1px solid var(--line); border-radius:7px; background:var(--panel)}
+.tally{display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--ink-2)}
+.tally b{font-family:"IBM Plex Mono",monospace; font-size:14px; font-weight:600}
+.tally .rev{color:var(--muted); font-size:11.5px}
+button.act{border:1px solid var(--line); background:var(--panel-2); border-radius:6px;
+  padding:5px 10px; cursor:pointer; font-family:"IBM Plex Mono",monospace; font-size:10.5px;
+  letter-spacing:.03em; color:var(--ink-2)}
+button.act:hover{border-color:var(--accent); color:var(--accent-ink)}
+.rgrp{display:flex; flex-direction:column; gap:10px}
+.rgrp>header{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap}
+.rgrp>header h3{margin:0; font-size:14.5px; font-weight:600}
+.rgrp>header .n{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--muted)}
+.rgrp>header p{margin:0; flex-basis:100%; font-size:12px; line-height:1.5; color:var(--muted); max-width:78ch}
+.rescue{gap:22px}
+.imgs3 img{flex:1 1 0; min-width:0; width:auto; aspect-ratio:1/1; display:block; background:#fff}
+.rlist2{display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(330px,1fr))}
+.ritem2{border:1px solid var(--line); border-radius:9px; background:var(--panel);
+  overflow:hidden; box-shadow:var(--shadow); display:flex; flex-direction:column}
+.ritem2[data-op="drop"]{opacity:.5}
+.ritem2[data-op="keep"]{border-style:dashed}
+.imgs3{display:flex; gap:1px; background:var(--screen)}
+.imgs3 canvas{flex:1 1 0; min-width:0; width:auto; aspect-ratio:1/1; display:block}
+.rlab3{display:flex; gap:1px; background:var(--panel-2); border-bottom:1px solid var(--line-2)}
+.rlab3 span{width:100%; text-align:center; font-family:"IBM Plex Mono",monospace; font-size:8.5px;
+  letter-spacing:.04em; text-transform:uppercase; color:var(--muted); padding:3px 0}
+.rbody{padding:9px 10px 10px; display:flex; flex-direction:column; gap:7px}
+.rhead{display:flex; align-items:baseline; gap:7px; justify-content:space-between}
+.nm3{font-family:"IBM Plex Mono",monospace; font-size:10px; color:var(--ink-2);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.sub3{font-family:"IBM Plex Mono",monospace; font-size:9px; color:var(--muted); flex:none}
+.vstat{font-family:"IBM Plex Mono",monospace; font-size:10.5px; padding:4px 7px; border-radius:5px;
+  border:1px solid transparent}
+.vstat.ok{background:rgba(27,175,122,.13); color:#0f7a52; border-color:rgba(27,175,122,.32)}
+.vstat.bad{background:rgba(235,104,52,.13); color:#b8431a; border-color:rgba(235,104,52,.32)}
+.vstat.drop{background:var(--panel-2); color:var(--muted); border-color:var(--line-2)}
+:root[data-theme="dark"] .vstat.ok{color:#4ecf9a}
+:root[data-theme="dark"] .vstat.bad{color:#f58a5c}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .vstat.ok{color:#4ecf9a}
+  :root:not([data-theme="light"]) .vstat.bad{color:#f58a5c}}
+.kv3{display:flex; gap:12px; flex-wrap:wrap}
+.kv3 div{display:flex; flex-direction:column}
+.kv3 span{font-family:"IBM Plex Mono",monospace; font-size:8.5px; color:var(--muted); letter-spacing:.04em}
+.kv3 b{font-family:"IBM Plex Mono",monospace; font-size:12px; font-weight:600; font-variant-numeric:tabular-nums}
+.opbar{display:flex; flex-wrap:wrap; gap:4px}
+.opbar button{border:1px solid var(--line); background:var(--panel-2); color:var(--ink-2);
+  border-radius:5px; padding:4px 8px; cursor:pointer; font-family:"IBM Plex Mono",monospace;
+  font-size:10px; letter-spacing:.02em}
+.opbar button:hover{border-color:var(--accent)}
+.opbar button[aria-pressed="true"]{background:var(--accent-soft); border-color:var(--accent);
+  color:var(--accent-ink); font-weight:600}
+.radrow{display:flex; align-items:center; gap:8px; font-size:10.5px; color:var(--muted)}
+.radrow input[type=range]{flex:1; accent-color:var(--accent)}
+.radrow b{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--ink-2); min-width:42px}
+.autotag{font-size:10px; color:var(--muted); line-height:1.4; font-style:italic}
+.tlist{display:grid; gap:14px; grid-template-columns:repeat(auto-fill,minmax(430px,1fr))}
+.titem{border:1px solid var(--line); border-radius:9px; background:var(--panel);
+  overflow:hidden; box-shadow:var(--shadow); display:flex; flex-direction:column}
+.titem.suspect{border-color:#eb6834}
+:root[data-theme="dark"] .titem.suspect{border-color:#d95926}
+.ttop{display:flex; gap:1px; background:var(--line-2)}
+.tcanvas{flex:1 1 auto; min-width:0; width:100%; height:auto; display:block; cursor:crosshair;
+  background:var(--screen); touch-action:manipulation}
+.tside{flex:0 0 88px; background:var(--panel-2); display:flex; flex-direction:column}
+.ttgt{display:flex; flex-direction:column; align-items:center; gap:2px; padding:6px 5px}
+.ttgt img{width:100%; background:#fff; border:1px solid var(--line-2); border-radius:3px}
+.ttgt span, .ttgt .none{font-family:"IBM Plex Mono",monospace; font-size:8px; letter-spacing:.04em;
+  text-transform:uppercase; color:var(--muted); text-align:center}
+.ttgt .none{padding:14px 0}
+.titem.done{border-color:var(--accent)}
+.tbody{padding:9px 11px 11px; display:flex; flex-direction:column; gap:6px}
+.treason{font-size:11px; line-height:1.45; color:var(--ink-2)}
+.tflag{font-family:"IBM Plex Mono",monospace; font-size:10px; padding:3px 7px; border-radius:5px;
+  align-self:flex-start; background:rgba(235,104,52,.13); color:#b8431a; border:1px solid rgba(235,104,52,.3)}
+:root[data-theme="dark"] .tflag{color:#f58a5c}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .tflag{color:#f58a5c}}
+
+.strip{
+  position:fixed; left:0; right:0; bottom:0; z-index:30;
+  background:var(--panel); border-top:1px solid var(--line);
+  box-shadow:0 -4px 20px rgba(0,0,0,.10);
+  padding:9px 20px 12px; display:flex; flex-direction:column; gap:8px;
+}
+.strip .hd{display:flex; align-items:center; gap:12px; flex-wrap:wrap}
+.strip .hd .sp{flex:1}
+.strip button.act{
+  border:1px solid var(--line); background:var(--panel-2); border-radius:6px;
+  padding:5px 10px; cursor:pointer; font-family:"IBM Plex Mono",monospace; font-size:10.5px;
+  letter-spacing:.03em; color:var(--ink-2);
+}
+.strip button.act:hover{border-color:var(--accent); color:var(--accent-ink)}
+.reel{display:flex; gap:7px; overflow-x:auto; padding-bottom:3px; min-height:66px; align-items:flex-start}
+.frame{
+  flex:none; width:58px; cursor:grab; position:relative;
+  border:1px solid var(--line); border-radius:5px; overflow:hidden; background:var(--screen);
+}
+.frame.drag{opacity:.35}
+.frame img, .frame canvas{width:100%; aspect-ratio:1/1; display:block}
+.frame .n{
+  position:absolute; top:0; left:0; background:var(--hit); color:#fff;
+  font-family:"IBM Plex Mono",monospace; font-size:9px; padding:1px 4px; border-bottom-right-radius:4px;
+}
+.frame .x{
+  position:absolute; top:0; right:0; background:rgba(0,0,0,.55); color:#fff; border:0;
+  font-size:10px; line-height:1; padding:2px 4px; cursor:pointer; border-bottom-left-radius:4px;
+}
+.empty{color:var(--muted); font-size:12px; padding:18px 0; font-style:italic}
+.hint{font-size:11px; color:var(--muted)}
+
+/* ── sequences track ─────────────────────────────────────────────────────── */
+.seqwrap{display:flex; flex-direction:column; gap:18px}
+.seqwrap h2{margin:0 0 4px; font-size:17px; font-weight:600; letter-spacing:-.01em}
+.seqwrap>.intro{margin:0; font-size:13px; line-height:1.6; color:var(--ink-2); max-width:78ch}
+.seqgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px}
+/* The library button rides along with the studio: always in the markup, revealed
+   only when /api/ping reports a Shadow_robot_ui to export into. Served as a plain
+   static file these cards render identically, minus one button. */
+.libline{display:flex; align-items:center; gap:8px; margin-top:8px}
+/* .libcopy is deliberately NOT a .libbtn: applyStudioState() hides every .libbtn
+   when no studio is answering, and the copy button is the one that must survive
+   that -- handing over the command is precisely what a page opened from disk,
+   with no backend to call, can still do. */
+.libbtn,.libcopy{font:inherit; font-size:11px; padding:3px 9px; border-radius:6px; cursor:pointer;
+  border:1px solid var(--line); background:var(--panel); color:inherit}
+.libbtn:hover:not(:disabled),.libcopy:hover{border-color:currentColor}
+.libbtn:disabled{opacity:.55; cursor:default}
+.libmsg{font-size:11px; opacity:.75}
+.seqpick{display:inline-flex; align-items:center; gap:4px; font-size:11px;
+  color:var(--ink-2); cursor:pointer; user-select:none}
+.seqpick input{margin:0; cursor:pointer}
+#seqHiddenNote b{font-weight:600}
+.libhint{opacity:.8}
+.seqcard{border:1px solid var(--line); border-radius:9px; background:var(--panel);
+  box-shadow:var(--shadow); overflow:hidden; display:flex; flex-direction:column}
+.seqcard .anim{position:relative; background:var(--screen); display:grid;
+  grid-template-columns:1fr; gap:1px}
+.seqcard .anim.trip{grid-template-columns:repeat(3,1fr)}
+.seqcard .anim canvas{width:100%; aspect-ratio:1/1; display:block;
+  image-rendering:pixelated; background:var(--screen)}
+.seqcard .anim .fidx{position:absolute; bottom:5px; right:7px; font-family:"IBM Plex Mono",monospace;
+  font-size:9.5px; color:var(--muted); background:var(--panel); padding:1px 5px; border-radius:4px;
+  border:1px solid var(--line-2); opacity:.9}
+.seqcard .seq-lbl{padding:0 1px}
+.seqctl{display:flex; gap:14px; align-items:center; flex-wrap:wrap}
+.seqctl .hint{font-size:11px; color:var(--muted)}
+.seqmeta{padding:10px 12px 11px; display:flex; flex-direction:column; gap:7px}
+.seqmeta .idline{display:flex; align-items:baseline; justify-content:flex-start; gap:8px; flex-wrap:wrap}
+.seqmeta .sid{font-family:"IBM Plex Mono",monospace; font-size:11.5px; font-weight:600;
+  color:var(--ink); overflow:visible; text-overflow:clip; white-space:normal}
+.seqmeta .prompt{font-size:11.5px; color:var(--muted); line-height:1.45}
+.seqbadges{display:flex; gap:5px; flex-wrap:wrap}
+.sbadge{font-family:"IBM Plex Mono",monospace; font-size:9px; letter-spacing:.05em;
+  text-transform:uppercase; padding:2px 7px; border-radius:999px; background:var(--panel-2);
+  border:1px solid var(--line-2); color:var(--ink-2)}
+.sbadge.loop{background:var(--accent-soft); color:var(--accent-ink); border-color:transparent}
+.seqnums{display:flex; gap:12px; flex-wrap:wrap}
+.seqnums div{display:flex; flex-direction:column}
+.seqnums span{font-family:"IBM Plex Mono",monospace; font-size:8.5px; color:var(--muted);
+  letter-spacing:.04em; text-transform:uppercase}
+.seqnums b{font-family:"IBM Plex Mono",monospace; font-size:12.5px; font-weight:600;
+  font-variant-numeric:tabular-nums}
+.seqspark{display:block; width:100%; height:26px}
+.solvebox{border-top:1px solid var(--line-2); background:var(--panel-2); padding:9px 12px 10px;
+  display:flex; flex-direction:column; gap:7px}
+.solvebox .src{font-family:"IBM Plex Mono",monospace; font-size:9px; letter-spacing:.05em;
+  text-transform:uppercase; color:var(--muted)}
+.solvebox .warnline{font-size:11px; line-height:1.5; color:var(--ink-2)}
+.seqnums b.bad{color:#c2410c}
+:root[data-theme="dark"] .seqnums b.bad{color:#fb923c}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .seqnums b.bad{color:#fb923c}}
+.unsolved{border-top:1px solid var(--line-2); padding:9px 12px 10px; font-size:11px;
+  line-height:1.6; color:var(--muted)}
+.unsolved code{font-family:"IBM Plex Mono",monospace; font-size:10px; background:var(--panel-2);
+  padding:1px 5px; border-radius:4px; word-break:break-all}
+
+/* ── guide view ──────────────────────────────────────────────────────────── */
+table.gref{border-collapse:collapse; font-size:11.5px; width:100%; line-height:1.5}
+table.gref th, table.gref td{padding:6px 9px; text-align:left; border-bottom:1px solid var(--line-2);
+  vertical-align:top}
+table.gref thead th{color:var(--muted); font-weight:500; font-size:10px; letter-spacing:.05em;
+  text-transform:uppercase}
+table.gref td.mn{font-family:"IBM Plex Mono",monospace; font-size:11px; white-space:nowrap; font-weight:600}
+table.gref td.rg{font-family:"IBM Plex Mono",monospace; font-size:10.5px; white-space:nowrap;
+  color:var(--ink-2)}
+table.gref td.dir{font-family:"IBM Plex Mono",monospace; font-size:10.5px; white-space:nowrap}
+table.gref td.note{color:var(--muted); font-size:11px}
+.guide-rules{margin:0; padding-left:18px; display:flex; flex-direction:column; gap:7px;
+  font-size:12.5px; line-height:1.55; color:var(--ink-2)}
+.guide-rules b{color:var(--ink)}
+@media (prefers-reduced-motion:reduce){ *{transition:none!important} }
+</style>
+
+<div class="app">
+  <aside class="rail">
+    <div class="brand">
+      <h1>Umbra Bench</h1>
+      <p id="brandline">the four-metric panel. Star frames to build a sequence.</p>
+    </div>
+
+    <div class="grp">
+      <div class="lbl">View</div>
+      <div class="seg" id="segPage">
+        <button data-v="results" aria-pressed="true">results</button>
+      </div>
+    </div>
+
+    <div class="grp" data-only="results">
+      <div class="lbl">Sweep</div>
+      <div class="seg" id="segSweep">
+        <button data-v="big" aria-pressed="true">big&nbsp;budget</button>
+        <button data-v="small" aria-pressed="false">small</button>
+      </div>
+    </div>
+
+    <div class="grp" data-only="results">
+      <div class="lbl">Plate</div>
+      <div class="seg" id="segView">
+        <button data-v="overlay" aria-pressed="true" title="shadow against the target the optimizer was actually given — after --fit-target scaled and shifted it">overlay</button>
+        <button data-v="shadow" aria-pressed="false">shadow</button>
+        <button data-v="target" aria-pressed="false" title="the target as given to the optimizer, i.e. after the fit">target</button>
+      </div>
+      <div class="legend" id="legend">
+        <div class="row"><i class="sw" style="background:#0000ff"></i> agreement</div>
+        <div class="row"><i class="sw" style="background:#00ffff"></i> target missed</div>
+        <div class="row"><i class="sw" style="background:#ff00ff"></i> shadow spilled</div>
+      </div>
+    </div>
+
+    <div class="grp" data-only="results">
+      <div class="lbl">Subset</div>
+      <div class="chips" id="subsets"></div>
+      <button class="chip" id="allSub" style="align-self:flex-start">reset all</button>
+    </div>
+
+    <div class="grp" data-only="results">
+      <div class="lbl">Sort</div>
+      <select class="field mono" id="sort">
+        <option value="iou-desc">IoU ↑ — most area agreement</option>
+        <option value="iou-asc">IoU ↑ — least area agreement</option>
+        <option value="nsd-desc">NSD ↑ — outline lands closest</option>
+        <option value="nsd-asc">NSD ↑ — outline worst placed</option>
+        <option value="hu-asc">Hu ↓ — shape closest, pose ignored</option>
+        <option value="hu-desc">Hu ↓ — shape furthest, pose ignored</option>
+        <option value="clip-desc">CLIP — most recognisable</option>
+        <option value="clip-asc">CLIP — least recognisable</option>
+      </select>
+    </div>
+
+    <div class="grp" data-only="results">
+      <div class="lbl">Search</div>
+      <input class="field mono" id="q" type="search" placeholder="id or class…" autocomplete="off">
+    </div>
+
+    <div class="grp">
+      <div class="lbl">Theme</div>
+      <div class="seg" id="segTheme">
+        <button data-v="auto" aria-pressed="true">auto</button>
+        <button data-v="light" aria-pressed="false">light</button>
+        <button data-v="dark" aria-pressed="false">dark</button>
+      </div>
+    </div>
+  </aside>
+
+  <section class="bench" id="benchView" hidden></section>
+  <section class="rescue" id="teleopView" hidden></section>
+  <section class="rescue" id="seqView" hidden></section>
+  <section class="bench" id="guideView" hidden></section>
+
+  <main class="main" id="resultsView">
+    <header class="top">
+      <div class="count">
+        <b id="nShown">0</b>
+        <span class="lbl" id="nTot">of 546 targets</span>
+      </div>
+      <div class="dist">
+        <div class="hd">
+          <span class="lbl" id="histLabel">IoU — drag to filter</span>
+          <span class="lbl mono" id="rangeTxt"></span>
+        </div>
+        <svg id="hist" viewBox="0 0 520 44" preserveAspectRatio="none" role="img"
+             aria-label="Distribution of IoU across the selected targets"></svg>
+      </div>
+    </header>
+    <div class="readout" id="readout"></div>
+    <section class="grid" id="grid"></section>
+  </main>
+</div>
+
+<div class="strip">
+  <div class="hd">
+    <span class="lbl">Sequence</span>
+    <span class="mono" id="pickN" style="font-size:12px">0 frames</span>
+    <span class="sp"></span>
+    <span class="hint" id="stripHint">Star a card to add it. Drag frames to reorder.</span>
+    <button class="act" id="copyIds">copy ids</button>
+    <button class="act" id="copyJson">copy json</button>
+    <button class="act" id="copyDeploy"
+      title="Copy the command that writes these shadows into the robot UI's Play library (fleet-shadow-art/choreographies/). Run it from the umbra-bench repo root; refresh Play to deploy them.">copy export cmd</button>
+    <button class="act" id="clearPicks">clear</button>
+  </div>
+  <div class="reel" id="reel"><div class="empty">No frames yet — star the shots you want, in order.</div></div>
+</div>
+
+<script id="data" type="application/json">__PAYLOAD__</script>
+<script id="teleop" type="application/json">__TELEOP__</script>
+<script id="sequences" type="application/json">__SEQUENCES__</script>
+<script>
+(() => {
+"use strict";
+/* The payload slots are literal placeholders until build_benchmark.py fills them, and
+   this file is a valid-looking .html sitting next to the built one. Opened by
+   mistake it used to fail as `Unexpected token '_'` in the console and a blank
+   page -- true, unreadable, and not actionable. Say what the file is instead. */
+function payload(id){
+  const t = document.getElementById(id).textContent;
+  if(/^\s*__[A-Z_]+__\s*$/.test(t)){
+    document.documentElement.innerHTML =
+      '<body style="margin:0;font:15px/1.65 system-ui,sans-serif;background:#eef0f3;color:#17171a">'
+      + '<div style="max-width:60ch;margin:14vh auto;padding:26px 30px;background:#fff;'
+      + 'border:1px solid #d8dade;border-radius:10px">'
+      + '<h1 style="margin:0 0 10px;font-size:19px">This is the template, not the page</h1>'
+      + '<p style="margin:0 0 14px;color:#4a4a55">The data is spliced in at build time, so this'
+      + ' file has placeholders where the benchmark should be. Build it, then open'
+      + ' <code>benchmark/benchmark.html</code>:</p>'
+      + '<pre style="margin:0;padding:12px 14px;background:#f6f7f9;border:1px solid #e8eaee;'
+      + 'border-radius:7px;font:12.5px ui-monospace,monospace;overflow-x:auto">'
+      + 'python3 benchmark/build_benchmark.py</pre></div></body>';
+    throw new Error("dashboard: template opened directly — run benchmark/build_benchmark.py and open benchmark/benchmark.html");
+  }
+  return JSON.parse(t);
+}
+const DATA = payload("data");
+const PX = DATA.px, S = DATA.samples;
+const $ = (s) => document.querySelector(s);
+
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem("uba:"+k); return v===null?d:JSON.parse(v); }catch{ return d; } },
+  set(k, v){ try{ localStorage.setItem("uba:"+k, JSON.stringify(v)); }catch{} }
+};
+
+/* Saved state outlives the code that wrote it. A browser still holding
+   page:"rescue" from before that view was removed would have every view hidden
+   and no button pressed -- a blank page with no way back except clearing storage.
+   Anything not on this list falls back to the dashboard. */
+const PAGES = ["results"];
+/* The teleop set is read here, ahead of the dashboard, because the dashboard uses it:
+   a target somebody has actually cast by hand is a different kind of row, and
+   the grid says so rather than making you switch views to find out. */
+const TELEOP = payload("teleop");
+const SEQ = payload("sequences");
+const TELBY = new Map();
+for(const ts of (TELEOP.sets || [TELEOP]))
+  for(const it of (ts.items || []))
+    if(it.sample_id && !TELBY.has(it.sample_id)) TELBY.set(it.sample_id, it);
+
+const st = {
+  page:  (p => PAGES.includes(p) ? p : "results")(store.get("page", "results")),
+  sweep: store.get("sweep","big"),
+  view:  store.get("view", "overlay"),
+  // Reconcile the remembered selection with the payload instead of trusting it.
+  // A subset added since the last visit (teleop) is not in the stored list, so a
+  // plain restore renders its chip unpressed and hides all of its samples -- new
+  // data looks missing rather than deselected.
+  //
+  // `subs` records only what is SELECTED, which cannot distinguish "the reader
+  // turned this off" from "this did not exist yet", so `subsKnown` records what
+  // the payload offered at the time. A reader with no `subsKnown` predates this
+  // and gets everything selected once.
+  subs:  (() => {
+    const known = new Set(DATA.subsets);
+    const stored = store.get("subs", null), before = store.get("subsKnown", null);
+    if(!Array.isArray(stored) || !Array.isArray(before)) return new Set(DATA.subsets);
+    const seenBefore = new Set(before);
+    const out = new Set([...stored.filter(s => known.has(s)),
+                         ...DATA.subsets.filter(s => !seenBefore.has(s))]);
+    return out.size ? out : new Set(DATA.subsets);
+  })(),
+  sort:  store.get("sort","iou-desc"),
+  q:     "",
+  lo: null, hi: null,      // null = full range, in the active metric's units
+  picks: store.get("picks", [])
+};
+// What this payload offered, so the next visit can tell a newly-added subset
+// from one the reader turned off. Written once per load, not per click.
+store.set("subsKnown", DATA.subsets);
+
+// The masthead used to be a hand-written sentence ("542 targets - base-optimizer
+// ... 64 v2 targets await the re-run"). Every clause of it went stale the moment
+// the sweeps were re-run, and a dashboard that misreports its own provenance is
+// worse than one that says nothing. Derive it from the payload instead.
+(function brandline(){
+  const el = document.getElementById("brandline");
+  if(!el || !DATA.sweep_dirs) return;
+  const dirs = [...new Set(Object.values(DATA.sweep_dirs))].join(" / ");
+  const cmp = DATA.ref === "shown"
+    ? "metrics vs the fitted target (aligned)"
+    : "metrics vs the target as authored (fit counted as error)";
+  el.textContent = `${DATA.n} targets · ${dirs} · ${DATA.targets_dir} · ${cmp}. `
+                 + el.textContent.trim();
+})();
+// `fit` and `centred` were separate plates for one release; a reader who left
+// one selected would restore a view that no longer exists and see nothing.
+if(!["overlay","shadow","target"].includes(st.view)) st.view = "overlay";
+const byId = new Map(S.map(s => [s.id, s]));
+
+/* ── derived helpers ─────────────────────────────────────────────────── */
+const sw = (s) => s[st.sweep] || null;
+const iou = (s) => { const e = sw(s); return e && e.iou != null ? e.iou : null; };
+const delta = (s) => (s.big && s.small && s.big.iou != null && s.small.iou != null)
+  ? s.big.iou - s.small.iou : null;
+const num = (v, d=3) => v == null ? "—" : v.toFixed(d);
+
+function filtered(){
+  const q = st.q.trim().toLowerCase();
+  return S.filter(s => {
+    if(!st.subs.has(s.subset)) return false;
+    if(iou(s) == null) return false;               // no results yet — nothing to browse
+    if(st.lo != null){
+      const v = mval(s, mkey());
+      if(v == null || v < st.lo - 1e-9 || v > st.hi + 1e-9) return false;
+    }
+    if(q && !(s.id.toLowerCase().includes(q) || (s.cls||"").toLowerCase().includes(q))) return false;
+    return true;
+  });
+}
+const mv = (s, k) => { const e = sw(s); return e && e[k] != null ? e[k] : null; };
+const hi = (k) => (a,b) => (mv(b,k) ?? -Infinity) - (mv(a,k) ?? -Infinity);   // big first
+const lo = (k) => (a,b) => (mv(a,k) ??  Infinity) - (mv(b,k) ??  Infinity);   // small first
+const CMP = {
+  "iou-desc":   hi("iou"),  "iou-asc":  lo("iou"),
+  "nsd-desc":   hi("nsd"),  "nsd-asc":  lo("nsd"),
+  "pw-asc":     lo("pw_h1"), "pw-desc": hi("pw_h1"),
+  "hu-asc":     lo("hu_distance"), "hu-desc": hi("hu_distance"),
+  "tc-desc":    hi("tc_iou"), "tc-asc": lo("tc_iou"),
+  "asp-desc":   hi("tc_aspect_error"),
+  "clip-desc":  hi("clip_rr"), "clip-asc": lo("clip_rr"),
+  // Ranking by raw clip_ratio put an 11x overshoot at the top: abstract_comma's
+  // target ranks 11th of 17 and its shadow happened to rank 1st. That is a
+  // collapsed ceiling, not a good shadow -- abstract targets sit at chance by
+  // design, so dividing by their rank divides by noise. Cap at 1: "how much of
+  // the target's legibility survived" tops out at "all of it", and beating an
+  // illegible target does not jump the queue.
+  // Capping alone is not enough: ~172 items retain the full ceiling and tie at
+  // 1, and a stable sort then leads with whichever the payload happened to list
+  // first -- in practice the collapsed-ceiling ones. Break the tie on the
+  // target's own rank, so "kept all of a ceiling worth keeping" outranks "kept
+  // all of a ceiling that was never there".
+  "clipretain-desc": (a,b) => (Math.min(mv(b,"clip_ratio") ?? 0, 1))
+                            - (Math.min(mv(a,"clip_ratio") ?? 0, 1))
+                            || (a.clip_t_rank ?? 1e9) - (b.clip_t_rank ?? 1e9),
+  "clipover-desc":  hi("clip_ratio"),
+  "cliptop1-desc":  hi("clip_top1"), "cliptop5-desc": hi("clip_top5"),
+  "cliptgt-desc":   (a,b) => (b.clip_t_rr ?? -1) - (a.clip_t_rr ?? -1),
+  "cliptgt-asc":    (a,b) => (a.clip_t_rr ??  2) - (b.clip_t_rr ??  2),
+  "delta-desc": (a,b) => (delta(b) ?? -9) - (delta(a) ?? -9),
+  "stroke-asc": (a,b) => (a.a.median_stroke_width_rel ?? 9) - (b.a.median_stroke_width_rel ?? 9),
+  "subset":     (a,b) => a.subset.localeCompare(b.subset) || (iou(b) ?? -1) - (iou(a) ?? -1),
+  "id":         (a,b) => a.id.localeCompare(b.id)
+};
+
+/* The four-metric panel. iou/nsd higher-better; pw_h1/hu_distance lower-better —
+   the arrow is part of the label so the direction is never inferred. */
+const PANEL = [
+  { k:"iou",         name:"IoU",   dir:1,  dp:3, what:"how much area agrees" },
+  { k:"nsd",         name:"NSD",   dir:1,  dp:3, what:"outline within tolerance" },
+  { k:"pw_h1",       name:"pw_h1", dir:-1, dp:3, what:"holes survived, graded" },
+  { k:"hu_distance", name:"Hu",    dir:-1, dp:2, what:"shape, pose removed" },
+  /* 1/rank of the true class among its subset's own classes, so the mean over any
+     selection is exactly the MRR clip_eval_dataset.py reports. Absent until that
+     has been run, and absent for a sweep it did not cover -- num() renders it as
+     an em dash rather than inventing a zero. */
+  { k:"clip_rr",     name:"CLIP",  dir:1,  dp:3, what:"is it recognisable, 1/rank",
+    tip: (s, e) => {
+      if(!e || e.clip_rank == null) return "no CLIP score";
+      const n = s.clip_n ? " of " + s.clip_n : "";
+      const t = s.clip_t_rank != null ? "target ranks " + s.clip_t_rank + n : "target not scored";
+      return "shadow ranks " + e.clip_rank + n + " · " + t
+           + (e.clip_ratio != null ? " · ratio " + e.clip_ratio : "");
+    } }
+];
+/* The top strip carries two more than the cards do. clip_top1/clip_top5 are 0/1
+   per item, so a mean over the current selection IS the correctly-identified
+   ratio for exactly what is on screen -- no separate aggregation to drift. The
+   cards keep PANEL: seven cells do not fit a 176px .mrow. */
+const READOUT = PANEL.concat([
+  { k:"clip_top1", name:"top-1", dir:1, dp:3, what:"correctly identified outright" },
+  { k:"clip_top5", name:"top-5", dir:1, dp:3, what:"true class within the top 5" },
+  /* The ceiling. It lives on the sample, not the sweep entry, so it needs its own
+     aggregate rather than mv(). Without it on screen the ratio sorts have an
+     invisible denominator and cannot be checked by eye. */
+  { k:"__clipT", name:"target", what:"the same measure on the target — the ceiling",
+    agg: (rows) => {
+      const xs = rows.map(s => s.clip_t_rr).filter(x => x != null);
+      if(!xs.length) return { value:"—", sub:"" };
+      const m = xs.reduce((a,b)=>a+b,0)/xs.length;
+      const sh = rows.map(s => mv(s,"clip_rr")).filter(x => x != null);
+      const ms = sh.length ? sh.reduce((a,b)=>a+b,0)/sh.length : null;
+      return { value: m.toFixed(3),
+               sub: ms == null ? "" : "shadow keeps " + (ms/m).toFixed(3) + " of it" };
+    } },
+  /* Composition, not a score. Deliberately NOT paired with a "chance = 1/labels"
+     figure: CLIP ranks each item inside its OWN subset's class list, so the
+     pooled distinct-label count across a mixed selection is not the list anything
+     was ranked against. The sub-line gives the real chance range instead. */
+  { k:"__labels", name:"labels", what:"distinct classes in view — each ranked "
+      + "within its own subset, so chance differs per row",
+    agg: (rows) => {
+      const cls = new Set(), subs = new Set(), ch = [];
+      for(const s of rows){
+        if(s.cls) cls.add(s.subset + "/" + s.cls);
+        subs.add(s.subset);
+        if(s.clip_n) ch.push(1 / s.clip_n);
+      }
+      ch.sort((a,b) => a-b);
+      const lo = ch[0], hi = ch[ch.length-1];
+      return { value: String(cls.size),
+               sub: subs.size + (subs.size === 1 ? " subset" : " subsets")
+                    + (ch.length ? "  ·  chance " + (lo === hi ? lo.toFixed(3)
+                        : lo.toFixed(3) + "–" + hi.toFixed(3)) : "") };
+    } }
+]);
+const q05 = (xs, p) => { if(!xs.length) return null;
+  const a = [...xs].sort((x,y) => x-y), i = (a.length-1)*p, f = Math.floor(i);
+  return f+1 < a.length ? a[f] + (a[f+1]-a[f])*(i-f) : a[f]; };
+
+/* The distribution strip follows the sort: whatever you are ordering by is what
+   you are looking at, so the brush filters on the same quantity. Two of the sorts
+   rank by something that is not a panel metric — the budget delta and the target's
+   own stroke width — and those get a strip too; the stroke one is a property of the
+   TARGET, not a score, and is labelled as such. */
+const SORT_METRIC = {
+  "iou-desc":"iou", "iou-asc":"iou", "nsd-desc":"nsd", "nsd-asc":"nsd",
+  "pw-asc":"pw_h1", "pw-desc":"pw_h1", "hu-asc":"hu_distance", "hu-desc":"hu_distance",
+  "delta-desc":"__delta", "stroke-asc":"__stroke",
+  "clip-desc":"clip_rr", "clip-asc":"clip_rr",
+  "cliptop1-desc":"clip_top1", "cliptop5-desc":"clip_top5",
+  "cliptgt-desc":"__clipT", "cliptgt-asc":"__clipT", "clipretain-desc":"clip_ratio", "clipover-desc":"clip_ratio",
+  "tc-desc":"tc_iou", "tc-asc":"tc_iou", "asp-desc":"tc_aspect_error",
+  "disagree":"iou", "subset":"iou", "id":"iou"
+};
+const METRIC_META = {
+  iou:         { label:"IoU",           dir: 1, dp:3 },
+  nsd:         { label:"NSD",           dir: 1, dp:3 },
+  pw_h1:       { label:"pw_h1",         dir:-1, dp:3 },
+  hu_distance: { label:"Hu",            dir:-1, dp:2 },
+  clip_rr:     { label:"CLIP 1/rank",   dir: 1, dp:3 },
+  clip_top1:   { label:"identified top-1", dir: 1, dp:3 },
+  clip_top5:   { label:"identified top-5", dir: 1, dp:3 },
+  __clipT:     { label:"target CLIP 1/rank", dir: 1, dp:3 },
+  clip_ratio:  { label:"CLIP vs target",dir: 1, dp:3 },
+  tc_iou:      { label:"shape IoU",     dir: 1, dp:3 },
+  tc_aspect_error:{ label:"aspect error",dir:-1, dp:3 },
+  __delta:     { label:"Δ big − small", dir: 1, dp:3 },
+  __stroke:    { label:"stroke width",  dir: 0, dp:3 }
+};
+const mkey = () => SORT_METRIC[st.sort] || "iou";
+const mval = (s, k) => k === "__delta"  ? delta(s)
+                     : k === "__stroke" ? (s.a.median_stroke_width_rel ?? null)
+                     // sample-level, not per-sweep: mv() looks inside the active
+                     // sweep entry and would return undefined for the ceiling.
+                     : k === "__clipT"  ? (s.clip_t_rr ?? null)
+                     : mv(s, k);
+
+/* rank-disagreement: the cases METRICS.md is about — area filled, outline wrong */
+function disagreement(rows){
+  const rank = (k, desc) => {
+    const ok = rows.filter(s => mv(s,k) != null)
+      .sort((a,b) => desc ? mv(b,k)-mv(a,k) : mv(a,k)-mv(b,k));
+    const m = new Map(); ok.forEach((s,i) => m.set(s.id, i/Math.max(1, ok.length-1)));
+    return m;
+  };
+  const ri = rank("iou", true), rn = rank("nsd", true);
+  const d = new Map();
+  rows.forEach(s => d.set(s.id, (ri.has(s.id) && rn.has(s.id)) ? Math.abs(ri.get(s.id)-rn.get(s.id)) : -1));
+  return d;
+}
+
+/* ── overlay compositing ─────────────────────────────────────────────────
+   Masks are 1-bit, dark = shape. Colours match make_phrase_gif.py so the
+   dashboard reads the same way as the contact sheets and the paper figures.   */
+const imgCache = new Map();
+function loadMask(b64){
+  if(imgCache.has(b64)) return imgCache.get(b64);
+  const p = new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => res(im); im.onerror = rej;
+    im.src = "data:image/png;base64," + b64;
+  });
+  imgCache.set(b64, p);
+  return p;
+}
+let scratch = null;
+function scratchCtx(){
+  if(!scratch){ scratch = document.createElement("canvas"); scratch.width = scratch.height = PX; }
+  return scratch.getContext("2d", { willReadFrequently: true });
+}
+async function paintOverlay(cv, tb, sb){
+  const [ti, si] = await Promise.all([loadMask(tb), loadMask(sb)]);
+  const sc = scratchCtx();
+  sc.clearRect(0,0,PX,PX); sc.drawImage(ti,0,0,PX,PX);
+  const T = sc.getImageData(0,0,PX,PX).data;
+  sc.clearRect(0,0,PX,PX); sc.drawImage(si,0,0,PX,PX);
+  const Sd = sc.getImageData(0,0,PX,PX).data;
+  const ctx = cv.getContext("2d");
+  const out = ctx.createImageData(PX,PX), d = out.data;
+  for(let i=0, n=PX*PX; i<n; i++){
+    const j = i<<2, t = T[j] < 128, s = Sd[j] < 128;
+    let r=255, g=255, b=255;
+    if(t && s){ r=0;   g=0;   b=255; }        // agreement
+    else if(t){ r=0;   g=255; b=255; }        // target the shadow missed
+    else if(s){ r=255; g=0;   b=255; }        // shadow that spilled
+    d[j]=r; d[j+1]=g; d[j+2]=b; d[j+3]=255;
+  }
+  ctx.putImageData(out,0,0);
+}
+
+const io = new IntersectionObserver((ents) => {
+  for(const e of ents){
+    if(!e.isIntersecting) continue;
+    const cv = e.target;
+    io.unobserve(cv);
+    paintOverlay(cv, cv.dataset.t, cv.dataset.s).catch(()=>{});
+  }
+}, { rootMargin: "300px 0px" });
+
+function plate(s){
+  const e = sw(s), wrap = document.createElement("div");
+  wrap.className = "plate";
+  // Every plate works in the fitted frame: `tgt` is the target the optimizer was
+  // given, which on a --fit-target sweep is the authored shape scaled ~0.83 and
+  // shifted ~14px. Showing the authored target instead put `target` and
+  // `overlay` in different coordinate systems and every card read as
+  // mis-registered. Unfitted sweeps have no `w`, and there the authored target
+  // IS what was cast, so the fallback is exact.
+  const tgt = (e && e.w) || s.t;
+  const mk = { target: () => imgEl(tgt), shadow: () => e && e.s ? imgEl(e.s) : blankEl(),
+               overlay: () => e && e.s ? cvEl(tgt, e.s) : blankEl() };
+  wrap.append(mk[st.view]());
+  return wrap;
+}
+function imgEl(b64){
+  const i = document.createElement("img");
+  i.loading = "lazy"; i.decoding = "async"; i.alt = "";
+  i.src = "data:image/png;base64," + b64;
+  return i;
+}
+function cvEl(tb, sb){
+  const c = document.createElement("canvas");
+  c.width = c.height = PX; c.dataset.t = tb; c.dataset.s = sb;
+  io.observe(c);
+  return c;
+}
+function blankEl(msg){
+  const d = document.createElement("div");
+  d.style.cssText = "background:var(--panel-2);display:grid;place-items:center;color:var(--muted);font-size:10px;text-align:center;padding:4px";
+  d.textContent = msg || "no solve";
+  return d;
+}
+
+/* ── grid ────────────────────────────────────────────────────────────── */
+function card(s){
+  const e = sw(s), v = iou(s);
+  const el = document.createElement("article");
+  el.className = "card" + (st.picks.includes(s.id) ? " picked" : "");
+  el.dataset.id = s.id;
+
+  const p = plate(s);
+  const star = document.createElement("button");
+  star.className = "star"; star.type = "button";
+  star.setAttribute("aria-label", "Add " + s.id + " to the sequence");
+  star.textContent = "★";
+  star.addEventListener("click", (ev) => { ev.stopPropagation(); togglePick(s.id); });
+  // The star already stops propagation, so the rest of the card is the hit area.
+  el.style.cursor = "zoom-in";
+  el.addEventListener("click", () => openDetail(s.id));
+  p.append(star);
+
+  const cell = (p) => '<div class="m' + (p.k === "clip_rr" ? " mclip" : "") + '"' +
+    (p.k === "clip_rr" ? ' role="button" tabindex="0"' : "") +
+    (p.tip ? ' title="' + p.tip(s, e) + '"' : "") +
+    '><span>' + p.name + (p.dir > 0 ? " ↑" : " ↓") +
+    (p.k === "clip_rr" ? ' <i class="cx">▾</i>' : "") +
+    '</span><b>' + num(e && e[p.k], p.dp) + '</b></div>';
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  meta.innerHTML =
+    '<div class="idline"><span class="sid" title="' + s.id + '">' + s.id + '</span>' +
+    '<span class="iou" title="IoU — how much area agrees">' + (v == null ? "—" : v.toFixed(3)) + '</span></div>' +
+    '<div class="mrow">' + PANEL.slice(1).map(cell).join("") + '</div>';
+
+  /* The CLIP cell expands in place. The rank alone says the shadow failed; the
+     top 5 say what it failed *as*, and that is the part a reader can act on.
+     Inline rather than in the detail sheet because the question is almost always
+     comparative -- "do these all collapse onto the same wrong letter?" -- and a
+     modal per card is exactly the wrong shape for that. The card's own click
+     opens the detail sheet, so this one stops propagating. */
+  const cl = meta.querySelector(".mclip");
+  if(cl){
+    const box = document.createElement("div");
+    box.className = "clipex"; box.hidden = true;
+    meta.append(box);
+    const toggle = (ev) => {
+      ev.stopPropagation();
+      if(box.hidden){ box.innerHTML = clipConfusion(s, e); box.hidden = false; }
+      else box.hidden = true;
+      cl.classList.toggle("open", !box.hidden);
+    };
+    cl.addEventListener("click", toggle);
+    cl.addEventListener("keydown", (ev) => {
+      if(ev.key === "Enter" || ev.key === " "){ ev.preventDefault(); toggle(ev); }
+    });
+  }
+  el.append(p, meta);
+  return el;
+}
+
+/* Top-5 confusions, true class marked. parseGuess splits on "|" and tolerates a
+   shorter list, so a payload built before the scorer was widened to five still
+   renders -- it shows the three it has rather than nothing at all. The bars are
+   scaled to the top guess, not to 1.0: these are raw cosines, they sit in a
+   narrow band well below 1, and drawing them against a full-width 1.0 makes
+   every candidate look equally weak and hides the gap that is the whole point. */
+function clipConfusion(s, e){
+  const g = parseGuess(e && e.clip_preds);
+  if(!g.length)
+    return '<div class="note">No CLIP guesses in this payload. Run '
+         + '<span class="mono">scripts/clip_eval_dataset.py</span>, then rebuild '
+         + 'the payload and this page.</div>';
+  const truth = s.clip_true ?? s.cls;
+  const top = Math.max.apply(null, g.map(x => x.sim ?? 0)) || 1;
+  const hit = g.some(x => x.label === truth);
+  return '<ol class="clipl">' + g.map((x, i) =>
+      '<li' + (x.label === truth ? ' class="hit"' : "") + '>'
+    + '<span class="cn">' + (i + 1) + '</span>'
+    + '<span class="cl">' + x.label + '</span>'
+    + '<span class="cb"><i style="width:'
+    + Math.max(2, Math.round(100 * (x.sim ?? 0) / top)) + '%"></i></span>'
+    + '<span class="cs">' + (x.sim == null ? "—" : x.sim.toFixed(3)) + '</span></li>'
+    ).join("") + '</ol><div class="note">'
+    + (truth ? 'True class <b>' + truth + '</b> — '
+             + (hit ? 'inside the top 5.' : '<b>not</b> in the top 5.') + ' ' : "")
+    + 'Bars are raw cosine similarity scaled to the top guess, not confidence: '
+    + 'they do not sum to 1.</div>';
+}
+
+/* ── expanded card ───────────────────────────────────────────────────────── */
+function parseGuess(str){
+  if(!str) return [];
+  return String(str).split("|").map(t => {
+    const i = t.lastIndexOf(":");
+    return i < 0 ? {label:t, sim:null} : {label:t.slice(0,i), sim:+t.slice(i+1)};
+  });
+}
+function guessRow(str, truth){
+  const g = parseGuess(str);
+  if(!g.length) return "—";
+  return '<span class="guess">' + g.map(x =>
+    (x.label === truth ? "<b>" + x.label + "</b>" : x.label) +
+    (x.sim == null ? "" : " " + x.sim.toFixed(3))).join("  ·  ") + "</span>";
+}
+function closeDetail(){
+  const el = document.getElementById("detail");
+  if(el) el.remove();
+  document.removeEventListener("keydown", detailKey);
+}
+function detailKey(e){ if(e.key === "Escape") closeDetail(); }
+
+function openDetail(id){
+  closeDetail();
+  const s = byId.get(id); if(!s) return;
+  const e = sw(s);
+  const back = document.createElement("div");
+  back.className = "dback"; back.id = "detail";
+  back.addEventListener("click", (ev) => { if(ev.target === back) closeDetail(); });
+
+  const sheet = document.createElement("div"); sheet.className = "dsheet";
+  const sweepName = (DATA.sweep_dirs || {})[st.sweep] || st.sweep;
+
+  // header
+  const head = document.createElement("div"); head.className = "dhead";
+  head.innerHTML = `<span class="did">${s.id}</span>
+    <span class="dsub">${s.subset}${s.cls ? " · " + s.cls : ""} · ${sweepName}</span>`;
+  const x = document.createElement("button"); x.className = "dx"; x.textContent = "close  esc";
+  x.addEventListener("click", closeDetail);
+  head.append(x);
+
+  // plates: target, shadow, overlay
+  const plates = document.createElement("div"); plates.className = "dplates";
+  const tgt = (e && e.w) || s.t;
+  const cell = (lab, node) => {
+    const d = document.createElement("div"); d.className = "dp";
+    const l = document.createElement("div"); l.className = "lab"; l.textContent = lab;
+    d.append(l, node); return d;
+  };
+  const missing = (msg) => { const d = document.createElement("div"); d.className = "miss";
+    d.textContent = msg; return d; };
+  plates.append(cell("target (as given to the optimizer)", tgt ? imgEl(tgt) : missing("none")));
+  plates.append(cell("shadow", e && e.s ? imgEl(e.s) : missing("not solved")));
+  if(e && e.s && tgt){
+    // Not observed by the grid's IntersectionObserver, so paint it now.
+    const cv = document.createElement("canvas"); cv.width = cv.height = PX;
+    paintOverlay(cv, tgt, e.s).catch(()=>{});
+    plates.append(cell("overlay — blue agrees, cyan missed, magenta spilled", cv));
+  }
+
+  // numbers, both sweeps at once
+  const sec = document.createElement("div"); sec.className = "dsec";
+  const slots = Object.keys(DATA.sweep_dirs || {big:1, small:1});
+  const f = (v, dp=3) => (v == null ? "—" : (+v).toFixed(dp));
+  const mrow = (label, key, dp=3) => `<tr><td>${label}</td>` +
+    slots.map(k => `<td>${f((s[k]||{})[key], dp)}</td>`).join("") + "</tr>";
+
+  const g = parseGuess(e && e.clip_top3);
+  const tg = parseGuess(s.clip_t_top3);
+  sec.innerHTML = `
+    <h4>Geometry — against the target the optimizer was given</h4>
+    <table class="dtab"><thead><tr><th></th>${slots.map(k =>
+      `<th>${(DATA.sweep_dirs||{})[k] || k}</th>`).join("")}</tr></thead><tbody>
+      ${mrow("IoU","iou")}${mrow("NSD","nsd")}${mrow("Hu distance","hu_distance",2)}
+    </tbody></table>
+
+    <h4>Recognizability — CLIP, ranked in ${s.clip_n || "?"} classes of this subset</h4>
+    <table class="dtab"><thead><tr><th></th><th>rank</th><th>1/rank</th><th>what CLIP read it as (top 5)</th></tr></thead><tbody>
+      <tr><td>target (ceiling)</td><td>${s.clip_t_rank ?? "—"}</td><td>${f(s.clip_t_rr)}</td>
+          <td style="text-align:left">${guessRow(s.clip_t_preds, s.clip_true)}</td></tr>
+      <tr><td>shadow</td><td>${(e&&e.clip_rank) ?? "—"}</td><td>${f(e&&e.clip_rr)}</td>
+          <td style="text-align:left">${guessRow(e&&e.clip_preds, s.clip_true)}</td></tr>
+    </tbody></table>
+    <div class="note">True class <b>${s.clip_true ?? s.cls ?? "?"}</b>, chance
+      ${s.clip_n ? (1/s.clip_n).toFixed(3) : "—"}. Ratio shadow/target
+      <b>${f(e && e.clip_ratio)}</b>. The similarity beside each guess is a raw
+      cosine, not a confidence — it does not sum to 1 across candidates.</div>`;
+
+  sheet.append(head, plates, sec);
+  back.append(sheet);
+  document.body.append(back);
+  document.addEventListener("keydown", detailKey);
+}
+
+function renderGrid(){
+  let rows = filtered();
+  if(st.sort === "disagree"){
+    const d = disagreement(rows);
+    rows = rows.slice().sort((a,b) => (d.get(b.id) ?? -1) - (d.get(a.id) ?? -1));
+  } else {
+    // Fall back rather than pass undefined. The guard at load only runs once, so
+    // a menu entry with no CMP comparator reached this as sort(undefined), which
+    // is a lexicographic sort of "[object Object]" -- every element equal, the
+    // order untouched, and no error. A sort that silently does nothing looks
+    // exactly like a sort whose metric happens to be flat.
+    rows = rows.slice().sort(CMP[st.sort] || CMP["iou-desc"]);
+  }
+  $("#nShown").textContent = rows.length;
+  const solved = S.filter(x => iou(x) != null).length, pend = DATA.n - solved;
+  $("#nTot").textContent = "of " + solved + " with results"
+    + (pend ? "  ·  " + pend + " v2 pending the re-run" : "");
+  const frag = document.createDocumentFragment();
+  rows.forEach(s => frag.append(card(s)));
+  $("#grid").replaceChildren(frag);
+  renderReadout(rows);
+}
+
+/* Aggregates recompute over the current filter, in the same shape METRICS.md
+   reports them — mean with a p05–p95 spread — so a subset read here is directly
+   quotable next to the numbers in the doc. */
+function renderReadout(rows){
+  const box = $("#readout");
+  box.replaceChildren();
+  for(const p of READOUT){
+    const el = document.createElement("div");
+    el.className = "ro";
+    let head, val, sub;
+    if(p.agg){
+      // A cell that is not a mean. Counts have no percentiles and no direction,
+      // so it supplies its own value and sub-line rather than being forced
+      // through the mean path.
+      const a = p.agg(rows);
+      head = ""; val = a.value; sub = a.sub;
+    } else {
+      const xs = rows.map(s => mv(s, p.k)).filter(x => x != null);
+      const mean = xs.length ? xs.reduce((a,b) => a+b, 0) / xs.length : null;
+      head = (p.dir > 0 ? "↑ higher better" : "↓ lower better");
+      val = (mean == null ? "—" : mean.toFixed(p.dp));
+      sub = "p05 " + num(q05(xs, .05), p.dp) + "  ·  p95 " + num(q05(xs, .95), p.dp);
+    }
+    el.innerHTML =
+      '<div class="k"><span class="lbl">' + p.name + '</span><em>' + head + '</em></div>' +
+      '<div class="v">' + val + '</div>' +
+      '<div class="sp">' + sub + '</div>' +
+      '<div class="wh">' + p.what + '</div>';
+    box.append(el);
+  }
+}
+
+/* ── distribution strip (single series, brushable) ─────────────────────────
+   Domain comes from the data, not a constant: IoU and NSD live in [0,1] but
+   pw_h1 and Hu are unbounded and the budget delta is signed, so a fixed axis
+   would squash three of the six into one bin. */
+const BINS = 26;
+let HDOM = [0, 1];
+function histPool(){
+  const k = mkey();
+  return S.filter(s => st.subs.has(s.subset) && iou(s) != null && mval(s, k) != null)
+          .map(s => mval(s, k));
+}
+function renderHist(){
+  const k = mkey(), meta = METRIC_META[k], all = histPool();
+  const svg = $("#hist"); svg.replaceChildren();
+  const arrow = meta.dir > 0 ? " ↑" : meta.dir < 0 ? " ↓" : "";
+  $("#histLabel").textContent = meta.label + arrow +
+    (k === "__stroke" ? " — target geometry, drag to filter" : " — drag to filter");
+  if(!all.length){ HDOM = [0, 1]; $("#rangeTxt").textContent = "no data"; return; }
+  let lo = Math.min(...all), hi = Math.max(...all);
+  if(hi - lo < 1e-9){ hi = lo + 1e-6; }
+  const pad = (hi - lo) * 0.02; lo -= pad; hi += pad;
+  HDOM = [lo, hi];
+  const counts = new Array(BINS).fill(0);
+  all.forEach(v => counts[Math.min(BINS - 1, Math.floor((v - lo) / (hi - lo) * BINS))]++);
+  const max = Math.max(1, ...counts), W = 520, H = 44, bw = W / BINS;
+  const ns = "http://www.w3.org/2000/svg";
+  counts.forEach((c, i) => {
+    const x0 = lo + (hi - lo) * i / BINS, x1 = lo + (hi - lo) * (i + 1) / BINS;
+    const on = st.lo == null || (x1 > st.lo && x0 < st.hi);
+    const h = Math.max(c ? 2 : 0, Math.round(c / max * (H - 6)));
+    const r = document.createElementNS(ns, "rect");
+    r.setAttribute("x", (i * bw + 0.6).toFixed(2)); r.setAttribute("y", H - h);
+    r.setAttribute("width", (bw - 1.2).toFixed(2)); r.setAttribute("height", h);
+    r.setAttribute("rx", "1.5"); r.setAttribute("class", "bar" + (on ? " on" : ""));
+    svg.append(r);
+  });
+  svg.setAttribute("aria-label",
+    `Distribution of ${meta.label} across the ${all.length} selected targets`);
+  const d = meta.dp;
+  $("#rangeTxt").textContent = st.lo == null
+    ? `${lo.toFixed(d)} – ${hi.toFixed(d)}`
+    : `${st.lo.toFixed(d)} – ${st.hi.toFixed(d)}   (click to clear)`;
+}
+(function brush(){
+  const svg = $("#hist");
+  let drag = null;
+  const at = (ev) => {
+    const r = svg.getBoundingClientRect();
+    const f = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
+    return HDOM[0] + f * (HDOM[1] - HDOM[0]);
+  };
+  svg.addEventListener("pointerdown", (e) => { drag = at(e); svg.setPointerCapture(e.pointerId); });
+  svg.addEventListener("pointermove", (e) => {
+    if(drag == null) return;
+    const b = at(e);
+    st.lo = Math.min(drag, b); st.hi = Math.max(drag, b);
+    renderHist();
+  });
+  svg.addEventListener("pointerup", (e) => {
+    if(drag == null) return;
+    const b = at(e), span = HDOM[1] - HDOM[0];
+    if(Math.abs(b - drag) < span * 0.012){ st.lo = st.hi = null; }   // click = clear
+    drag = null; renderHist(); renderGrid();
+  });
+})();
+
+/* ── sequence filmstrip ──────────────────────────────────────────────── */
+function togglePick(id){
+  const i = st.picks.indexOf(id);
+  if(i >= 0) st.picks.splice(i, 1); else st.picks.push(id);
+  store.set("picks", st.picks);
+  const c = $('.card[data-id="' + CSS.escape(id) + '"]');
+  if(c) c.classList.toggle("picked", st.picks.includes(id));
+  renderReel();
+}
+function renderReel(){
+  const reel = $("#reel");
+  $("#pickN").textContent = st.picks.length + (st.picks.length === 1 ? " frame" : " frames");
+  if(!st.picks.length){
+    reel.replaceChildren(Object.assign(document.createElement("div"),
+      { className: "empty", textContent: "No frames yet — star the shots you want, in order." }));
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  st.picks.forEach((id, k) => {
+    const s = byId.get(id); if(!s) return;
+    const e = sw(s);
+    const f = document.createElement("div");
+    f.className = "frame"; f.draggable = true; f.dataset.id = id;
+    f.title = id + "  IoU " + num(e && e.iou);
+    f.append(e && e.s ? imgEl(e.s) : blankEl());
+    const n = document.createElement("span"); n.className = "n"; n.textContent = k + 1;
+    const x = document.createElement("button");
+    x.className = "x"; x.type = "button"; x.textContent = "×";
+    x.setAttribute("aria-label", "Remove " + id);
+    x.addEventListener("click", (ev) => { ev.stopPropagation(); togglePick(id); });
+    f.append(n, x);
+    f.addEventListener("dragstart", (ev) => { ev.dataTransfer.setData("text/plain", id); f.classList.add("drag"); });
+    f.addEventListener("dragend", () => f.classList.remove("drag"));
+    f.addEventListener("dragover", (ev) => ev.preventDefault());
+    f.addEventListener("drop", (ev) => {
+      ev.preventDefault();
+      const from = ev.dataTransfer.getData("text/plain");
+      if(!from || from === id) return;
+      const a = st.picks.indexOf(from), b = st.picks.indexOf(id);
+      if(a < 0 || b < 0) return;
+      st.picks.splice(b, 0, st.picks.splice(a, 1)[0]);
+      store.set("picks", st.picks); renderReel();
+    });
+    frag.append(f);
+  });
+  reel.replaceChildren(frag);
+}
+function copy(text, btn){
+  const done = () => { const t = btn.textContent; btn.textContent = "copied"; setTimeout(() => btn.textContent = t, 1100); };
+  if(navigator.clipboard && window.isSecureContext){ navigator.clipboard.writeText(text).then(done, ()=>{}); return; }
+  const ta = document.createElement("textarea");
+  ta.value = text; ta.style.cssText = "position:fixed;opacity:0";
+  document.body.append(ta); ta.select();
+  try{ document.execCommand("copy"); done(); } finally { ta.remove(); }
+}
+
+/* ── controls ────────────────────────────────────────────────────────── */
+function seg(sel, key, after){
+  const box = $(sel);
+  box.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-v]"); if(!b) return;
+    [...box.querySelectorAll("button")].forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    st[key] = b.dataset.v; store.set(key, st[key]); after();
+  });
+  [...box.querySelectorAll("button")].forEach(x => x.setAttribute("aria-pressed", String(x.dataset.v === st[key])));
+}
+seg("#segSweep", "sweep", () => { renderHist(); renderGrid(); renderReel(); });
+seg("#segView",  "view",  () => { renderGrid(); $("#legend").style.display = st.view === "overlay" ? "" : "none"; });
+
+(function themeSeg(){
+  const box = $("#segTheme"), cur = store.get("theme", "auto");
+  const apply = (v) => {
+    if(v === "auto") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", v);
+  };
+  apply(cur);
+  [...box.querySelectorAll("button")].forEach(x => x.setAttribute("aria-pressed", String(x.dataset.v === cur)));
+  box.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-v]"); if(!b) return;
+    [...box.querySelectorAll("button")].forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    store.set("theme", b.dataset.v); apply(b.dataset.v);
+  });
+})();
+
+(function subsetChips(){
+  const box = $("#subsets"), counts = {};
+  S.forEach(s => counts[s.subset] = (counts[s.subset] || 0) + 1);
+  DATA.subsets.forEach(name => {
+    const b = document.createElement("button");
+    b.className = "chip"; b.type = "button"; b.dataset.sub = name;
+    b.innerHTML = name.replace(/_/g, " ") + '<span class="ct">' + counts[name] + '</span>';
+    b.setAttribute("aria-pressed", String(st.subs.has(name)));
+    b.addEventListener("click", () => {
+      st.subs.has(name) ? st.subs.delete(name) : st.subs.add(name);
+      if(!st.subs.size) st.subs = new Set(DATA.subsets);
+      [...box.children].forEach(c => c.setAttribute("aria-pressed", String(st.subs.has(c.dataset.sub))));
+      store.set("subs", [...st.subs]); renderHist(); renderGrid();
+    });
+    box.append(b);
+  });
+  $("#allSub").addEventListener("click", () => {
+    st.subs = new Set(DATA.subsets);
+    [...box.children].forEach(c => c.setAttribute("aria-pressed", "true"));
+    store.set("subs", [...st.subs]); renderHist(); renderGrid();
+  });
+})();
+
+if(!CMP[st.sort] && st.sort !== "disagree") st.sort = "iou-desc";
+$("#sort").value = st.sort;
+$("#sort").addEventListener("change", (e) => {
+  const before = mkey();
+  st.sort = e.target.value; store.set("sort", st.sort);
+  // A range picked on IoU means nothing on Hu — clear it when the quantity changes.
+  if(mkey() !== before) st.lo = st.hi = null;
+  renderHist(); renderGrid();
+});
+let qt;
+$("#q").addEventListener("input", (e) => { clearTimeout(qt); qt = setTimeout(() => { st.q = e.target.value; renderGrid(); }, 140); });
+$("#copyIds").addEventListener("click", (e) => copy(st.picks.join("\n"), e.target));
+$("#copyJson").addEventListener("click", (e) => copy(JSON.stringify({
+  sweep: st.sweep,
+  frames: st.picks.map(id => {
+    const s = byId.get(id), en = s && s[st.sweep];
+    return { id, subset: s && s.subset, target: s && ("targets/" + s.subset + "/" + id.replace(s.subset + "_", "") + ".png"), iou: en && en.iou };
+  })
+}, null, 2), e.target));
+/* Starred shadows -> the robot. The dashboard is one self-contained file with no
+   backend, and it stays that way: rather than calling an exporter it cannot
+   reach, it hands you the exact command. export_library_clip.py writes into
+   fleet-shadow-art/choreographies/, which IS the robot UI's Play library
+   (render_server serves it at GET /choreographies), so a starred target is
+   deployable from the UI on the next refresh -- no package build.
+
+   The card keys are short ("big"/"small"); the exporter takes the SWEEP
+   DIRECTORY name, so translate rather than pasting a --sweep that names no
+   directory on disk. Only a solved target has a pose to send, so unsolved
+   picks are named and dropped instead of poisoning the whole command. */
+const SWEEP_DIR = { big: "big-budget-grounded", small: "small-budget-grounded" };
+$("#copyDeploy").addEventListener("click", (e) => {
+  const dir = (DATA.sweep_dirs || {})[st.sweep] || SWEEP_DIR[st.sweep] || st.sweep;
+  const solved = [], unsolved = [];
+  st.picks.forEach(id => {
+    const s = byId.get(id), en = s && sw(s);
+    (en && en.iou != null ? solved : unsolved).push(id);
+  });
+  const head = ["# run from the umbra-bench repo root, then refresh Play"];
+  if(unsolved.length) head.push("# skipped, no solve in " + dir + ": " + unsolved.join(", "));
+  if(!solved.length){
+    copy(head.concat("# nothing to export").join("\n") + "\n", e.target);
+    return;
+  }
+  const args = solved.map(id => "    --library-id " + id);
+  if(dir !== "big-budget-grounded") args.push("    --sweep " + dir);
+  const body = ["python demo/export_library_clip.py \\"]
+    .concat(args.map((a, k) => a + (k < args.length - 1 ? " \\" : "")));
+  copy(head.concat(body).join("\n") + "\n", e.target);
+});
+$("#clearPicks").addEventListener("click", () => { st.picks = []; store.set("picks", st.picks);
+  document.querySelectorAll(".card.picked").forEach(c => c.classList.remove("picked")); renderReel(); });
+
+/* ── benchmark view ──────────────────────────────────────────────────────────
+   Everything here is computed from the same payload the dashboard uses, on the
+   big-budget sweep, so the figures cannot drift from the cards.              */
+const SRC = { digits:"glyph", letters_upper:"glyph", letters_lower:"glyph",
+  animals:"nameable", objects:"nameable",
+  abstract:"abstract", hand_shadow:"hand" };
+const SRC_ORDER = ["glyph","nameable","abstract","hand"];
+const SRC_LABEL = { glyph:"glyph (generated)", nameable:"MPEG-7 nameable",
+  abstract:"MPEG-7 abstract (null)", hand:"HaSPeR hand-expert" };
+const SRC_VAR = { glyph:"var(--s1)", nameable:"var(--s2)", abstract:"var(--s3)", hand:"var(--s4)" };
+const QN = ["S1 thin","S2","S3","S4 thick"];
+/* 5-fold CV R^2 of a linear model on 11 target attributes -> each metric.
+   Fitted offline (scripts/, statsmodels-free lstsq); see the caption. */
+const CVR2 = { iou:0.587, nsd:0.311, pw_h1:0.628, hu_distance:0.267 };
+const bm = (s,k) => (s.big && s.big[k] != null) ? s.big[k] : null;
+const pct = (xs,p) => { const a=[...xs].sort((x,y)=>x-y), i=(a.length-1)*p, f=Math.floor(i);
+  return f+1<a.length ? a[f]+(a[f+1]-a[f])*(i-f) : a[f]; };
+
+const BS = S.filter(s => bm(s,"iou") != null && s.a.median_stroke_width_rel != null)
+  .map(s => ({ ...s, src: SRC[s.subset], stroke: s.a.median_stroke_width_rel,
+               holed: (s.a.n_holes_signif ?? 0) > 0 }));
+{
+  const cuts = [.25,.5,.75].map(p => pct(BS.map(s => s.stroke), p));
+  BS.forEach(s => { s.q = s.stroke <= cuts[0] ? 0 : s.stroke <= cuts[1] ? 1 : s.stroke <= cuts[2] ? 2 : 3; });
+}
+const svgEl = (t, at) => { const e = document.createElementNS("http://www.w3.org/2000/svg", t);
+  for(const k in at) e.setAttribute(k, at[k]); return e; };
+
+function stratTable(){
+  const cell = (f) => BS.filter(f).length;
+  const head = "<thead><tr><th></th>" + QN.map(q => `<th>${q}</th>`).join("") + "<th>all</th></tr></thead>";
+  const body = SRC_ORDER.map(src => {
+    const tds = QN.map((_,q) => { const n = cell(s => s.src===src && s.q===q);
+      return `<td class="${n<10?"warn":""}">${n}</td>`; }).join("");
+    return `<tr><td>${SRC_LABEL[src]}</td>${tds}<td>${cell(s=>s.src===src)}</td></tr>`;
+  }).join("");
+  const tot = `<tr class="tot"><td>all</td>${QN.map((_,q)=>`<td>${cell(s=>s.q===q)}</td>`).join("")}<td>${BS.length}</td></tr>`;
+  const holed = `<tr><td style="padding-top:11px">of which <b>holed</b> (secondary axis)</td>` +
+    QN.map((_,q)=>{ const n=cell(s=>s.q===q&&s.holed); return `<td class="${n<10?"warn":""}" style="padding-top:11px">${n}</td>`; }).join("") +
+    `<td style="padding-top:11px">${cell(s=>s.holed)}</td></tr>`;
+  return `<div class="tblwrap"><table class="strat">${head}<tbody>${body}${tot}${holed}</tbody></table></div>`;
+}
+
+/* Fig B1 — castability vs stroke width, plus how much of each metric the
+   target alone explains. */
+function figB1(){
+  const W=880,H=300,L=52,R=14,T=14,B=38;
+  const xs=BS.map(s=>s.stroke), ys=BS.map(s=>bm(s,"iou"));
+  const x0=0, x1=Math.max(...xs)*1.02, y0=Math.min(...ys)*0.96, y1=Math.max(...ys)*1.02;
+  const X=v=>L+(v-x0)/(x1-x0)*(W-L-R), Y=v=>H-B-(v-y0)/(y1-y0)*(H-T-B);
+  const svg=svgEl("svg",{viewBox:`0 0 ${W} ${H}`,role:"img",
+    "aria-label":"Achieved IoU against target stroke width for all 546 targets"});
+  svg.style.cssText="width:100%;height:auto;display:block";
+  for(let i=0;i<=4;i++){ const v=y0+(y1-y0)*i/4;
+    svg.append(svgEl("line",{x1:L,x2:W-R,y1:Y(v),y2:Y(v),stroke:"var(--line-2)","stroke-width":1}));
+    const t=svgEl("text",{x:L-8,y:Y(v)+3.5,"text-anchor":"end",fill:"var(--muted)","font-size":10,
+      "font-family":"IBM Plex Mono, monospace"}); t.textContent=v.toFixed(2); svg.append(t); }
+  for(let i=0;i<=4;i++){ const v=x0+(x1-x0)*i/4;
+    const t=svgEl("text",{x:X(v),y:H-B+15,"text-anchor":"middle",fill:"var(--muted)","font-size":10,
+      "font-family":"IBM Plex Mono, monospace"}); t.textContent=v.toFixed(2); svg.append(t); }
+  BS.forEach(s=>svg.append(svgEl("circle",{cx:X(s.stroke).toFixed(1),cy:Y(bm(s,"iou")).toFixed(1),
+    r:2.6,fill:SRC_VAR[s.src],"fill-opacity":.55})));
+  const n=xs.length, mx=xs.reduce((a,b)=>a+b,0)/n, my=ys.reduce((a,b)=>a+b,0)/n;
+  let sxy=0,sxx=0; for(let i=0;i<n;i++){ sxy+=(xs[i]-mx)*(ys[i]-my); sxx+=(xs[i]-mx)**2; }
+  const b1=sxy/sxx, b0=my-b1*mx;
+  svg.append(svgEl("line",{x1:X(x0),y1:Y(b0+b1*x0),x2:X(x1),y2:Y(b0+b1*x1),
+    stroke:"var(--ink)","stroke-width":1.6,"stroke-dasharray":"6 4","stroke-opacity":.75}));
+  const ax=svgEl("text",{x:(L+W-R)/2,y:H-4,"text-anchor":"middle",fill:"var(--muted)","font-size":11});
+  ax.textContent="target median stroke width (fraction of image diagonal)"; svg.append(ax);
+  const ay=svgEl("text",{x:14,y:H/2,"text-anchor":"middle",fill:"var(--muted)","font-size":11,
+    transform:`rotate(-90 14 ${H/2})`}); ay.textContent="achieved IoU"; svg.append(ay);
+
+  const bw=svgEl("svg",{viewBox:"0 0 380 118",role:"img",
+    "aria-label":"Share of each metric's variance explained by target attributes alone"});
+  bw.style.cssText="width:100%;max-width:380px;height:auto;display:block";
+  Object.entries(CVR2).forEach(([k,v],i)=>{
+    const y=i*28+8, w=v*230;
+    const lb=svgEl("text",{x:0,y:y+13,fill:"var(--ink-2)","font-size":11,
+      "font-family":"IBM Plex Mono, monospace"}); lb.textContent=k;
+    bw.append(lb, svgEl("rect",{x:88,y,width:230,height:17,rx:2,fill:"var(--line-2)"}),
+      svgEl("rect",{x:88,y,width:w.toFixed(1),height:17,rx:2,fill:"var(--accent)"}));
+    const vt=svgEl("text",{x:324,y:y+13,fill:"var(--ink-2)","font-size":11,
+      "font-family":"IBM Plex Mono, monospace"}); vt.textContent=v.toFixed(3); bw.append(vt);
+  });
+  const leg = SRC_ORDER.map(s=>`<span><i style="background:${SRC_VAR[s]}"></i>${SRC_LABEL[s]}</span>`).join("");
+  const wrap=document.createElement("div"); wrap.className="fig";
+  wrap.innerHTML=`<h3>Castability is predictable before anything is solved</h3>
+    <div class="legend-row" style="margin-top:8px">${leg}</div>`;
+  wrap.append(svg);
+  const sub=document.createElement("div");
+  sub.innerHTML=`<div class="lbl" style="margin:14px 0 6px">variance explained by target attributes alone — 5-fold CV R²</div>`;
+  sub.append(bw); wrap.append(sub);
+  const cap=document.createElement("div"); cap.className="cap";
+  cap.innerHTML=`Each point is one of the 546 targets, big-budget sweep. IoU rises with stroke width
+    (Spearman <b>ρ = +0.66</b>); the dashed line is the least-squares fit. The bars below show how much of
+    each metric a linear model on eleven <em>target</em> attributes can predict without seeing a solve.
+    The ordering is the argument for the panel: <b>IoU (0.587) and pw_h1 (0.628) are largely determined by
+    the target</b>, while <b>hu_distance (0.267) is the least contaminated</b> — it is the member that most
+    reflects the solve rather than the shape it was handed.`;
+  wrap.append(cap); return wrap;
+}
+
+/* Fig B2 — matched pairs: IoU ties, another panel member does not. */
+const PAIRS = [
+  { k:"pw_h1", dp:3, title:"Same IoU, opposite topology",
+    a:"objects_spoon_mpeg7-05", b:"animals_butterfly_mpeg7-01" },
+  { k:"nsd", dp:3, title:"Same IoU, outline twice as badly placed",
+    a:"objects_spoon_mpeg7-04", b:"objects_cup_mpeg7-03" }
+];
+function pcard(s, k, dp, hot){
+  const el=document.createElement("div"); el.className="pcard";
+  const trip=document.createElement("div"); trip.className="trip";
+  // Only four of these, and they sit below the fold — paint eagerly rather than
+  // through the grid's IntersectionObserver, which never fires for them.
+  const cv=document.createElement("canvas"); cv.width=cv.height=PX;
+  const ptgt=(s.big && s.big.w) || s.t;          // fitted frame, as the grid uses
+  paintOverlay(cv, ptgt, s.big.s).catch(()=>{});
+  trip.append(imgEl(ptgt), imgEl(s.big.s), cv);
+  const cd=document.createElement("div"); cd.className="cd";
+  cd.innerHTML=`<div class="trip-lbl"><span>target</span><span>shadow</span><span>overlay</span></div>
+    <div class="nm">${s.id}</div>
+    <div class="nums">
+      <div><span>IoU ↑</span><b>${bm(s,"iou").toFixed(3)}</b></div>
+      <div><span>${k} ${k==="nsd"?"↑":"↓"}</span><b class="${hot?"hot":""}">${bm(s,k).toFixed(dp)}</b></div>
+    </div>`;
+  el.append(trip, cd); return el;
+}
+function figB2(){
+  const wrap=document.createElement("div"); wrap.className="fig";
+  wrap.innerHTML=`<h3>Why four numbers and not one</h3>`;
+  PAIRS.forEach(p=>{
+    const A=byId.get(p.a), B=byId.get(p.b);
+    if(!A||!B||!A.big||!B.big) return;
+    const hd=document.createElement("div"); hd.className="lbl";
+    hd.style.cssText="margin:14px 0 6px"; hd.textContent=p.title;
+    const row=document.createElement("div"); row.className="pair";
+    // Highlight the member that is WORSE on the second metric. nsd is
+    // higher-better, pw_h1 lower-better — so "worse" flips with the metric.
+    const hiBetter = p.k === "nsd";
+    const aWorse = hiBetter ? bm(A,p.k) < bm(B,p.k) : bm(A,p.k) > bm(B,p.k);
+    row.append(pcard(A,p.k,p.dp, aWorse), pcard(B,p.k,p.dp, !aWorse));
+    wrap.append(hd,row);
+  });
+  const cap=document.createElement("div"); cap.className="cap";
+  cap.innerHTML=`Two pairs the optimizer scores identically on IoU. <b>Top:</b> a spoon and a butterfly both
+    land at IoU ≈ 0.60, but the butterfly's holes are gone — <b>pw_h1 differs by 1.008</b> while IoU differs
+    by 0.004. <b>Bottom:</b> a spoon and a cup both at IoU ≈ 0.75, same subset, but the cup's outline is more
+    than twice as badly placed (<b>NSD 0.741 vs 0.312</b>). Across all 546 the panel members share little:
+    the largest pairwise |ρ| is 0.51, and IoU↔pw_h1 is 0.10. Overlay colours as in the dashboard.`;
+  wrap.append(cap); return wrap;
+}
+
+/* The reference set as a stratum, in the same shape as the table above it: the
+   question a reader has here is not what a capture looks like -- the dashboard shows
+   that -- but which strata a human actually covered, and whether that coverage is
+   thin enough to make a claim about it unsafe. */
+function telBlock(){
+  const wrap = document.createElement("div"); wrap.className = "telbench";
+  const TB = TELSETS.find(x => x.n_live > 0) || TEL;
+  const bySub = new Map();
+  for(const it of TB.items){
+    if(!it.sample_id) continue;
+    const k = it.subset || "—";
+    bySub.set(k, (bySub.get(k) || 0) + 1);
+  }
+  const rows = [...bySub.entries()].sort((a, b) => b[1] - a[1]);
+  const linked = new Set(TB.items.filter(i => i.sample_id).map(i => i.sample_id)).size;
+  const withResults = S.filter(x => TELBY.has(x.id) && iou(x) != null).length;
+  wrap.innerHTML = `
+    <h3>The hand-cast reference set <code>SO101_fleet_teleop</code></h3>
+    <p>${TB.n} shadows a person produced by posing the same three arms, one per target, spread
+    across the parts A–D of the selection rather than sampled at random. They are a supplement to
+    the benchmark, not a stratum of it: they change no score and sit on the cards of the targets
+    they were posed for. ${linked} targets carry one; ${withResults} of those also have solver
+    results to sit beside, the rest waiting on the v2 re-run.</p>
+    <div class="telcov">${rows.map(([k, n]) =>
+      `<div><span>${k}</span><b>${n}</b></div>`).join("")}</div>
+    <div class="axis-note" style="margin-top:12px"><span class="tag">open</span><div>
+      <b>Not yet a score.</b> The pose was never recorded against the target's placement, so where
+      the shadow was <em>meant</em> to sit and how large it was meant to be are unknown. Mask and
+      target can be shown side by side honestly; overlaying them for an IoU means inventing that
+      alignment. Three ways out, none yet chosen: fit a shared similarity transform per capture and
+      report against both the placed and the authored target, as the <code>*-fitted</code> sweeps
+      already do; report only <code>hu_distance</code>, which is invariant to placement and is in
+      the panel for exactly this reason; or project the target onto the wall during the next session
+      and make the alignment measurable instead of inferred. Worth knowing before the set is called
+      an upper bound: on the abstract subset the hand-cast shadows are visibly far from their
+      targets, so for those strata a person may be a floor rather than a ceiling.</div></div>`;
+  return wrap;
+}
+
+function renderBench(){
+  const b=$("#benchView");
+  const intro=document.createElement("div");
+  intro.innerHTML=`<h2>How umbra-bench is stratified</h2>
+    <p style="margin-bottom:12px">Because a target's achievable IoU is unknown and target-dependent, a bare
+    score is uninterpretable. So the benchmark is built to make difficulty a <em>stratification variable
+    rather than a confound</em>: targets are binned along the axes the metric panel responds to, and every
+    number is reported per stratum. Where other benchmarks ask how well you scored, this one first asks what
+    the target was worth.</p>
+    <div class="axis-note" style="margin-bottom:8px"><span class="tag">primary</span>
+      <div><b>Stroke-width quartile</b> — four groups of ~137, split at the 25/50/75th percentile of the
+      target's median stroke width. This is the axis <b>IoU</b> moves along (ρ = +0.66), and it barely
+      touches the other three (|ρ| ≤ 0.08). Every result is reported per quartile.</div></div>
+    <div class="axis-note"><span class="tag">secondary</span>
+      <div><b>Topology</b> — does the target have a significant hole. This is the axis <b>pw_h1</b> moves
+      along (ρ = +0.35) and that <b>IoU cannot see at all</b> (ρ = −0.04). The split is 91 / 455, too
+      unbalanced to cross fully with the primary axis, so it is reported as a split within quartiles.</div></div>
+    <p style="margin-top:12px">Source is carried as a <em>label</em>, not a third crossing: it is what the
+    recognizability metrics and head-to-head comparisons need, and it explains only ~30% of the variance in
+    either attributes or scores.</p>`;
+  // This used to be a hand-written "the pre-rescue sweep ... those 64 have not
+  // been solved yet". They have been, and a note that reports staleness while
+  // being stale is worse than none. Derived from the payload instead, so it can
+  // only ever say what is true of the data it is sitting on.
+  const note=document.createElement("div"); note.className="axis-note";
+  const nMissing = S.length - BS.length;
+  note.innerHTML = nMissing > 0
+    ? `<span class="tag">stale</span><div>This page describes the <b>${BS.length}</b> targets that have
+       results. The benchmark indexes <b>${S.length}</b>, so <b>${nMissing}</b> are unsolved. Re-run the
+       sweeps and rebuild <code>master_table.csv</code> to refresh the stratification and the figures.</div>`
+    : `<span class="tag">current</span><div>All <b>${S.length}</b> indexed targets have results, from
+       <code>${Object.values(DATA.sweep_dirs || {}).join("</code> and <code>")}</code> against
+       <code>${DATA.targets_dir || "targets"}</code>.</div>`;
+  const tbl=document.createElement("div"); tbl.className="fig";
+  tbl.innerHTML=`<h3>What is in it</h3>${stratTable()}
+    <div class="cap">Counts over all 562 targets. Cells under 10 are marked: <b>S4 × holed = 8</b> (thick
+    shapes rarely have holes) and <b>abstract × holed = 0</b>, so the primary and secondary axes cannot be
+    fully crossed, and the null-control subset cannot probe topology at all. <b>HaSPeR hand-expert has 10
+    items total</b> — the human-expert reference, and the smallest group in the benchmark.</div>`;
+  b.replaceChildren(intro, note, tbl, clipBlock(), telBlock(), figB1(), figB2());
+}
+
+/* ── CLIP recognizability ─────────────────────────────────────────────────────
+   Subset-level, because the class list is per subset and chance varies with its
+   size (as low as 0.038 for letters, 26 classes). Absolute top-1 is not comparable
+   across those rows; top1/chance and the ratio against the target are. */
+function clipBlock(){
+  const rows = DATA.clip_summary || [];
+  const d = document.createElement("div"); d.className = "fig";
+  if(!rows.length){
+    d.innerHTML = `<h3>Recognizability — CLIP</h3><div class="cap">Not run.
+      <code>python scripts/clip_eval_dataset.py</code> writes it, then rebuild the payload.</div>`;
+    return d;
+  }
+  const by = {};
+  for(const r of rows){ (by[r.subset] = by[r.subset] || {})[r.condition] = r; }
+  const f = (v, dp=3) => v == null ? "—" : (+v).toFixed(dp);
+  const body = Object.keys(by).sort((x,y) =>
+      ((by[y].big||{}).mrr_ratio_vs_target ?? -1) - ((by[x].big||{}).mrr_ratio_vs_target ?? -1))
+    .map(k => {
+      const t = by[k].target || {}, bg = by[k].big || {}, sm = by[k].small || {};
+      return `<tr><td>${k}</td><td>${t.n ?? "—"}</td><td>${t.n_classes ?? "—"}</td>
+        <td>${f(t.chance_top1)}</td><td><b>${f(t.top1)}</b></td>
+        <td>${f(bg.top1)}</td><td>${f(sm.top1)}</td>
+        <td>${f(bg.ratio_vs_target)}</td><td><b>${f(bg.mrr_ratio_vs_target)}</b></td></tr>`;
+    }).join("");
+  d.innerHTML = `<h3>Recognizability — CLIP</h3>
+    <div class="tblwrap"><table class="strat"><thead><tr>
+      <th>subset</th><th>n</th><th>classes</th><th>chance</th><th>target top-1</th>
+      <th>big top-1</th><th>small top-1</th><th>ratio top-1</th><th>ratio MRR</th>
+    </tr></thead><tbody>${body}</tbody></table></div>
+    <div class="cap"><b>Not cosine similarity.</b> Each image is ranked against its subset's own class
+    list; top-1 is how often the true class comes first, MRR is the mean of 1/rank, which gives partial
+    credit for coming close. <b>The two ratio columns disagree on purpose.</b> Ratio top-1 is the strict
+    reading — how often the shadow wins outright, relative to the target. Ratio MRR is the graded one, and
+    it is the aggregate of the per-item CLIP figure on the dashboard cards. <code>hand_shadow</code> is the
+    case that needs both: <b>0.000</b> by top-1, because no shadow ever ranks first, against <b>0.407</b>
+    by MRR, because they land around 4th of 9 and simply never win.
+    <b><code>abstract</code> is the null control</b> — its targets score 0.086 against 0.059 chance, so the
+    class list is not leaking and the rows above it can be read. <code>teleop</code> behaves as a second
+    null control: its targets are human shadow captures re-used as targets, and a shadow of a letter is not
+    itself legible as that letter, so the subset carries no recognizability signal.</div>`;
+  return d;
+}
+
+/* ── teleop captures — click to segment ──────────────────────────────────────
+   Photographs of real shadows, cast by hand-posing the same three arms, then
+   rectified by the four ArUco markers around the projection area.
+
+   Automatic thresholding was not good enough, and the reason is structural: the
+   shadow sits 30-60 grey levels below the lit wall and the lamp's falloff across
+   the frame is the same magnitude, so no global rule separates them. A person
+   pointing at the shadow settles in one click what no threshold gets right.
+
+   What runs here is a preview, not the deliverable. Clicking floods the
+   flat-fielded frame — illumination divided out, so one tolerance means the same
+   thing on every capture — from each positive point, subtracting the region under
+   each negative one. `copy points` exports exactly what
+   `scripts/segment_teleop.py` consumes, and that script runs the same points
+   through SAM 2 on a machine with the checkpoint. Same markup, better edges.  */
+const TELSETS = TELEOP.sets || [Object.assign({ name: "teleop_v1" }, TELEOP)];
+let telIdx = Math.min(store.get("telSet", TELSETS.length - 1), TELSETS.length - 1);
+let TEL = TELSETS[telIdx];
+const tkey = () => "teleopPts:" + TEL.name;
+let tpts = store.get(tkey(), {});
+const ffCache = new Map();
+
+function ffData(it){
+  if(ffCache.has(it.capture)) return ffCache.get(it.capture);
+  const p = new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => {
+      const c = document.createElement("canvas"); c.width = it.w; c.height = it.h;
+      const g = c.getContext("2d", { willReadFrequently: true });
+      g.drawImage(im, 0, 0);
+      const d = g.getImageData(0, 0, it.w, it.h).data;
+      const a = new Uint8Array(it.w * it.h);
+      for(let i = 0; i < a.length; i++) a[i] = d[i << 2];
+      res(a);
+    };
+    im.onerror = rej;
+    im.src = "data:image/png;base64," + it.ff;
+  });
+  ffCache.set(it.capture, p); return p;
+}
+
+/** The lit wall's own level: the 90th percentile of the flat field. */
+function wallLevel(ff){
+  const hist = new Uint32Array(256);
+  for(let i = 0; i < ff.length; i++) hist[ff[i]]++;
+  let acc = 0; const want = ff.length * 0.9;
+  for(let v = 0; v < 256; v++){ acc += hist[v]; if(acc >= want) return v; }
+  return 255;
+}
+
+/* ── seeded segmentation by geodesic competition ─────────────────────────────
+   A flood fill was the wrong tool and failed in the way flood fills fail: the
+   shadow is one connected region, so an exclude point landing anywhere in it
+   deleted the whole mask. Connectivity is all-or-nothing and the user's second
+   click should not be an all-or-nothing act.
+
+   Instead both kinds of seed COMPETE. For every pixel, measure the cheapest path
+   back to any foreground seed and to any background seed, where a path pays for
+   the intensity it climbs; the pixel joins whichever is nearer. An exclude point
+   then pulls its neighbourhood over to background and stops where the evidence
+   turns, rather than erasing a component. Adding seeds always refines.
+
+   The distances are the intensity-weighted geodesic ones — Toivanen's chamfer
+   sweep, a handful of raster passes, which is what makes this real-time on
+   190k pixels where a proper random walker solve would not be. `segment_teleop.py`
+   runs skimage's random_walker on the same seeds for the version that counts;
+   the two agree on where the boundary is and differ in how smooth it is.
+
+   The frame border seeds background implicitly, so one click on the shadow is
+   already a complete problem — there is always something to compete against. */
+function geodesic(ff, w, h, seeds, gamma, passes = 3){
+  const n = w * h, D = new Float32Array(n).fill(1e30);
+  for(const i of seeds) D[i] = 0;
+  const step = (a, b) => {                       // cost of moving between neighbours
+    const d = ff[a] - ff[b];
+    return 1 + gamma * (d > 0 ? d : -d);
+  };
+  const relax = (i, j, diag) => {
+    const c = D[j] + step(i, j) * (diag ? 1.4142 : 1);
+    if(c < D[i]) D[i] = c;
+  };
+  for(let p = 0; p < passes; p++){
+    for(let y = 0; y < h; y++) for(let x = 0; x < w; x++){
+      const i = y * w + x;
+      if(x > 0)            relax(i, i - 1, 0);
+      if(y > 0)            relax(i, i - w, 0);
+      if(y > 0 && x > 0)   relax(i, i - w - 1, 1);
+      if(y > 0 && x < w-1) relax(i, i - w + 1, 1);
+    }
+    for(let y = h - 1; y >= 0; y--) for(let x = w - 1; x >= 0; x--){
+      const i = y * w + x;
+      if(x < w-1)            relax(i, i + 1, 0);
+      if(y < h-1)            relax(i, i + w, 0);
+      if(y < h-1 && x < w-1) relax(i, i + w + 1, 1);
+      if(y < h-1 && x > 0)   relax(i, i + w - 1, 1);
+    }
+  }
+  return D;
+}
+function brushAt(x, y, w, h, r){                 // a seed is a small disc, not a pixel
+  const out = [];
+  for(let dy = -r; dy <= r; dy++) for(let dx = -r; dx <= r; dx++){
+    if(dx*dx + dy*dy > r*r) continue;
+    const xx = x + dx, yy = y + dy;
+    if(xx >= 0 && yy >= 0 && xx < w && yy < h) out.push(yy * w + xx);
+  }
+  return out;
+}
+function segment(ff, w, h, d, tags){
+  const out = new Uint8Array(w * h);
+  if(!d.pos.length) return out;
+  const R = 4, gamma = (d.tol ?? 55) / 12;       // higher = edges cost more to cross
+  const fg = [], bg = [];
+  for(const [x, y] of d.pos) fg.push(...brushAt(Math.round(x), Math.round(y), w, h, R));
+  for(const [x, y] of d.neg) bg.push(...brushAt(Math.round(x), Math.round(y), w, h, R));
+  for(let x = 0; x < w; x++){ bg.push(x); bg.push((h - 1) * w + x); }   // the frame is wall
+  for(let y = 0; y < h; y++){ bg.push(y * w); bg.push(y * w + w - 1); }
+  /* The AprilTags are IN the crop by design (the outer frame includes them),
+     and they are ink-dark, so a flood would happily claim them. Seed their
+     padded footprints as background — the same exclusion the pipeline applies
+     when it hands SAM2 the tag centres as negatives. */
+  for(const poly of (tags || [])){
+    const xs = poly.map(q => q[0]), ys = poly.map(q => q[1]), PAD = 6;
+    const x0 = Math.max(0, Math.min(...xs) - PAD), x1 = Math.min(w - 1, Math.max(...xs) + PAD);
+    const y0 = Math.max(0, Math.min(...ys) - PAD), y1 = Math.min(h - 1, Math.max(...ys) + PAD);
+    for(let y = y0; y <= y1; y++) for(let x = x0; x <= x1; x++) bg.push(y * w + x);
+  }
+  const Df = geodesic(ff, w, h, fg, gamma), Db = geodesic(ff, w, h, bg, gamma);
+  for(let i = 0; i < out.length; i++) out[i] = Df[i] < Db[i] ? 1 : 0;
+  return out;
+}
+const tdec = (it) => tpts[it.capture] || { pos: [], neg: [], tol: 70 };
+function tset(it, d){ tpts[it.capture] = d; store.set(tkey(), tpts); }
+
+const tcards = new Map();
+async function tdraw(it){
+  const c = tcards.get(it.capture); if(!c) return;
+  const ff = await ffData(it), d = tdec(it);
+  const m = d.pos.length ? segment(ff, it.w, it.h, d, it.tags) : null;
+  const g = c.cv.getContext("2d");
+  g.clearRect(0, 0, it.w, it.h);
+  g.drawImage(c.photo, 0, 0, it.w, it.h);
+  if(m){
+    const im = g.getImageData(0, 0, it.w, it.h), px = im.data;
+    for(let i = 0; i < m.length; i++) if(m[i]){
+      const j = i << 2;
+      px[j] = px[j] * 0.35 + 255 * 0.65;      // magenta wash over the kept region
+      px[j+1] = px[j+1] * 0.35;
+      px[j+2] = px[j+2] * 0.35 + 255 * 0.65;
+    }
+    g.putImageData(im, 0, 0);
+  }
+  const dot = (x, y, fill) => {
+    g.beginPath(); g.arc(x, y, 6, 0, 6.284);
+    g.fillStyle = fill; g.fill();
+    g.lineWidth = 2; g.strokeStyle = "#fff"; g.stroke();
+  };
+  d.pos.forEach(([x, y]) => dot(x, y, "#1baf7a"));
+  d.neg.forEach(([x, y]) => dot(x, y, "#eb6834"));
+  const frac = m ? m.reduce((a, b) => a + b, 0) / m.length : 0;
+  const leak = frac > 0.55;
+  c.stat.className = "vstat " + (!d.pos.length ? "ok" : leak ? "bad" : "ok");
+  c.stat.textContent = !d.pos.length
+    ? `committed mask covers ${(it.shape_frac * 100).toFixed(1)}% · click to re-segment here`
+    : leak
+      ? `leaking — ${(frac * 100).toFixed(0)}% of the frame · raise edge pull, or shift-click the spill`
+      : `${d.pos.length}+ / ${d.neg.length}−  ·  edge ${d.tol}  ·  covers ${(frac * 100).toFixed(1)}%`;
+  c.tolv.textContent = d.tol;
+  c.range.value = d.tol;
+  c.el.classList.toggle("done", d.pos.length > 0);
+}
+let tq = Promise.resolve();
+const tqueue = (it) => { tq = tq.then(() => tdraw(it)).catch(() => {}); };
+
+function titem(it){
+  const el = document.createElement("article");
+  el.className = "titem" + (it.suspect ? " suspect" : "");
+  el.dataset.cap = it.capture;
+
+  const cv = document.createElement("canvas");
+  cv.width = it.w; cv.height = it.h; cv.className = "tcanvas";
+  const photo = new Image();
+  photo.onload = () => tqueue(it);
+  photo.src = "data:image/jpeg;base64," + it.rect;
+
+  const xy = (ev) => {
+    const r = cv.getBoundingClientRect();
+    return [Math.round((ev.clientX - r.left) / r.width * it.w),
+            Math.round((ev.clientY - r.top) / r.height * it.h)];
+  };
+  cv.addEventListener("click", (ev) => {
+    const d = tdec(it), p = xy(ev);
+    (ev.shiftKey || ev.altKey ? d.neg : d.pos).push(p);
+    tset(it, d); tqueue(it); ttally();
+  });
+  cv.addEventListener("contextmenu", (ev) => {
+    ev.preventDefault();
+    const d = tdec(it); d.neg.push(xy(ev)); tset(it, d); tqueue(it); ttally();
+  });
+
+  const side = document.createElement("div"); side.className = "tside";
+
+  // The mask that is actually committed to Teleops/masks and linked from
+  // metadata.jsonl. The canvas to its left shows the browser's own segmenter,
+  // which only runs once you click; without this panel an untouched card looks
+  // like nothing has been extracted, when in fact all of them have.
+  if(it.mask){
+    const mw = document.createElement("div"); mw.className = "ttgt";
+    const mi = document.createElement("img");
+    mi.src = "data:image/png;base64," + it.mask; mi.alt = "";
+    mw.append(mi, Object.assign(document.createElement("span"),
+      { textContent: "mask · " + (it.mask_backend || "committed") }));
+    side.append(mw);
+  }
+
+  const tgt = document.createElement("div"); tgt.className = "ttgt";
+  if(it.target){
+    const i = document.createElement("img");
+    i.src = "data:image/png;base64," + it.target; i.alt = "";
+    tgt.append(i);
+    const cap = document.createElement("span");
+    cap.textContent = it.target_status === "replaced_by_v2" ? "target (v1)" : "target";
+    tgt.append(cap);
+  } else {
+    tgt.innerHTML = '<div class="none">no target</div>';
+  }
+  side.append(tgt);
+
+  const stat = document.createElement("div");
+  const range = document.createElement("input");
+  range.type = "range"; range.min = 5; range.max = 95; range.step = 5;
+  const tolv = document.createElement("b");
+  range.addEventListener("input", () => { tolv.textContent = range.value; });
+  range.addEventListener("change", () => {
+    const d = tdec(it); d.tol = +range.value; tset(it, d); tqueue(it);
+  });
+  const rad = document.createElement("label"); rad.className = "radrow";
+  rad.append(Object.assign(document.createElement("span"), { textContent: "edge pull" }), range, tolv);
+
+  const btns = document.createElement("div"); btns.className = "opbar";
+  const mk = (label, fn) => { const b = document.createElement("button");
+    b.type = "button"; b.textContent = label; b.addEventListener("click", fn); return b; };
+  btns.append(
+    mk("undo", () => { const d = tdec(it);
+      if(d.neg.length) d.neg.pop(); else d.pos.pop();
+      tset(it, d); tqueue(it); ttally(); }),
+    mk("clear", () => { tset(it, { pos: [], neg: [], tol: tdec(it).tol });
+      tqueue(it); ttally(); }));
+
+  const body = document.createElement("div"); body.className = "tbody";
+  body.innerHTML = `<div class="rhead"><span class="nm3" title="${it.capture}">${it.capture}</span>
+      <span class="sub3">${it.part || "—"}</span></div>`
+    + (it.reason ? `<div class="treason">selected: ${it.reason}</div>` : "")
+    + `<div class="autotag">${it.sample_id || "no sample_id — this class is in neither selection CSV"}</div>`;
+  body.append(stat, rad, btns);
+  if(it.suspect){
+    const f = document.createElement("div"); f.className = "tflag";
+    f.textContent = "auto-threshold failed here (" + it.shape_frac.toFixed(2)
+      + " of the frame) — the crop runs past the lit cone";
+    body.append(f);
+  }
+  if(it.target_status === "replaced_by_v2"){
+    const f = document.createElement("div"); f.className = "tflag";
+    f.textContent = "posed against v1 — that target is now " + it.v2_id;
+    body.append(f);
+  }
+  const top = document.createElement("div"); top.className = "ttop";
+  top.append(cv, side);
+  el.append(top, body);
+  tcards.set(it.capture, { el, cv, photo, stat, range, tolv });
+  return el;
+}
+
+function ttally(){
+  const n = TEL.items.filter(i => (tpts[i.capture]?.pos || []).length).length;
+  const pts = Object.values(tpts).reduce((a, d) => a + d.pos.length + d.neg.length, 0);
+  const linked = new Set(TEL.items.filter(i => i.sample_id).map(i => i.sample_id)).size;
+  $("#ttally").innerHTML = `<span><b>${TEL.n}</b> captures segmented</span>`
+    + `<span><b>${linked}</b> targets linked</span>`
+    + `<span><b>${n}</b> re-marked here · ${pts} points</span>`
+    + `<span class="rev">${n ? (TEL.src ? "export → " + TEL.src.replace(/masks\/manifest\.json$/, "points.json")
+                                        + ", then: python scripts/teleop_pipeline.py --teleop-root "
+                                        + TEL.src.replace(/\/masks\/manifest\.json$/, "")
+                                      : "export → points.json, then: python3 scripts/segment_teleop.py --write")
+                            : "committed masks shown — click a card only to redo one"}</span>`;
+}
+
+/* Exposed on purpose: the preview makes a claim about what the points will do,
+   and a claim you cannot inspect is one you cannot trust. */
+window.__teleop = { get TEL(){ return TEL; }, get tpts(){ return tpts; }, TELSETS, ffData, wallLevel, geodesic, segment, tdec };
+
+/* The teleop view is the pipeline, not a second copy of the dataset. The captures
+   themselves surface in the dashboard, on the cards of the targets they were posed
+   for; what belongs here is how to collect and process a new one, with the
+   interactive segmenter sitting inside the step that needs it. */
+const STEPS = [
+  ["1", "Rig", `Three SO-101 arms, one point light, the wall screen. Four AprilTags
+    (<code>36h11</code>, ids 0–3) go at the corners of the projection area — their
+    <b>outer</b> corners define the crop, so the tags ride along INSIDE the frame
+    and nothing between them is ever trimmed off. The pipeline detects them, warps,
+    and later excludes their footprints from every statistic and segmentation.`, null],
+  ["2", "Capture", `Pose the arms by hand until the shadow reads, then grab the frame.
+    The script refuses a frame in which it cannot see all four tags, so a capture that
+    lands in the folder is always rectifiable.`,
+    `# live RealSense — SPACE grabs, N skips, Q quits
+python3 scripts/capture_teleop.py
+# or rectify frames you already have
+python3 scripts/capture_teleop.py --from-images 'raw/*.png'
+# --record-pose also writes joint angles to <name>_capture.json`],
+  ["3", "Rectify + binarise", `One command per set: detect tags, warp to the pinned
+    654×548 tag frame (measured aspect 1.196; three visible tags are enough — the fourth
+    is inferred from the session median), learn the threshold statistics on the region
+    inside the tags only, and hand SAM2 positive seeds plus the tag centres as negatives.
+    Hand points in <code>&lt;set&gt;/points.json</code> (tag-frame coordinates, from the
+    cards below) win over every automatic tier. A run limited by <code>--images</code>
+    merges into the set's manifest and labels by capture stem — it never truncates.`,
+    `python scripts/teleop_pipeline.py --teleop-root Teleops/source/teleop_set2
+# touch up two captures only
+python scripts/teleop_pipeline.py --teleop-root Teleops/source/teleop_set2 \
+  --images 'Teleops/source/teleop_set2/raw/teleop_upper[pg]_01.png'`],
+  ["4", "Fix by hand, from this page", `The cards below segment ON the flat-fielded
+    frame (illumination divided out, CLAHE — the shadow sits only 30–60 grey levels
+    under the wall, so both steps are needed). Serve the dashboard through
+    <code>scripts/teleop_studio.py</code> and the loop closes without a terminal:
+    <b>save to folder</b> merges your points into the set's <code>points.json</code>,
+    <b>re-segment marked</b> runs SAM2 on exactly those captures and rebuilds this
+    page. On a plain static server the same points export via <b>copy points</b>.`,
+    `~/miniconda3/envs/umbra-bench/python.exe scripts/teleop_studio.py
+# then open http://localhost:8479/benchmark.html`],
+  ["5", "Link", `A capture is not a target — it is a shadow somebody produced <i>for</i> one.
+    It fills <code>shadows.teleop</code> on that target's row and the row gains the tag
+    <code>SO101_fleet_teleop</code>, so both halves share one <code>sample_id</code>.
+    Matching is by capture name against the selection CSVs; class names come from the
+    source dataset and are not always the English spelling (MPEG-7 ships <code>glas</code>),
+    so exceptions go in <code>CLASS_ALIAS</code> rather than into a renamed photograph.`,
+    `python scripts/link_teleop.py --manifest Teleops/source/teleop_set1/masks/manifest.json          # dry run
+python scripts/link_teleop.py --manifest Teleops/source/teleop_set1/masks/manifest.json --write`],
+  ["6", "Rebuild", `The payload is read from the mask manifest, so anything the steps above
+    changed reaches the dashboard here and nowhere else.`,
+    `python scripts/_build_teleop_payload.py     # bakes every set under Teleops/source/
+python benchmark/build_benchmark.py
+# (the studio's re-segment button runs both for you)`],
+];
+
+function renderTeleop(){
+  const v = $("#teleopView");
+  const head = document.createElement("div");
+  const linked = new Set(TEL.items.filter(i => i.sample_id).map(i => i.sample_id)).size;
+  head.innerHTML = `
+    <h2 style="margin:0 0 6px;font-size:17px;font-weight:600">Collecting a teleop capture
+      <code style="font-size:12px;font-weight:400;color:var(--muted)">SO101_fleet_teleop</code></h2>
+    <p style="margin:0 0 14px;font-size:13px;line-height:1.6;color:var(--ink-2);max-width:74ch">
+      The pipeline from camera to a row in the benchmark. The captures themselves are not
+      a separate dataset — each one attaches to the target it was posed for and shows up on
+      that target's card in the dashboard, under the <b>human</b> plate. This page is what to run
+      to add more. Full prose in <code>Teleops/README.md</code>.</p>
+    ${TELSETS.length > 1 ? `<div style="display:flex;gap:6px;margin:0 0 10px">${TELSETS.map((x, i) =>
+      `<button class="chip" aria-pressed="${i === telIdx}" data-si="${i}">${x.name}<span class="ct">${x.n}</span></button>`).join("")}</div>` : ""}
+    <div class="tallybar"><div class="tally">
+      <span><b>${TEL.n}</b> captures</span>
+      <span><b>${linked}</b> targets linked</span>
+      <span><b>${(TEL.median_frac * 100).toFixed(1)}%</b> median shape fraction</span>
+      <span class="rev">${TEL.src ? "set: " + TEL.src : "masks committed in Teleops/masks"}</span>
+    </div></div>
+    <div class="steps">${STEPS.map(([n, t, body, cmd]) => `
+      <section class="step">
+        <div class="stepn">${n}</div>
+        <div class="stepb"><h3>${t}</h3><p>${body}</p>
+          ${cmd ? `<pre class="cmd">${cmd}</pre>` : ""}</div>
+      </section>`).join("")}</div>
+
+    <h3 style="margin:26px 0 4px;font-size:14.5px;font-weight:600">Step 4, by hand</h3>
+    <p style="margin:0 0 10px;font-size:13px;line-height:1.6;color:var(--ink-2);max-width:74ch">
+      Every capture below already has a committed mask, shown beside its target. Redo one only
+      if it is wrong: <b>click</b> to include a region, <b>shift-click</b> (or right-click) to
+      exclude one. Both kinds of point compete for every pixel rather than one erasing the
+      other's region, so an exclude refines the boundary instead of deleting the mask.
+      <b>Edge pull</b> sets what crossing a boundary costs. Export, then replay:
+      for the v1 wall set, <code>scripts/segment_teleop.py --write</code>; for a
+      tag-rectified set, save the export as <code>points.json</code> in the set's
+      folder and rerun <code>scripts/teleop_pipeline.py --teleop-root &lt;set&gt;</code>
+      &mdash; clicked points are in the tag frame and are used as-is.</p>
+    <div class="tallybar"><div id="ttally" class="tally"></div>
+      <span style="flex:1"></span>
+      <button class="act" id="tExport">copy points</button>
+      <button class="act" id="tSave" hidden>save to folder</button>
+      <button class="act" id="tRerun" hidden>re-segment marked</button>
+      <button class="act" id="tClear">clear all</button></div>`;
+  const list = document.createElement("div"); list.className = "tlist";
+  [...TEL.items].sort((a, b) => (b.suspect - a.suspect) || a.capture.localeCompare(b.capture))
+    .forEach(it => list.append(titem(it)));
+  v.replaceChildren(head, list);
+  ttally();
+  $("#tExport").addEventListener("click", (e) => {
+    const captures = {};
+    TEL.items.forEach(it => { const d = tdec(it);
+      if(d.pos.length) captures[it.capture] = { pos: d.pos, neg: d.neg, tol: d.tol }; });
+    copy(JSON.stringify({ ff_window: TEL.ff_window, captures }, null, 1), e.target);
+  });
+  $("#tClear").addEventListener("click", () => {
+    for(const k of Object.keys(tpts)) delete tpts[k];
+    store.set(tkey(), tpts);
+    TEL.items.forEach(it => tqueue(it)); ttally();
+  });
+  head.querySelectorAll("[data-si]").forEach(b => b.addEventListener("click", () => {
+    telIdx = +b.dataset.si; store.set("telSet", telIdx);
+    TEL = TELSETS[telIdx]; tpts = store.get(tkey(), {});
+    tcards.clear(); ffCache.clear();
+    v.replaceChildren(); renderTeleop();
+  }));
+  /* The studio server (scripts/teleop_studio.py) turns the preview into the
+     deliverable: save writes the active set's points into its folder, rerun
+     sends the marked captures through SAM2 and rebuilds this page. Served as
+     a plain static file, neither button appears and export/copy still works. */
+  const marked = () => {
+    const captures = {};
+    TEL.items.forEach(it => { const d = tdec(it);
+      if(d.pos.length) captures[it.capture] = { pos: d.pos, neg: d.neg, tol: d.tol }; });
+    return captures;
+  };
+  const studio = async (path, body, btn, busy) => {
+    const t = btn.textContent; btn.disabled = true; btn.textContent = busy;
+    try{
+      const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify(body) });
+      const j = await r.json();
+      if(!r.ok || j.error) throw new Error(j.error || r.status);
+      return j;
+    } finally { btn.disabled = false; btn.textContent = t; }
+  };
+  STUDIO_PING.then(j => {
+    if(!j || !TEL.src) return;
+    const sv = $("#tSave"), rr = $("#tRerun");
+    sv.hidden = rr.hidden = false;
+    sv.addEventListener("click", async (e) => {
+      const caps = marked();
+      if(!Object.keys(caps).length) return;
+      await studio("/api/points/" + TEL.name, { ff_window: TEL.ff_window, captures: caps },
+                   e.target, "saving…");
+      e.target.textContent = "saved ✓";
+      setTimeout(() => { e.target.textContent = "save to folder"; }, 1500);
+    });
+    rr.addEventListener("click", async (e) => {
+      const caps = marked();
+      if(!Object.keys(caps).length) return;
+      if(!confirm(Object.keys(caps).length + " capture(s) will be re-segmented with SAM2 and the committed masks in " +
+                  TEL.name + " overwritten. Continue?")) return;
+      await studio("/api/rerun/" + TEL.name, { ff_window: TEL.ff_window, captures: caps },
+                   e.target, "running SAM2… (stay on this page)");
+      location.reload();
+    });
+  }).catch(() => {});
+}
+
+/* ── sequences track ─────────────────────────────────────────────────────────
+   The track's whole argument is that per-frame numbers are not enough, so the
+   card is built to make the temporal facts unavoidable: the preview plays at
+   the source fps and only wraps when the sequence actually loops, the loop
+   badge carries its provenance (a declared label is a fact from source.json, a
+   wrap-test label is a heuristic and shows its evidence), and a solve's mean
+   frame IoU is never printed without dq_infeasible_frac beside it. */
+const seqAnims = [];
+let seqTicker = null;
+let seqPlate = "target";                 // target | shadow | overlay | trip
+const seqFams = new Set(["generated", "demo"]);
+/* Hidden clips are a VIEW filter and nothing else: no file is touched, and the
+   payload still carries every sequence. The sequences track has no evaluation
+   riding on it yet, so culling the ones not worth looking at is a reading
+   convenience -- but a card that vanishes with no way back is the failure the
+   subset chips already taught us (see "Saved state" in the README), so the
+   count and a "show all" are always on screen while anything is hidden.
+
+   Reconciled against the payload on load for the same reason `st.page` is: an
+   id hidden before a rebuild that no longer exists would otherwise sit in
+   localStorage forever, inflating the count against nothing. */
+let seqHidden = new Set(store.get("seqHidden", [])
+  .filter(id => SEQ.sequences.some(q => q.id === id)));
+const seqSel = new Set();                // multi-select, this session only
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* The three plates are the dashboard card's, animated in lockstep: every pane of a
+   card draws the SAME frame index, so target, shadow and overlay stay aligned
+   through the clip. Overlay classification matches paintOverlay exactly, but
+   composites at SEQ.px on its own scratch canvas rather than borrowing the
+   grid's (whose size is DATA.px -- equal today, not guaranteed). */
+let seqScratch = null;
+function seqScratchCtx(px){
+  if(!seqScratch){
+    seqScratch = document.createElement("canvas");
+    seqScratch.width = seqScratch.height = px;
+  }
+  return seqScratch.getContext("2d", { willReadFrequently: true });
+}
+const seqOvCache = new Map();            // (tb64|sb64) -> Promise<ImageData>
+function seqOverlay(tb, sb, px){
+  const key = tb + "|" + sb;
+  if(!seqOvCache.has(key)){
+    seqOvCache.set(key, Promise.all([loadMask(tb), loadMask(sb)]).then(([ti, si]) => {
+      const sc = seqScratchCtx(px);
+      sc.clearRect(0, 0, px, px); sc.drawImage(ti, 0, 0, px, px);
+      const T = sc.getImageData(0, 0, px, px).data;
+      sc.clearRect(0, 0, px, px); sc.drawImage(si, 0, 0, px, px);
+      const Sd = sc.getImageData(0, 0, px, px).data;
+      const out = new ImageData(px, px), d = out.data;
+      for(let i = 0, n = px * px; i < n; i++){
+        const j = i << 2, t = T[j] < 128, s = Sd[j] < 128;
+        let r = 255, g = 255, b = 255;
+        if(t && s){ r = 0;   g = 0;   b = 255; }      // agreement
+        else if(t){ r = 0;   g = 255; b = 255; }      // target the shadow missed
+        else if(s){ r = 255; g = 0;   b = 255; }      // shadow that spilled
+        d[j] = r; d[j+1] = g; d[j+2] = b; d[j+3] = 255;
+      }
+      return out;
+    }));
+  }
+  return seqOvCache.get(key);
+}
+
+function seqWhite(cv){
+  const c = cv.getContext("2d");
+  c.fillStyle = "#fff"; c.fillRect(0, 0, cv.width, cv.height);
+}
+async function seqDrawMask(cv, b64, tick){
+  if(b64 == null){ seqWhite(cv); return; }
+  const im = await loadMask(b64);
+  if(cv._tick !== tick) return;          // a newer frame superseded this paint
+  const c = cv.getContext("2d");
+  c.imageSmoothingEnabled = false;
+  c.drawImage(im, 0, 0, cv.width, cv.height);
+}
+async function seqDrawOverlay(cv, tb, sb, tick){
+  if(sb == null){ seqWhite(cv); return; }
+  const data = await seqOverlay(tb, sb, cv.width);
+  if(cv._tick !== tick) return;
+  cv.getContext("2d").putImageData(data, 0, 0);
+}
+
+function seqDrawFrame(a, show){
+  const tick = ++a.tick;
+  const tb = a.f[show], sb = a.sf ? a.sf[show] : null;
+  for(const cv of [a.cvT, a.cvS, a.cvO]) cv._tick = tick;
+  if(!a.cvT.hidden) seqDrawMask(a.cvT, tb, tick);
+  if(!a.cvS.hidden) seqDrawMask(a.cvS, sb, tick);
+  if(!a.cvO.hidden) seqDrawOverlay(a.cvO, tb, sb, tick);
+}
+
+// Which panes a card shows under the current plate. A clip with no solved
+// shadow has nothing to put on the other plates, so it stays on target rather
+// than going blank.
+function seqApplyPlate(){
+  for(const a of seqAnims){
+    const mode = a.sf ? seqPlate : "target";
+    a.cvT.hidden = !(mode === "target" || mode === "trip");
+    a.cvS.hidden = !(mode === "shadow" || mode === "trip");
+    a.cvO.hidden = !(mode === "overlay" || mode === "trip");
+    a.anim.classList.toggle("trip", mode === "trip");
+    a.triplbl.hidden = mode !== "trip";
+    seqDrawFrame(a, Math.min(a.i, a.n - 1));
+  }
+}
+
+function seqTick(){
+  if(document.hidden || $("#seqView").hidden) return;
+  const now = performance.now();
+  for(const a of seqAnims){
+    if(a.el.hidden || now < a.next) continue;
+    a.i += 1;
+    // A non-loop clip runs once and holds: the film it came from has no
+    // last-to-first transition, so the preview must not invent one. It restarts
+    // after a visible rest instead of wrapping.
+    if(a.i >= (a.loop ? a.n : a.n + 4)) a.i = 0;
+    const show = Math.min(a.i, a.n - 1);
+    seqDrawFrame(a, show);
+    a.lbl.textContent = "f" + String(show).padStart(2, "0")
+                      + (!a.loop && a.i >= a.n ? " · end" : "");
+    a.next += a.period;                       // drift-free; re-anchor after a stall
+    if(a.next < now) a.next = now + a.period;
+  }
+}
+
+function seqSpark(mo, loop){
+  const v = mo.step_iou || [];
+  if(v.length < 2) return "";
+  const pts = v.map((s, i) => `${(2 + 96 * i / (v.length - 1)).toFixed(1)},${(24 - 20 * s).toFixed(1)}`);
+  const wrap = loop
+    ? `<circle cx="98" cy="${(24 - 20 * mo.wrap_iou).toFixed(1)}" r="2" fill="var(--s2)">
+         <title>wrap step IoU ${mo.wrap_iou}</title></circle>` : "";
+  return `<svg class="seqspark" viewBox="0 0 100 26" preserveAspectRatio="none" role="img"
+     aria-label="target step IoU per transition">
+     <polyline points="${pts.join(" ")}" fill="none" stroke="var(--s1)" stroke-width="1.5"/>${wrap}</svg>`;
+}
+
+/* Same rule as the teleop save/rerun pair, one view over. Cards are built lazily
+   on first visit, so the reveal runs from both ends -- whichever of the ping and
+   the render lands second finds the other already done. */
+/* null until the probe answers, so a card built before it lands neither shows a
+   button that will not work nor a hint that is about to be wrong. */
+let STUDIO_LIB = null;
+function applyStudioState(){
+  if(STUDIO_LIB === null) return;
+  document.querySelectorAll(".libbtn").forEach(b => { b.hidden = !STUDIO_LIB; });
+  // Hiding the button silently is what made this feature undiscoverable: opened
+  // as a plain file the page looked identical to one where the export had
+  // simply not been built. The hint is the absence explaining itself.
+  document.querySelectorAll(".libhint").forEach(h => { h.hidden = STUDIO_LIB; });
+}
+/* Probed once at load rather than from inside a view. This used to live in
+   renderTeleop, which meant a sequences card could only discover the studio
+   after someone had visited the teleop view first -- so the button was hidden
+   on the page that owns it. One shared promise, so there is still one request. */
+const STUDIO_PING = fetch("/api/ping")
+  .then(r => r.ok ? r.json() : null)
+  .catch(() => null);
+STUDIO_PING.then(j => { STUDIO_LIB = !!(j && j.library); applyStudioState(); });
+async function seqLibClick(e){
+  const b = e.target.closest(".libbtn"); if(!b) return;
+  const msg = b.parentElement.querySelector(".libmsg");
+  const label = b.textContent;
+  b.disabled = true; b.textContent = "exporting\u2026"; msg.textContent = "";
+  try{
+    const r = await fetch("/api/library/" + encodeURIComponent(b.dataset.sid),
+                          { method: "POST", headers: { "Content-Type": "application/json" },
+                            body: "{}" });
+    const j = await r.json();
+    if(!r.ok || j.error) throw new Error(j.error || r.status);
+    msg.textContent = "on the shelf \u2713";
+  }catch(err){
+    msg.textContent = String(err && err.message ? err.message : err);
+  }finally{ b.disabled = false; b.textContent = label; }
+}
+
+/* The command, not the call -- the same bargain the results view strikes with
+   `copy export cmd`, one view over. The live button above it needs the studio
+   answering on /api; this page is normally read as a file off disk, where there
+   is no backend to reach, so the honest move is to hand over the exact command.
+   It is therefore never hidden by applyStudioState.
+
+   --force is NOT inferred. export_library_clip.py exports via pack.clip_poses,
+   which reads the LATEST timestamped run under optimized/<id>; the payload's
+   solve sources (optimizer, optimizer_static, optimizer_v0, ...) do not map onto
+   "latest", so deciding --force from any one source's dq_infeasible_frac would
+   be a guess that silently writes an unperformable clip -- or omits the flag the
+   export needs and fails. The infeasible sources are named instead, and the
+   reader decides. */
+function seqExportCmd(q){
+  const head = ["# run from the umbra-bench repo root, then refresh Play"];
+  if(!q.solved.length)
+    return head.concat([`# ${q.id}: no solve yet — nothing to export.`,
+      "# solve the clip first (demo/README.md, “Routing, then solving”)"]).join("\n") + "\n";
+  const bad = q.solved.filter(s => ((q.solves[s] || {}).headline || {}).dq_infeasible_frac > 0)
+                      .map(s => `${s} ${q.solves[s].headline.dq_infeasible_frac}`);
+  if(bad.length)
+    head.push(`# exceeds the planner's per-joint bound (${bad.join(", ")}).`,
+      "# if the export refuses, add --force — preview only, the arms cannot perform it");
+  return head.concat(["python demo/export_library_clip.py \\",
+                      "    --sequence " + q.id]).join("\n") + "\n";
+}
+
+/* Family and hidden are one decision per card, so they resolve in one place --
+   two independent `el.hidden =` writers would race and whichever ran last would
+   win, un-hiding clips the other had just filtered out. */
+function seqApplyFilters(){
+  for(const a of seqAnims)
+    a.el.hidden = !seqFams.has(a.family) || seqHidden.has(a.id);
+  const n = seqHidden.size, note = $("#seqHiddenNote");
+  if(note){
+    note.hidden = !n;
+    note.firstElementChild && (note.firstElementChild.textContent =
+      `${n} clip${n === 1 ? "" : "s"} hidden`);
+  }
+  const btn = $("#seqHideSel");
+  if(btn){ btn.disabled = !seqSel.size; btn.textContent = `hide selected (${seqSel.size})`; }
+}
+
+function seqCard(q){
+  const card = document.createElement("div"); card.className = "seqcard";
+  const period = Math.max(1000 / (q.fps || 6), 200);
+  const loopBadge = q.loop
+    ? `<span class="sbadge loop" title="${q.loop_source === "declared"
+        ? "declared in source.json — the source performs the wrap, so it is scored (wrap step " + q.motion.wrap_iou + ", mean step " + q.motion.mean_step_iou + " for reference)"
+        : "wrap step " + q.motion.wrap_iou + " vs 0.9 × mean step " + q.motion.mean_step_iou + " — the wrap is a real transition and is scored"}">loop · ${q.loop_source}</span>`
+    : `<span class="sbadge" title="${q.loop_source === "declared"
+        ? "declared in source.json — the film runs once; a wrap is never performed, so none is scored (the wrap test alone would misread slow clips)"
+        : "wrap step " + q.motion.wrap_iou + " fails 0.9 × mean step " + q.motion.mean_step_iou}">runs once · ${q.loop_source}</span>`;
+  const fpsChip = q.fps ? `${q.fps} fps` : "~6 fps";
+  card.innerHTML = `
+    <div class="anim">
+      <canvas class="cv-t" width="${SEQ.px}" height="${SEQ.px}" aria-label="${q.id} target"></canvas>
+      <canvas class="cv-s" width="${SEQ.px}" height="${SEQ.px}" hidden aria-label="${q.id} shadow"></canvas>
+      <canvas class="cv-o" width="${SEQ.px}" height="${SEQ.px}" hidden aria-label="${q.id} overlay"></canvas>
+      <span class="fidx">f00</span></div>
+    <div class="trip-lbl seq-lbl" hidden><span>target</span><span>shadow</span><span>overlay</span></div>
+    <div class="seqmeta">
+      <div class="idline"><span class="sid">${q.id}</span>
+        <span class="sbadge">${q.family}</span>${loopBadge}</div>
+      <div class="prompt">${q.prompt}</div>
+      <div class="seqbadges"><span class="sbadge">${q.n_frames} frames</span>
+        <span class="sbadge">${fpsChip}</span>
+        <span class="sbadge">${q.frame_size[0]}px native</span>
+        ${q.cls && q.cls.length === 1 ? `<span class="sbadge">glyph ${q.cls}</span>` : ""}</div>
+      <div class="seqnums">
+        <div><span>mean step IoU</span><b>${num(q.motion.mean_step_iou)}</b></div>
+        <div><span>min step</span><b>${num(q.motion.min_step_iou)}</b></div>
+        <div><span>wrap</span><b>${num(q.motion.wrap_iou)}</b></div>
+      </div>
+      ${seqSpark(q.motion, q.loop)}
+      <div class="libline"><button class="libbtn" hidden data-sid="${q.id}"
+        title="Write this clip onto the UI's Targets shelf (Shadow_robot_ui/library/models.json) as a frame sequence">&rarr; shape library</button><button
+        class="libcopy" data-sid="${q.id}"
+        title="Copy the command that writes this whole clip into the robot UI's Play library (fleet-shadow-art/choreographies/). Run it from the umbra-bench repo root; refresh Play to deploy.">copy export cmd</button><button
+        class="libcopy seqhide" data-sid="${q.id}"
+        title="Hide this clip from the sequences view. Nothing on disk is touched — the count above stays visible and 'show all' brings it back.">hide</button><label
+        class="seqpick" title="Select for a batch hide"><input type="checkbox" data-sid="${q.id}"${
+        seqSel.has(q.id) ? " checked" : ""}> sel</label><span class="libmsg"></span></div>
+    </div>`;
+  for(const src of q.solved){
+    const so = q.solves[src], h = so.headline;
+    const box = document.createElement("div"); box.className = "solvebox";
+    const infeas = h.dq_infeasible_frac;
+    const mism = so.loop_scored !== q.loop
+      ? `<div class="warnline">⚠ scored with loop=${so.loop_scored} but the track says loop=${q.loop} — re-run sequence_metrics.py</div>` : "";
+    const sizeNote = so.solve_size && so.solve_size !== q.frame_size[0]
+      ? ` · solved at ${so.solve_size}px` : "";
+    // A clip solved against a fitted target has two honest IoUs: vs the
+    // authored frames (end to end, fit counted as error) and vs what the
+    // solver was actually asked to cast. Show both whenever they diverge —
+    // preferring the recomputed ref=shown number (validated against the run's
+    // recorded IoU to within resampling noise) over the run's own report.
+    const vsShown = h.iou_shown_mean ?? h.iou_reported_mean;
+    const fitted = vsShown != null && h.iou_mean != null
+                && Math.abs(vsShown - h.iou_mean) > 0.02;
+    const iouCells = fitted
+      ? `<div><span>IoU vs authored</span><b>${num(h.iou_mean)}</b></div>
+         <div><span>vs fitted target</span><b>${num(vsShown)}</b></div>`
+      : `<div><span>mean frame IoU</span><b>${num(h.iou_mean)}</b></div>
+         <div><span>worst frame</span><b>${num(h.iou_min)}</b></div>`;
+    const fitNote = so.fit
+      ? `<div class="warnline">clip fit: scale ${so.fit.scale} · dx ${so.fit.dx} · dy ${so.fit.dy}${
+          so.fit.at_bound ? " · <b>at search bound</b>" : ""} — the benchmark column charges the fit
+          as error; being one similarity per clip it is recoverable — in post for a rendered
+          demo (08_reassemble.py), as a per-clip camera reframe for a filmed rig</div>` : "";
+    // a 5-arm clip solved with 3 arms is a different problem, not a bad solve
+    const armChip = so.n_arms_solved ? ` · ${so.n_arms_solved} arms` : "";
+    // The command for THIS solve, not for the clip. A card can carry several
+    // sources and they are different rigs, so one command per box is the only
+    // honest form -- a single card-level button would export whichever solve
+    // the exporter defaulted to and look like it had exported the one you
+    // were reading. --source is omitted for `optimizer` because that IS the
+    // exporter's default and the shorter line is the one to paste.
+    const exportCmd = "python demo/export_library_clip.py --sequence " + q.id
+      + (src === "optimizer" ? "" : " --source " + src);
+    const priorChip = so.prior_iou != null ? ` · prior ${num(so.prior_iou)}` : "";
+    const armWarn = (so.n_arms_declared && so.n_arms_solved
+                     && so.n_arms_declared !== so.n_arms_solved)
+      ? `<div class="warnline">⚠ clip declares ${so.n_arms_declared} arms; solved with ${
+          so.n_arms_solved} — a different problem, not a bad result</div>` : "";
+    box.innerHTML = `<div class="src">${src} · ${so.n_transitions} transitions${sizeNote}${armChip}${priorChip}</div>
+      <div class="seqnums">
+        ${iouCells}
+        <div><span>infeasible</span><b class="${infeas > 0 ? "bad" : ""}">${
+          infeas == null ? "no joint data" : (100 * infeas).toFixed(0) + "%"}</b></div>
+        ${so.s2 && so.s2.dq_max_deg && so.s2.dq_max_deg.max != null ? `<div><span>worst step</span>
+          <b class="${h.dq_infeasible_thr_deg && so.s2.dq_max_deg.max > h.dq_infeasible_thr_deg - 2
+            ? "bad" : ""}">${so.s2.dq_max_deg.max.toFixed(1)}°<span style="text-transform:none">
+            / ${h.dq_infeasible_thr_deg ?? "?"}°</span></b></div>` : ""}
+        <div><span>arm swaps</span><b class="${so.s3.n_arm_swaps > 0 ? "bad" : ""}">${
+          so.s3.assignment_stability == null ? "—" : so.s3.n_arm_swaps + "/" + so.n_transitions}</b></div>
+      </div>
+      ${so.s3.dq_max_deg_by_transition ? `<div class="warnline">dq_max per step:
+        <span class="mono">[${so.s3.dq_max_deg_by_transition.map(d => d.toFixed(1)).join(", ")}]°</span>${
+        so.s3.loop_closure && so.s3.loop_closure.dq_max_deg != null
+          ? ` · wrap ${so.s3.loop_closure.dq_max_deg.toFixed(1)}°` : ""} vs the ${
+        num(h.dq_infeasible_thr_deg, 2)}° bound</div>` : ""}
+      ${(() => {
+        // Legibility: does the cast clip READ as the letter (CLIP retrieval,
+        // folded 49-class glyph set, authored frames as the ceiling). A zero
+        // ceiling has no denominator — the authored serif I is itself unread
+        // as the folded "digit 1" class — so those clips say so explicitly
+        // rather than showing a 0 that would read as "illegible shadow".
+        const lg = so.legibility;
+        if(!lg) return "";
+        if(!lg.ceiling_top1) return `<div class="warnline">legibility: no ceiling — the authored
+          frames are also unread as this folded class (I/l/1); ratios undefined, not zero</div>`;
+        return `<div class="warnline">reads as <b>${q.cls}</b>: top-1 ${num(lg.top1)} /
+          ceiling ${num(lg.ceiling_top1)} → ratio <b>${num(lg.ratio_top1)}</b> ·
+          MRR ratio ${num(lg.ratio_rr)} · chance ${num(lg.chance_top1)}</div>`;
+      })()}
+      ${(() => {
+        // loop-close status, only for clips scored with the wrap: "did not
+        // fire" and "was not run" must not be conflated — an untriggered
+        // safeguard is not a fix (attribution rule, umbra-bench-9f).
+        if(!so.loop_scored) return "";
+        const la = so.loop_anchor;
+        if(la == null) return `<div class="warnline">loop-close: not run (pre-flag solve)</div>`;
+        if(typeof la === "object")
+          return `<div class="warnline">loop-close: ${la.attempted
+            ? (la.accepted ? "fired, accepted" : "fired, declined")
+            : "not needed"} — ${la.reason || ("wrap " + (la.dq_wrap_deg ?? "?") + "°"
+              + (la.attempted && la.dq_wrap_deg_closed != null
+                 ? " → " + la.dq_wrap_deg_closed + "°, neighbour " + (la.dq_prev_deg_closed ?? "?") + "°"
+                 : ""))}</div>`;
+        return `<div class="warnline">loop-close: ${la}</div>`;
+      })()}
+      ${fitNote}
+      ${armWarn}
+      ${mism}
+      <div class="warnline">export this solve: <span class="mono">${exportCmd}</span>
+        <button class="libcopy seqexport" type="button">copy</button></div>`;
+    const eb = box.querySelector(".seqexport");
+    if(eb) eb.addEventListener("click", () => copy(exportCmd, eb));
+    card.appendChild(box);
+  }
+  if(!q.solved.length){
+    const u = document.createElement("div"); u.className = "unsolved";
+    u.innerHTML = `not yet solved — after a clip run:<br>
+      <code>python scripts/sequence_metrics.py --run &lt;run_dir&gt; --sequence ${q.id}</code>`;
+    card.appendChild(u);
+  }
+  // Shadow frames come from the first solved source that recorded them; today
+  // that is at most one, and a per-source switch can wait for a second capture.
+  // When the run solved a fitted target, every plate draws the SHOWN frames
+  // (wf) — the static dashboard's rule: against the authored frames the card reads
+  // as mis-registered, and none of that is solver error.
+  const withSf = q.solved.map(s => q.solves[s]).find(so => so.sf);
+  const a = {
+    el: card, anim: card.querySelector(".anim"),
+    cvT: card.querySelector(".cv-t"), cvS: card.querySelector(".cv-s"),
+    cvO: card.querySelector(".cv-o"), lbl: card.querySelector(".fidx"),
+    triplbl: card.querySelector(".seq-lbl"),
+    f: (withSf && withSf.wf) ? withSf.wf : q.f,
+    sf: withSf ? withSf.sf : null, family: q.family, id: q.id,
+    n: q.f.length, loop: q.loop, period, i: 0, tick: 0,
+    next: performance.now() + period,
+  };
+  if(REDUCED || q.f.length < 2) a.next = Infinity;   // static first frame
+  else a.next = performance.now() + period * (seqAnims.length % 5) / 5;  // stagger the beats
+  seqAnims.push(a);
+  seqDrawFrame(a, 0);
+  return card;
+}
+
+function renderSequences(){
+  const v = $("#seqView");
+  seqAnims.length = 0;
+  const wrap = document.createElement("div"); wrap.className = "seqwrap";
+  const head = document.createElement("div");
+  head.innerHTML = `<h2>The sequences track</h2>
+    <p class="intro">${SEQ.n} animated targets (${SEQ.sequences.filter(s => s.family === "generated").length}
+    generated motions, ${SEQ.sequences.filter(s => s.family === "demo").length} film-cut letters from the demo ad),
+    ${SEQ.n_solved} solved so far. A clip is not a bag of frames: <b>star_spin averages 0.6679 per-frame IoU
+    and cannot be performed</b> — one transition needs a 291° single-joint swing. So every solve here shows its
+    mean frame IoU only next to <span class="mono">dq_infeasible_frac</span>, and previews only wrap around when
+    the sequence actually loops. The guide view explains each number.</p>
+    <p class="libhint intro" hidden><b>copy export cmd</b> on any card copies the command that writes
+    that whole clip into the robot UI&rsquo;s Play library
+    (<span class="mono">fleet-shadow-art/choreographies/</span>); run it from the repo root and
+    refresh Play. Pushing a clip onto the UI&rsquo;s Targets shelf <em>in one click</em> additionally
+    needs this page served by the studio rather than opened from disk &mdash; run
+    <span class="mono">python scripts/teleop_studio.py</span> and open
+    <span class="mono">localhost:8479/benchmark.html</span>, and each card also carries a
+    <b>&rarr; shape library</b> button.</p>`;
+  // The same plate control as the dashboard grid, animated: every pane of a card
+  // draws the same frame index, so the three modes stay aligned through the
+  // clip. Clips without a solved shadow stay on target rather than going blank.
+  const ctl = document.createElement("div"); ctl.className = "seqctl";
+  ctl.innerHTML = `
+    <div class="seg" id="seqPlateSeg">
+      <button data-v="target" aria-pressed="true">target</button>
+      <button data-v="shadow" aria-pressed="false">shadow</button>
+      <button data-v="overlay" aria-pressed="false">overlay</button>
+      <button data-v="trip" aria-pressed="false">all 3</button>
+    </div>
+    <div class="chips" id="seqFamChips">
+      <button class="chip" data-f="generated" aria-pressed="true">generated</button>
+      <button class="chip" data-f="demo" aria-pressed="true">demo</button>
+    </div>
+    <span class="hint">shadow &amp; overlay need a solved clip — ${SEQ.n_solved} of ${SEQ.n} so far</span>
+    <button class="act" id="seqHideSel" disabled>hide selected (0)</button>
+    <span class="hint" id="seqHiddenNote" hidden><b></b> —
+      <button class="act" id="seqShowAll">show all</button></span>`;
+  const grid = document.createElement("div"); grid.className = "seqgrid";
+  for(const q of SEQ.sequences) grid.appendChild(seqCard(q));
+  grid.addEventListener("click", seqLibClick);   // grid is rebuilt per render, so
+                                                 // this cannot accumulate listeners
+  grid.addEventListener("click", (e) => {
+    const h = e.target.closest(".seqhide");
+    if(h){ seqHidden.add(h.dataset.sid); seqSel.delete(h.dataset.sid);
+           store.set("seqHidden", [...seqHidden]); seqApplyFilters(); return; }
+    // .seqhide also carries .libcopy for styling, so it must be handled first.
+    const b = e.target.closest(".libcopy"); if(!b) return;
+    const q = SEQ.sequences.find(x => x.id === b.dataset.sid); if(!q) return;
+    copy(seqExportCmd(q), b);
+  });
+  grid.addEventListener("change", (e) => {
+    const c = e.target.closest(".seqpick input"); if(!c) return;
+    c.checked ? seqSel.add(c.dataset.sid) : seqSel.delete(c.dataset.sid);
+    seqApplyFilters();
+  });
+  wrap.append(head, ctl, grid);
+  v.replaceChildren(wrap);
+  applyStudioState();
+  ctl.querySelectorAll("#seqPlateSeg button").forEach(b => b.addEventListener("click", () => {
+    seqPlate = b.dataset.v;
+    ctl.querySelectorAll("#seqPlateSeg button").forEach(x =>
+      x.setAttribute("aria-pressed", String(x === b)));
+    seqApplyPlate();
+  }));
+  ctl.querySelectorAll("#seqFamChips .chip").forEach(c => c.addEventListener("click", () => {
+    const f = c.dataset.f;
+    if(seqFams.has(f) && seqFams.size > 1) seqFams.delete(f); else seqFams.add(f);
+    ctl.querySelectorAll("#seqFamChips .chip").forEach(x =>
+      x.setAttribute("aria-pressed", String(seqFams.has(x.dataset.f))));
+    seqApplyFilters();
+  }));
+  ctl.querySelector("#seqHideSel").addEventListener("click", () => {
+    for(const id of seqSel) seqHidden.add(id);
+    seqSel.clear();
+    store.set("seqHidden", [...seqHidden]);
+    ctl.closest(".seqwrap").querySelectorAll(".seqpick input")
+       .forEach(c => { c.checked = false; });
+    seqApplyFilters();
+  });
+  ctl.querySelector("#seqShowAll").addEventListener("click", () => {
+    seqHidden.clear(); store.set("seqHidden", []); seqApplyFilters();
+  });
+  seqApplyFilters();
+  if(!seqTicker && seqAnims.length) seqTicker = setInterval(seqTick, 50);
+}
+
+/* ── guide view ──────────────────────────────────────────────────────────────
+   The metric reference. Ranges and directions here are checked against
+   scripts/metrics.py, scripts/sequence_metrics.py, semantic_metrics.py and
+   fleet-shadow-art's target_fit.py / motion_planner.py — if this table and the
+   code ever disagree, the code is right and this table has rotted. */
+function gtable(rows){
+  return `<div class="tblwrap"><table class="gref">
+    <thead><tr><th>metric</th><th>range</th><th>better</th><th>what it answers</th><th>notes</th></tr></thead>
+    <tbody>${rows.map(r => `<tr><td class="mn">${r[0]}</td><td class="rg">${r[1]}</td>
+      <td class="dir">${r[2]}</td><td>${r[3]}</td><td class="note">${r[4]}</td></tr>`).join("")}</tbody>
+  </table></div>`;
+}
+
+function renderGuide(){
+  const v = $("#guideView");
+  const UP = "↑ higher", DOWN = "↓ lower", DIAG = "◦ diagnostic";
+
+  const shape = [
+    ["iou", "[0,1]", UP, "how much area agrees: |T∩S| / |T∪S|",
+     "the headline, but it correlates ρ=+0.75 with stroke width on the grounded sweeps (+0.63 fitted) — it mostly measures how fat the target is; never rank by it alone"],
+    ["dice", "[0,1]", UP, "pixel F1; monotone in IoU",
+     "adds no ranking information — here because segmentation readers look for it"],
+    ["boundary_iou", "[0,1]", UP, "is the outline in the right place, with the interior's vote removed",
+     "IoU inside a band 2% of the diagonal along each outline; undoes the stroke-width bias (truck_mpeg7-01: 0.807 IoU, 0.234 here)"],
+    ["nsd", "[0,1]", UP, "share of outline within a set tolerance (1% of the diagonal) of the other's",
+     "the tolerance is physical: on a 1 m screen it reads 'outline within ~1 cm'"],
+    ["chamfer", "[0,1] of diag", DOWN, "mean outline-to-outline distance",
+     "keeps grading after the shapes stop overlapping, where IoU flatlines at 0"],
+    ["hd95", "[0,1] of diag", DOWN, "how far off the worst part of the outline is",
+     "95th-percentile Hausdorff — what a viewer notices first, minus stray pixels"],
+    ["cldice", "[0,1]", UP, "did the thin parts survive — a limb counts as much as a torso",
+     "skeleton-vs-mask harmonic mean; cannot be gamed by thickening"],
+    ["betti_error", "int ≥ 0", DOWN, "is an 8 still an 8 — same number of parts and holes",
+     "|Δβ0|+|Δβ1|, significance-thresholded; a step function — pw_h0/h1 are its graded versions"],
+    ["pw_h0 / pw_h1", "[0,∞)", DOWN, "graded topology error: parts (h0) and holes (h1)",
+     "Wasserstein distance between persistence diagrams — a 99%-closed hole is cheap, a missing one expensive"],
+    ["limb_offset_rel", "[0,~1] of diag", DOWN, "did the protrusions land in the right places",
+     "Hungarian-matched skeleton endpoints; None (not 0) when a side has no endpoints — count metrics can't see limbs pointing the wrong way"],
+    ["hu_distance", "[0,∞)", DOWN, "same shape? — ignoring position, scale, rotation",
+     "log-scaled L1 over the first 4 Hu invariants (higher orders are numerical noise)"],
+    ["fourier_distance", "[0,∞)", DOWN, "contour-descriptor distance",
+     "normalised Fourier magnitudes of the main outline — comparable to the MPEG-7 retrieval literature"],
+    ["tc_iou", "[0,1]", UP, "is it the right shape, ignoring where it sat and how big it was drawn",
+     "trim to ink, match height, centre; on a fitted sweep this is the only pairwise number about the shape rather than the fit — read with tc_aspect_error (↓): high tc_iou + big aspect error = stretched, not wrong"],
+  ];
+
+  const fit = [
+    ["fit_scale / dx / dy", "grid-bounded", DIAG, "the similarity transform --fit-target applied before solving",
+     "mean scale 0.832, ~14 px shift on the grounded sweep — the whole reason ref=shown and ref=original disagree"],
+    ["at_bound", "bool", "⚠ true", "did the fit stop exactly on a search bound",
+     "censored, not measured — widen the range before trusting the fit numbers (centred sweeps: ~66%; grounded: 14%)"],
+    ["clip_frac", "[0, 0.02]", DOWN, "fraction of the placed target pushed off-canvas",
+     "anything > 0 means the solve scored against a truncated shape; capped at 2% by --fit-min-retained"],
+    ["touches_edge", "bool", DIAG, "does the placed target reach a frame border",
+     "read per tree: grounded targets rest on the bottom edge by design (~75%), so there it means nothing"],
+    ["uncastable_before/after", "[0,1]", DOWN + " (after)", "target area outside the rig's reachable support",
+     "high after-value = a reach problem, not an algorithm problem — check before blaming the optimizer"],
+  ];
+
+  const clip = [
+    ["clip_rank / clip_rr", "1..n / (0,1]", "↓ / ↑", "where the true class ranks when CLIP scores the image against the subset's prompts",
+     "rr = 1/rank; the mean of rr over any filter IS that filter's MRR, so card and table cannot disagree"],
+    ["top1 (+ chance)", "[0,1]", UP, "the true class wins outright",
+     "chance runs 0.037–0.500 across subsets — never compare raw top1 down a column; use top1_over_chance"],
+    ["mrr", "[1/n, 1]", UP, "how much of the rank position survives",
+     "keeps signal top-1 discards: hand_shadow shadows rank ~4th of 9 (top1 0.000, mrr ratio 0.407)"],
+    ["ratio_vs_target / mrr_ratio", "[0,∞)", UP, "the number to quote: shadow recognizability over the target's own",
+     "CLIP is weak on 1-bit silhouettes, so the target scored through the identical path is the ceiling; nulled only when the target never ranks first — abstract and teleop ceilings sit at chance, so their ratios are noise, not signal"],
+    ["clip_top1_similarity", "[-1,1]", DIAG, "the raw cosine of the top guess — what it failed AS",
+     "no softmax, no logit scale: not a confidence, does not sum to 1 — which is exactly why the metric is a rank"],
+  ];
+
+  const seq = [
+    ["&lt;m&gt;_mean/min/max/std", "as base", "as base", "S1 — per-frame quality over the clip, every pairwise metric aggregated",
+     "min is what a viewer sees (the worst frame); for lower-better metrics the worst frame is the max column"],
+    ["dq_max_deg", "deg ≥ 0", DOWN, "S2 — largest single-joint step per transition",
+     "the number frame IoU cannot see: star_spin needs 291° between two individually-good frames"],
+    ["dq_infeasible_frac", "[0,1]", DOWN + " · headline", "S2 — share of transitions where any joint exceeds the planner's bound",
+     "LARGE_Q_JUMP = 1.2 rad = 68.75°, read live from motion_planner.py, never copied; the wrap counts whenever loop=true; null means no joint data, not zero"],
+    ["shadow/target_step_iou", "[0,1]", DIAG, "S2 — how much the shadow / the animation moved per step",
+     "shadow movement is uninterpretable without the target's own: wiper changes 0.21 per step, plant 0.91"],
+    ["motion_excess", "[-1,1]", DIAG, "S2 — thrashing, normalised: target_step_iou − shadow_step_iou",
+     "positive = the rig moved more than the animation asked; negative = under-moved (the clip looks frozen); both are failures"],
+    ["assignment_stability", "[0,1]", UP, "S3 — do the arms keep their roles, or trade regions mid-clip",
+     "Hungarian on per-arm joint vectors per transition; arms crossing on screen — star_spin scores 0.0 with healthy frame IoU"],
+    ["loop_closure_*", "as base", "as base", "S3 — the wrap transition broken out",
+     "only for loops; already counted inside the aggregates — skip it and a solver can unwind a full rotation between last and first frame for free"],
+    ["total_path_length_deg", "deg ≥ 0", DOWN, "S3 — what performing the whole clip costs in joint motion",
+     "scales with frame count — compare dq_l2_deg mean across clips of different length"],
+  ];
+
+  const views = document.createElement("div"); views.className = "fig";
+  views.innerHTML = `<h3>The views</h3>
+    <ul class="guide-rules">
+      <li><b>results</b> — every target beside its best solved shadow. Sort by any panel metric, drag the
+        histogram to brush a range, filter by subset chips or search, star cards into the filmstrip, click a
+        card for its full report. Plates draw the target <em>the optimizer was actually given</em> (the fitted
+        one) so pictures and numbers are always the same comparison. The hand-cast badge marks a human
+        reference capture — a marker, not a score.</li>
+      <li><b>benchmark</b> — the stratification (stroke-width quartiles × topology), per-subset tables, CLIP
+        recognizability, and the metric-vs-metric figures.</li>
+      <li><b>sequences</b> — the animated track: previews play at source fps and wrap only when the sequence
+        loops; each loop badge names its provenance (<span class="mono">declared</span> = fact from
+        source.json, <span class="mono">wrap-test</span> = heuristic with its evidence); solves show mean
+        frame IoU only beside infeasibility.</li>
+      <li><b>teleop</b> — the capture pipeline, six steps from rig to rebuild, with the interactive segmenter
+        in step 4.</li>
+      <li>Sidebar state persists per browser (<span class="mono">localStorage</span>, keys
+        <span class="mono">uba:*</span>); after a re-run, rebuild payloads then the dashboard —
+        <span class="mono">build_benchmark.py --check</span> says whether the committed page is current.</li>
+    </ul>`;
+
+  const rules = document.createElement("div"); rules.className = "fig";
+  rules.innerHTML = `<h3>Reading rules — the ways these numbers lie if quoted alone</h3>
+    <ul class="guide-rules">
+      <li><b>Mean frame IoU never travels without dq_infeasible_frac.</b> star_spin averages 0.6679 and
+        cannot be performed — averaging per-frame quality is precisely the statistic that cannot see a 291°
+        joint swing.</li>
+      <li><b>ref=shown vs ref=original.</b> On a fitted sweep the solver was asked to cast the <em>placed</em>
+        target. shown = did it solve the problem it was given; original = how much of the authored shape
+        survived, fit included. The gap is enormous (0.75 vs 0.35 on the grounded small budget) and quoting a
+        mean IoU without its ref is meaningless.</li>
+      <li><b>On fitted sweeps, plain IoU mostly reports the fit.</b> Use tc_iou for the shape-only question.
+        Do not reach for aligned_iou — its search (scale 0.85–1.15, shift ≤ 12%) cannot reach the fits it
+        would need to undo (fits recorded down to scale 0.54; the search floor is 0.35).</li>
+      <li><b>IoU needs company, not replacement.</b> Boundary, thin-structure, topology and placement answer
+        different questions; a featureless disc outscores a recognisable car on IoU alone.</li>
+      <li><b>CLIP scores are ratios, not absolutes.</b> The judge is half-blind on silhouettes, so shadow
+        recognizability is quoted over the target's own ceiling; abstract and teleop are null controls and
+        carry no signal. Quote the top-1 ratio and the MRR ratio together — they disagree in ways that change
+        conclusions (hand_shadow: 0.000 vs 0.407).</li>
+      <li><b>The wrap is a real transition.</b> Whenever a sequence loops, the last→first step is scored like
+        any other — otherwise a solver can unwind a whole rotation in the gap for free. Loop labels are
+        declared by the importer where the source knows (a film cut runs once) and wrap-tested only where it
+        doesn't; the badge tells you which.</li>
+      <li><b>Nulls are meaningful, not zero.</b> dq columns without joint data, limb offsets without
+        endpoints, CLIP ratios without a ceiling — everything degrades to null rather than raising, and
+        averaging over nulls silently misreports.</li>
+      <li><b>Fit diagnostics gate everything downstream.</b> at_bound means the fit is censored; clip_frac
+        &gt; 0 means the solve scored a truncated shape; check uncastable_after before blaming the optimizer.
+        And metrics must use the same --targets-dir the sweep solved against.</li>
+    </ul>`;
+
+  const solver = document.createElement("div"); solver.className = "fig";
+  solver.innerHTML = `<h3>How sequences are solved — and why the transition metrics exist</h3>
+    <p style="max-width:78ch">Animated clips are never solved jointly. The CPU path
+    (<span class="mono">run_sequence.py</span>) solves each frame with the same CMA-ES optimizer used for a
+    static target, in order, chaining state forward: the previous frame's pose warm-starts the next solve, a
+    temporal penalty (weight 0.3 by default) pulls the new pose toward it, and a reachability barrier
+    (weight 100) fires when any joint would move more than <span class="mono">LARGE_Q_JUMP</span> = 1.2 rad —
+    the same threshold below which <span class="mono">motion_planner.py</span> can connect two keyframes with
+    a direct quintic. All of that coupling is soft, one-directional, and active only when a previous pose is
+    supplied, so frames solved independently never see the barrier at all — which is how star_spin ended
+    with every transition infeasible. Between keyframes, smoothness is manufactured after the fact:
+    the planner builds collision-checked paths and retimes them, but it cannot repair keyframes the solver
+    placed too far apart.</p>
+    <p style="max-width:78ch; margin-top:8px">When a clip is solved with a clip-level
+    <span class="mono">--fit-target</span>, two columns must not be conflated: the <b>benchmark
+    column</b> charges the fit as error (vs-authored), and it should — but being one similarity
+    transform per clip it is <b>recoverable</b>: in post for a rendered demo
+    (<span class="mono">08_reassemble.py</span> applies fit⁻¹, measured to recover the fitted
+    score to within resampling), or as a per-clip camera reframe — a zoom plus a pan — for a
+    filmed rig, where it is realizable but not free. The same clip legitimately
+    has two quality numbers; say which column you are reading. The demo section quotes
+    <b>legibility</b> (CLIP retrieval over the folded glyph set, cast frames over the authored
+    ceiling) rather than IoU — the two rank clips differently, and legibility is what a viewer
+    of the video experiences; the benchmark section keeps IoU primary.</p>
+    <p style="max-width:78ch; margin-top:8px">A separate GPU path exists
+    (<span class="mono">run_sequence_jax.py</span> — this is where JAX comes in: a differentiable MJX renderer
+    with batched Adam restarts), and it currently solves every frame independently with no warm start and no
+    temporal term. Nothing yet optimizes a whole clip at once, and nothing prevents arms trading roles
+    between frames — <span class="mono">dq_infeasible_frac</span> and
+    <span class="mono">assignment_stability</span> are the metrics that keep both facts visible.</p>`;
+
+  const mkfig = (title, cap, rows) => {
+    const d = document.createElement("div"); d.className = "fig";
+    d.innerHTML = `<h3>${title}</h3>${gtable(rows)}<div class="cap">${cap}</div>`;
+    return d;
+  };
+
+  const intro = document.createElement("div");
+  intro.innerHTML = `<h2>Guide — how to use this dashboard, and what the numbers mean</h2>
+    <p>Every metric below answers one question, has a known range and a direction, and lies in a specific way
+    when quoted alone. Ranges and directions are checked against the code
+    (<span class="mono">scripts/metrics.py</span>, <span class="mono">sequence_metrics.py</span>,
+    <span class="mono">semantic_metrics.py</span>, <span class="mono">target_fit.py</span>); if this page and
+    the code disagree, the code is right.</p>`;
+
+  v.replaceChildren(intro, views, rules,
+    mkfig("Pairwise shape metrics — target vs shadow, one number each",
+      "All distances are normalised by the image diagonal, so they are resolution-independent. " +
+      "Everything degrades to null rather than raising when an optional dependency or a degenerate mask " +
+      "makes it uncomputable.", shape),
+    mkfig("Fit diagnostics — properties of the placement, not the solve",
+      "Recorded per target in results.json under <b>fit</b> by --fit-target sweeps; they gate every " +
+      "downstream comparison.", fit),
+    mkfig("CLIP recognizability — can a frozen judge name the shape",
+      "One prompt per class per subset, cosine ranks, no softmax. Chance level rides along because class " +
+      "lists run from 2 to 27 entries.", clip),
+    solver,
+    mkfig("Sequence metrics — S1 frames, S2 transitions, S3 the clip",
+      "From scripts/sequence_metrics.py: one row per frame plus one aggregate row per (sequence, source), " +
+      "in results/sequence_metrics_&lt;tag&gt;.csv. S2's threshold is imported from fleet-shadow-art at " +
+      "run time so it can never drift from what the planner enforces.", seq));
+}
+
+function applyPage(){
+  if(!PAGES.includes(st.page)) st.page = "results";
+  store.set("page", st.page);
+  const p = st.page;
+  $("#benchView").hidden  = p !== "bench";
+  $("#teleopView").hidden = p !== "teleop";
+  $("#seqView").hidden    = p !== "sequences";
+  $("#guideView").hidden  = p !== "guide";
+  $("#resultsView").hidden  = p !== "results";
+  document.querySelectorAll('[data-only="results"]').forEach(e => e.hidden = p !== "results");
+  document.querySelector(".strip").hidden = p !== "results";
+  if(p === "bench"  && !$("#benchView").childElementCount)  renderBench();
+  if(p === "teleop" && !$("#teleopView").childElementCount) renderTeleop();
+  if(p === "sequences" && !$("#seqView").childElementCount) renderSequences();
+  if(p === "guide"  && !$("#guideView").childElementCount)  renderGuide();
+}
+seg("#segPage", "page", applyPage);
+
+renderHist(); renderGrid(); renderReel(); applyPage();
+})();
+</script>

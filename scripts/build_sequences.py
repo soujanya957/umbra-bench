@@ -9,7 +9,7 @@ solver's ability to stay near a prior, not just to hit a silhouette.
 Layout, parallel to targets/:
 
     sequences/<group>/<name>/frame_00.png … frame_NN.png
-    sequences.jsonl
+    sequences_paper.jsonl
 
 Two conventions differ deliberately from `targets/`:
 
@@ -169,7 +169,7 @@ def main():
               f"{'cyclic' if cyclic else 'open'}")
 
     if not a.dry_run:
-        out = os.path.join(a.bench, "sequences.jsonl")
+        out = os.path.join(a.bench, "sequences_paper.jsonl")
         with open(out, "w") as f:
             for r in records:
                 f.write(json.dumps(r) + "\n")
