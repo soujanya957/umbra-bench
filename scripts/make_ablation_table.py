@@ -86,12 +86,12 @@ def compact(d3, d5):
     delta = lambda d, v, ref, gs: st.mean(d[v][g][0] - d[ref][g][0] for g in gs)
     fmt = lambda x: "$0$" if abs(x) < 5e-4 else f"${x:+.3f}$"
     ROWS = [  # number, label, (added variant, its predecessor), (removed variant) or None
-        ("3, 6", "arm-by-arm sweep, joint stage", ("fwd_joint", "flat"), None),
-        ("1", "zone assignment", ("plus_assign", "fwd_joint"), "full_no_assign"),
-        ("2", "aimed start", ("plus_voronoi", "plus_assign"), "full_no_voronoi"),
+        ("1", "arm-by-arm sweep, joint stage", ("fwd_joint", "flat"), None),
+        ("2", "zone assignment", ("plus_assign", "fwd_joint"), "full_no_assign"),
+        ("3", "aimed start", ("plus_voronoi", "plus_assign"), "full_no_voronoi"),
         ("4", "backward sweep", ("plus_backward", "plus_voronoi"), "full_no_backward"),
         ("5", "ICP-guided restart", ("plus_icp", "plus_backward"), "full_no_icp"),
-        ("7", "FD polish", ("full", "plus_icp"), "full_no_fd"),
+        ("6", "FD polish", ("full", "plus_icp"), "full_no_fd"),
     ]
     print(r"\begin{tabular}{@{}rlrrr@{}}")
     print(r"\toprule")

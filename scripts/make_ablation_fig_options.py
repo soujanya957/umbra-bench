@@ -34,12 +34,12 @@ def paired(v, ref):
 
 # pipeline number, label, build-up variant, its predecessor, leave-one-out variant
 STEPS = [
-    ("3, 6", "arm-by-arm sweep + joint stage", "fwd_joint",     "flat",          None),
-    ("1",    "zone assignment",                "plus_assign",   "fwd_joint",     "full_no_assign"),
-    ("2",    "aimed start",                    "plus_voronoi",  "plus_assign",   "full_no_voronoi"),
+    ("1",    "arm-by-arm sweep + joint stage", "fwd_joint",     "flat",          None),
+    ("2",    "zone assignment",                "plus_assign",   "fwd_joint",     "full_no_assign"),
+    ("3",    "aimed start",                    "plus_voronoi",  "plus_assign",   "full_no_voronoi"),
     ("4",    "backward sweep",                 "plus_backward", "plus_voronoi",  "full_no_backward"),
     ("5",    "ICP-guided restart",             "plus_icp",      "plus_backward", "full_no_icp"),
-    ("7",    "FD polish",                      "full",          "plus_icp",      "full_no_fd"),
+    ("6",    "FD polish",                      "full",          "plus_icp",      "full_no_fd"),
 ]
 LAB = [f"{n}  {l}" for n, l, *_ in STEPS]
 FLAT, FULL = mean("flat"), mean("full")
