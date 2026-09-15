@@ -1,0 +1,562 @@
+[shard 0/1] 10 targets × 5 runs
+[scene] so101 ×3: light_y=1.00 wall_y=-2.40 throw=3.40m table_len=0.40m | magnification 2.4x–3.4x
+[shard 0] n_dof=18 arm_gap=0.2
+[shard 0] variant=staged+init_samples=4
+[shard 0] wrote /home/souju/dev/umbra-bench-grounded/optimized/aimed-start-probe10/full-small-init4-n3/BUDGET.md
+[staged] Popsize: per-robot phases=32  final=32  (theory optimum for 6 DOF = 10)
+
+[staged] Hungarian pre-assignment  (3×3 cost matrix, 8 samples/entry = 72 renders)...
+[staged]   robot_a → zone 2  robot_b → zone 0  robot_c → zone 1
+
+[staged] Phase 1 — forward greedy  (8 iters × 3 robot(s), sigma=0.40×1.00, popsize=32)
+[staged]   Ph1 robot a  zone 2  (uncovered: 23% of target)
+    voronoi warm-start: IoU 0.148 → 0.212 ✓
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 15.0px of uncovered area  (2 samples)
+[staged]   → robot a: IoU 0.148 → 0.411  ✓
+    ↑ new global best IoU 0.411  [phase Ph1 robot a]
+[staged]   Ph1 robot b  zone 0  (uncovered: 8% of target)
+    voronoi warm-start: IoU 0.386 ≤ 0.411, kept current
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 214.0px of uncovered area  (4 samples)
+[staged]   → robot b: IoU 0.411 → 0.535  ✓
+    ↑ new global best IoU 0.535  [phase Ph1 robot b]
+[staged]   Ph1 robot c  zone 1  (uncovered: 21% of target)
+    voronoi warm-start: IoU 0.535 → 0.577 ✓
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 0.0px of uncovered area  (2 samples)
+[staged]   → robot c: IoU 0.535 → 0.604  ✓
+    ↑ new global best IoU 0.604  [phase Ph1 robot c]
+[staged] Phase 1 done — composite IoU: 0.604
+
+[staged] Phase 2 — backward pass  (8 iters × 3 robots, sigma=0.300)
+[staged]   contributions before Phase 2:
+[staged]     robot a: +0.165 IoU
+[staged]     robot b: +0.099 IoU
+[staged]     robot c: +0.068 IoU
+[staged]   Ph2 robot c  zone 1  (uncovered: 41% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 493.0px of uncovered area  (4 samples)
+[staged]   → robot c: IoU 0.604 → 0.612  ✓
+    ↑ new global best IoU 0.612  [phase Ph2 robot c]
+[staged]   Ph2 robot b  zone 0  (uncovered: 44% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 206.0px of uncovered area  (4 samples)
+[staged]   → robot b: IoU 0.612 → 0.615  ✓
+    ↑ new global best IoU 0.615  [phase Ph2 robot b]
+[staged]   Ph2 robot a  zone 2  (uncovered: 47% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 375.0px of uncovered area  (4 samples)
+[staged]   → robot a: candidate 0.596 < current 0.615  ✗ rejected
+[staged] Phase 2 done — composite IoU: 0.615
+
+[staged] Best snapshot: Phase 2  IoU=0.615
+[staged] Final refinement — all joints  (10 iters, popsize=32, sigma=0.160)
+    [parallel] 10 worker threads, one renderer clone each
+    ↑ new global best IoU 0.630  [final refinement]
+[staged] Final done — IoU: 0.630  ✓
+[staged] FD refinement — 5 Adam steps  (180 renders, lr=0.01, ε=0.02)
+    ↑ new global best IoU 0.641  [FD refinement]
+[staged] FD done — IoU: 0.641  (Δ=+0.011)  ✓
+[staged] Done — final IoU: 0.641  loss: 0.3600
+[staged] Popsize: per-robot phases=32  final=32  (theory optimum for 6 DOF = 10)
+
+[staged] Hungarian pre-assignment  (3×3 cost matrix, 8 samples/entry = 72 renders)...
+[staged]   robot_a → zone 1  robot_b → zone 2  robot_c → zone 0
+
+[staged] Phase 1 — forward greedy  (8 iters × 3 robot(s), sigma=0.40×1.00, popsize=32)
+[staged]   Ph1 robot a  zone 1  (uncovered: 26% of target)
+    voronoi warm-start: IoU 0.148 → 0.359 ✓
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 0.0px of uncovered area  (2 samples)
+[staged]   → robot a: IoU 0.148 → 0.398  ✓
+    ↑ new global best IoU 0.398  [phase Ph1 robot a]
+[staged]   Ph1 robot b  zone 2  (uncovered: 21% of target)
+    voronoi warm-start: IoU 0.376 ≤ 0.398, kept current
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 293.0px of uncovered area  (4 samples)
+[staged]   → robot b: IoU 0.398 → 0.451  ✓
+    ↑ new global best IoU 0.451  [phase Ph1 robot b]
+[staged]   Ph1 robot c  zone 0  (uncovered: 8% of target)
+    voronoi warm-start: IoU 0.439 ≤ 0.451, kept current
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 4.0px of uncovered area  (4 samples)
+[staged]   → robot c: IoU 0.451 → 0.526  ✓
+    ↑ new global best IoU 0.526  [phase Ph1 robot c]
+[staged] Phase 1 done — composite IoU: 0.526
+
+[staged] Phase 2 — backward pass  (8 iters × 3 robots, sigma=0.300)
+[staged]   contributions before Phase 2:
+[staged]     robot a: +0.250 IoU
+[staged]     robot b: +0.061 IoU
+[staged]     robot c: +0.075 IoU
+[staged]   Ph2 robot c  zone 0  (uncovered: 48% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 191.0px of uncovered area  (4 samples)
+[staged]   → robot c: candidate 0.525 < current 0.526  ✗ rejected
+[staged]   Ph2 robot b  zone 2  (uncovered: 44% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 410.0px of uncovered area  (4 samples)
+[staged]   → robot b: IoU 0.526 → 0.562  ✓
+    ↑ new global best IoU 0.562  [phase Ph2 robot b]
+[staged]   Ph2 robot a  zone 1  (uncovered: 57% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 1105.0px of uncovered area  (4 samples)
+[staged]   → robot a: IoU 0.562 → 0.574  ✓
+    ↑ new global best IoU 0.574  [phase Ph2 robot a]
+[staged] Phase 2 done — composite IoU: 0.574
+
+[staged] Best snapshot: Phase 2  IoU=0.574
+[staged] Final refinement — all joints  (10 iters, popsize=32, sigma=0.160)
+    [parallel] 10 worker threads, one renderer clone each
+    ↑ new global best IoU 0.587  [final refinement]
+[staged] Final done — IoU: 0.587  ✓
+[staged] FD refinement — 5 Adam steps  (180 renders, lr=0.01, ε=0.02)
+    ↑ new global best IoU 0.601  [FD refinement]
+[staged] FD done — IoU: 0.601  (Δ=+0.014)  ✓
+[staged] Done — final IoU: 0.601  loss: 0.4001
+[staged] Popsize: per-robot phases=32  final=32  (theory optimum for 6 DOF = 10)
+
+[staged] Hungarian pre-assignment  (3×3 cost matrix, 8 samples/entry = 72 renders)...
+[staged]   robot_a → zone 0  robot_b → zone 1  robot_c → zone 2
+
+[staged] Phase 1 — forward greedy  (8 iters × 3 robot(s), sigma=0.40×1.00, popsize=32)
+[staged]   Ph1 robot a  zone 0  (uncovered: 23% of target)
+    voronoi warm-start: IoU 0.148 → 0.212 ✓
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 0.0px of uncovered area  (2 samples)
+[staged]   → robot a: IoU 0.148 → 0.448  ✓
+    ↑ new global best IoU 0.448  [phase Ph1 robot a]
+[staged]   Ph1 robot b  zone 1  (uncovered: 17% of target)
+    voronoi warm-start: IoU 0.448 → 0.453 ✓
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 0.0px of uncovered area  (2 samples)
+[staged]   → robot b: IoU 0.448 → 0.531  ✓
+    ↑ new global best IoU 0.531  [phase Ph1 robot b]
+[staged]   Ph1 robot c  zone 2  (uncovered: 9% of target)
+    voronoi warm-start: IoU 0.522 ≤ 0.531, kept current
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 196.0px of uncovered area  (4 samples)
+[staged]   → robot c: IoU 0.531 → 0.564  ✓
+    ↑ new global best IoU 0.564  [phase Ph1 robot c]
+[staged] Phase 1 done — composite IoU: 0.564
+
+[staged] Phase 2 — backward pass  (8 iters × 3 robots, sigma=0.300)
+[staged]   contributions before Phase 2:
+[staged]     robot a: +0.226 IoU
+[staged]     robot b: +0.085 IoU
+[staged]     robot c: +0.034 IoU  ← low
+[staged]   Ph2 robot c  zone 2  (uncovered: 38% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 150.0px of uncovered area  (4 samples)
+[staged]   → robot c: IoU 0.564 → 0.588  ✓
+    ↑ new global best IoU 0.588  [phase Ph2 robot c]
+[staged]   Ph2 robot b  zone 1  (uncovered: 45% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 125.0px of uncovered area  (4 samples)
+[staged]   → robot b: IoU 0.588 → 0.601  ✓
+    ↑ new global best IoU 0.601  [phase Ph2 robot b]
+[staged]   Ph2 robot a  zone 0  (uncovered: 55% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 576.0px of uncovered area  (4 samples)
+[staged]   → robot a: candidate 0.539 < current 0.601  ✗ rejected
+[staged] Phase 2 done — composite IoU: 0.601
+
+[staged] Best snapshot: Phase 2  IoU=0.601
+[staged] Final refinement — all joints  (10 iters, popsize=32, sigma=0.160)
+    [parallel] 10 worker threads, one renderer clone each
+[staged] Final done — IoU: 0.601  ✓
+[staged] FD refinement — 5 Adam steps  (180 renders, lr=0.01, ε=0.02)
+    ↑ new global best IoU 0.617  [FD refinement]
+[staged] FD done — IoU: 0.617  (Δ=+0.016)  ✓
+[staged] Done — final IoU: 0.617  loss: 0.3842
+[staged] Popsize: per-robot phases=32  final=32  (theory optimum for 6 DOF = 10)
+
+[staged] Hungarian pre-assignment  (3×3 cost matrix, 8 samples/entry = 72 renders)...
+[staged]   robot_a → zone 2  robot_b → zone 1  robot_c → zone 0
+
+[staged] Phase 1 — forward greedy  (8 iters × 3 robot(s), sigma=0.40×1.00, popsize=32)
+[staged]   Ph1 robot a  zone 2  (uncovered: 44% of target)
+    voronoi warm-start: IoU 0.148 → 0.356 ✓
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 0.0px of uncovered area  (2 samples)
+[staged]   → robot a: IoU 0.148 → 0.443  ✓
+    ↑ new global best IoU 0.443  [phase Ph1 robot a]
+[staged]   Ph1 robot b  zone 1  (uncovered: 22% of target)
+    voronoi warm-start: IoU 0.443 → 0.444 ✓
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 529.0px of uncovered area  (2 samples)
+[staged]   → robot b: IoU 0.443 → 0.570  ✓
+    ↑ new global best IoU 0.570  [phase Ph1 robot b]
+[staged]   Ph1 robot c  zone 0  (uncovered: 6% of target)
+    voronoi warm-start: IoU 0.536 ≤ 0.570, kept current
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 114.0px of uncovered area  (4 samples)
+[staged]   → robot c: IoU 0.570 → 0.608  ✓
+    ↑ new global best IoU 0.608  [phase Ph1 robot c]
+[staged] Phase 1 done — composite IoU: 0.608
+
+[staged] Phase 2 — backward pass  (8 iters × 3 robots, sigma=0.300)
+[staged]   contributions before Phase 2:
+[staged]     robot a: +0.253 IoU
+[staged]     robot b: +0.140 IoU
+[staged]     robot c: +0.038 IoU  ← low
+[staged]   Ph2 robot c  zone 0  (uncovered: 36% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 380.0px of uncovered area  (4 samples)
+[staged]   → robot c: IoU 0.608 → 0.631  ✓
+    ↑ new global best IoU 0.631  [phase Ph2 robot c]
+[staged]   Ph2 robot b  zone 1  (uncovered: 40% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 435.0px of uncovered area  (4 samples)
+[staged]   → robot b: IoU 0.631 → 0.633  ✓
+    ↑ new global best IoU 0.633  [phase Ph2 robot b]
+[staged]   Ph2 robot a  zone 2  (uncovered: 54% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 1150.0px of uncovered area  (4 samples)
+[staged]   → robot a: IoU 0.633 → 0.634  ✓
+    ↑ new global best IoU 0.634  [phase Ph2 robot a]
+[staged] Phase 2 done — composite IoU: 0.634
+
+[staged] Best snapshot: Phase 2  IoU=0.634
+[staged] Final refinement — all joints  (10 iters, popsize=32, sigma=0.160)
+    [parallel] 10 worker threads, one renderer clone each
+    ↑ new global best IoU 0.645  [final refinement]
+[staged] Final done — IoU: 0.645  ✓
+[staged] FD refinement — 5 Adam steps  (180 renders, lr=0.01, ε=0.02)
+    ↑ new global best IoU 0.651  [FD refinement]
+[staged] FD done — IoU: 0.651  (Δ=+0.006)  ✓
+[staged] Done — final IoU: 0.651  loss: 0.3501
+[staged] Popsize: per-robot phases=32  final=32  (theory optimum for 6 DOF = 10)
+
+[staged] Hungarian pre-assignment  (3×3 cost matrix, 8 samples/entry = 72 renders)...
+[staged]   robot_a → zone 0  robot_b → zone 2  robot_c → zone 1
+
+[staged] Phase 1 — forward greedy  (8 iters × 3 robot(s), sigma=0.40×1.00, popsize=32)
+[staged]   Ph1 robot a  zone 0  (uncovered: 26% of target)
+    voronoi warm-start: IoU 0.148 → 0.359 ✓
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 479.0px of uncovered area  (2 samples)
+[staged]   → robot a: IoU 0.148 → 0.424  ✓
+    ↑ new global best IoU 0.424  [phase Ph1 robot a]
+[staged]   Ph1 robot b  zone 2  (uncovered: 8% of target)
+    voronoi warm-start: IoU 0.424 → 0.459 ✓
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 0.0px of uncovered area  (2 samples)
+[staged]   → robot b: IoU 0.424 → 0.521  ✓
+    ↑ new global best IoU 0.521  [phase Ph1 robot b]
+[staged]   Ph1 robot c  zone 1  (uncovered: 9% of target)
+    voronoi warm-start: IoU 0.497 ≤ 0.521, kept current
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 104.0px of uncovered area  (4 samples)
+[staged]   → robot c: IoU 0.521 → 0.606  ✓
+    ↑ new global best IoU 0.606  [phase Ph1 robot c]
+[staged] Phase 1 done — composite IoU: 0.606
+
+[staged] Phase 2 — backward pass  (8 iters × 3 robots, sigma=0.300)
+[staged]   contributions before Phase 2:
+[staged]     robot a: +0.229 IoU
+[staged]     robot b: +0.099 IoU
+[staged]     robot c: +0.085 IoU
+[staged]   Ph2 robot c  zone 1  (uncovered: 43% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 198.0px of uncovered area  (4 samples)
+[staged]   → robot c: candidate 0.605 < current 0.606  ✗ rejected
+[staged]   Ph2 robot b  zone 2  (uncovered: 43% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 530.0px of uncovered area  (4 samples)
+[staged]   → robot b: IoU 0.606 → 0.617  ✓
+    ↑ new global best IoU 0.617  [phase Ph2 robot b]
+[staged]   Ph2 robot a  zone 0  (uncovered: 57% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 1190.0px of uncovered area  (4 samples)
+[staged]   → robot a: IoU 0.617 → 0.635  ✓
+    ↑ new global best IoU 0.635  [phase Ph2 robot a]
+[staged] Phase 2 done — composite IoU: 0.635
+
+[staged] Best snapshot: Phase 2  IoU=0.635
+[staged] Final refinement — all joints  (10 iters, popsize=32, sigma=0.160)
+    [parallel] 10 worker threads, one renderer clone each
+    ↑ new global best IoU 0.662  [final refinement]
+[staged] Final done — IoU: 0.662  ✓
+[staged] FD refinement — 5 Adam steps  (180 renders, lr=0.01, ε=0.02)
+    ↑ new global best IoU 0.677  [FD refinement]
+[staged] FD done — IoU: 0.677  (Δ=+0.014)  ✓
+[staged] Done — final IoU: 0.677  loss: 0.3235
+[shard 0] 1/10 letters_upper/E_dejavusans-bold  best=0.677 mean=0.637±0.026  88s  eta 0.2h
+[staged] Popsize: per-robot phases=32  final=32  (theory optimum for 6 DOF = 10)
+
+[staged] Hungarian pre-assignment  (3×3 cost matrix, 8 samples/entry = 72 renders)...
+[staged]   robot_a → zone 1  robot_b → zone 0  robot_c → zone 2
+
+[staged] Phase 1 — forward greedy  (8 iters × 3 robot(s), sigma=0.40×1.00, popsize=32)
+[staged]   Ph1 robot a  zone 1  (uncovered: 24% of target)
+    voronoi warm-start: IoU 0.170 → 0.215 ✓
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 0.0px of uncovered area  (2 samples)
+[staged]   → robot a: IoU 0.170 → 0.323  ✓
+    ↑ new global best IoU 0.323  [phase Ph1 robot a]
+[staged]   Ph1 robot b  zone 0  (uncovered: 6% of target)
+    voronoi warm-start: IoU 0.311 ≤ 0.323, kept current
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 201.0px of uncovered area  (4 samples)
+[staged]   → robot b: IoU 0.323 → 0.474  ✓
+    ↑ new global best IoU 0.474  [phase Ph1 robot b]
+[staged]   Ph1 robot c  zone 2  (uncovered: 27% of target)
+    voronoi warm-start: IoU 0.448 ≤ 0.474, kept current
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 0.0px of uncovered area  (4 samples)
+[staged]   → robot c: IoU 0.474 → 0.504  ✓
+    ↑ new global best IoU 0.504  [phase Ph1 robot c]
+[staged] Phase 1 done — composite IoU: 0.504
+
+[staged] Phase 2 — backward pass  (8 iters × 3 robots, sigma=0.300)
+[staged]   contributions before Phase 2:
+[staged]     robot a: +0.168 IoU
+[staged]     robot b: +0.179 IoU
+[staged]     robot c: +0.030 IoU  ← low
+[staged]   Ph2 robot c  zone 2  (uncovered: 41% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 320.0px of uncovered area  (4 samples)
+[staged]   → robot c: IoU 0.504 → 0.526  ✓
+    ↑ new global best IoU 0.526  [phase Ph2 robot c]
+[staged]   Ph2 robot b  zone 0  (uncovered: 43% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 158.0px of uncovered area  (4 samples)
+[staged]   → robot b: candidate 0.485 < current 0.526  ✗ rejected
+[staged]   Ph2 robot a  zone 1  (uncovered: 51% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 520.0px of uncovered area  (4 samples)
+[staged]   → robot a: candidate 0.512 < current 0.526  ✗ rejected
+[staged] Phase 2 done — composite IoU: 0.526
+
+[staged] Best snapshot: Phase 2  IoU=0.526
+[staged] Final refinement — all joints  (10 iters, popsize=32, sigma=0.160)
+    [parallel] 10 worker threads, one renderer clone each
+    ↑ new global best IoU 0.553  [final refinement]
+[staged] Final done — IoU: 0.553  ✓
+[staged] FD refinement — 5 Adam steps  (180 renders, lr=0.01, ε=0.02)
+    ↑ new global best IoU 0.558  [FD refinement]
+[staged] FD done — IoU: 0.558  (Δ=+0.005)  ✓
+[staged] Done — final IoU: 0.558  loss: 0.4441
+[staged] Popsize: per-robot phases=32  final=32  (theory optimum for 6 DOF = 10)
+
+[staged] Hungarian pre-assignment  (3×3 cost matrix, 8 samples/entry = 72 renders)...
+[staged]   robot_a → zone 0  robot_b → zone 1  robot_c → zone 2
+
+[staged] Phase 1 — forward greedy  (8 iters × 3 robot(s), sigma=0.40×1.00, popsize=32)
+[staged]   Ph1 robot a  zone 0  (uncovered: 23% of target)
+    voronoi warm-start: IoU 0.170 → 0.199 ✓
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 0.0px of uncovered area  (2 samples)
+[staged]   → robot a: IoU 0.170 → 0.348  ✓
+    ↑ new global best IoU 0.348  [phase Ph1 robot a]
+[staged]   Ph1 robot b  zone 1  (uncovered: 11% of target)
+    voronoi warm-start: IoU 0.337 ≤ 0.348, kept current
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 0.0px of uncovered area  (4 samples)
+[staged]   → robot b: IoU 0.348 → 0.426  ✓
+    ↑ new global best IoU 0.426  [phase Ph1 robot b]
+[staged]   Ph1 robot c  zone 2  (uncovered: 23% of target)
+    voronoi warm-start: IoU 0.426 → 0.436 ✓
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 300.0px of uncovered area  (2 samples)
+[staged]   → robot c: IoU 0.426 → 0.506  ✓
+    ↑ new global best IoU 0.506  [phase Ph1 robot c]
+[staged] Phase 1 done — composite IoU: 0.506
+
+[staged] Phase 2 — backward pass  (8 iters × 3 robots, sigma=0.300)
+[staged]   contributions before Phase 2:
+[staged]     robot a: +0.175 IoU
+[staged]     robot b: +0.093 IoU
+[staged]     robot c: +0.080 IoU
+[staged]   Ph2 robot c  zone 2  (uncovered: 42% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 224.0px of uncovered area  (4 samples)
+[staged]   → robot c: candidate 0.466 < current 0.506  ✗ rejected
+[staged]   Ph2 robot b  zone 1  (uncovered: 45% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 280.0px of uncovered area  (4 samples)
+[staged]   → robot b: candidate 0.506 < current 0.506  ✗ rejected
+[staged]   Ph2 robot a  zone 0  (uncovered: 59% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 199.0px of uncovered area  (4 samples)
+[staged]   → robot a: IoU 0.506 → 0.537  ✓
+    ↑ new global best IoU 0.537  [phase Ph2 robot a]
+[staged] Phase 2 done — composite IoU: 0.537
+
+[staged] Best snapshot: Phase 2  IoU=0.537
+[staged] Final refinement — all joints  (10 iters, popsize=32, sigma=0.160)
+    [parallel] 10 worker threads, one renderer clone each
+    ↑ new global best IoU 0.556  [final refinement]
+[staged] Final done — IoU: 0.556  ✓
+[staged] FD refinement — 5 Adam steps  (180 renders, lr=0.01, ε=0.02)
+    ↑ new global best IoU 0.569  [FD refinement]
+[staged] FD done — IoU: 0.569  (Δ=+0.013)  ✓
+[staged] Done — final IoU: 0.569  loss: 0.4322
+[staged] Popsize: per-robot phases=32  final=32  (theory optimum for 6 DOF = 10)
+
+[staged] Hungarian pre-assignment  (3×3 cost matrix, 8 samples/entry = 72 renders)...
+[staged]   robot_a → zone 0  robot_b → zone 2  robot_c → zone 1
+
+[staged] Phase 1 — forward greedy  (8 iters × 3 robot(s), sigma=0.40×1.00, popsize=32)
+[staged]   Ph1 robot a  zone 0  (uncovered: 23% of target)
+    voronoi warm-start: IoU 0.170 → 0.199 ✓
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 0.0px of uncovered area  (2 samples)
+[staged]   → robot a: IoU 0.170 → 0.328  ✓
+    ↑ new global best IoU 0.328  [phase Ph1 robot a]
+[staged]   Ph1 robot b  zone 2  (uncovered: 26% of target)
+    voronoi warm-start: IoU 0.316 ≤ 0.328, kept current
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 301.0px of uncovered area  (4 samples)
+[staged]   → robot b: IoU 0.328 → 0.468  ✓
+    ↑ new global best IoU 0.468  [phase Ph1 robot b]
+[staged]   Ph1 robot c  zone 1  (uncovered: 14% of target)
+    voronoi warm-start: IoU 0.454 ≤ 0.468, kept current
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 203.0px of uncovered area  (4 samples)
+[staged]   → robot c: IoU 0.468 → 0.512  ✓
+    ↑ new global best IoU 0.512  [phase Ph1 robot c]
+[staged] Phase 1 done — composite IoU: 0.512
+
+[staged] Phase 2 — backward pass  (8 iters × 3 robots, sigma=0.300)
+[staged]   contributions before Phase 2:
+[staged]     robot a: +0.167 IoU
+[staged]     robot b: +0.133 IoU
+[staged]     robot c: +0.044 IoU  ← low
+[staged]   Ph2 robot c  zone 1  (uncovered: 43% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 264.0px of uncovered area  (4 samples)
+[staged]   → robot c: IoU 0.512 → 0.521  ✓
+    ↑ new global best IoU 0.521  [phase Ph2 robot c]
+[staged]   Ph2 robot b  zone 2  (uncovered: 54% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 103.0px of uncovered area  (4 samples)
+[staged]   → robot b: IoU 0.521 → 0.527  ✓
+    ↑ new global best IoU 0.527  [phase Ph2 robot b]
+[staged]   Ph2 robot a  zone 0  (uncovered: 56% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 201.0px of uncovered area  (4 samples)
+[staged]   → robot a: candidate 0.485 < current 0.527  ✗ rejected
+[staged] Phase 2 done — composite IoU: 0.527
+
+[staged] Best snapshot: Phase 2  IoU=0.527
+[staged] Final refinement — all joints  (10 iters, popsize=32, sigma=0.160)
+    [parallel] 10 worker threads, one renderer clone each
+    ↑ new global best IoU 0.557  [final refinement]
+[staged] Final done — IoU: 0.557  ✓
+[staged] FD refinement — 5 Adam steps  (180 renders, lr=0.01, ε=0.02)
+    ↑ new global best IoU 0.573  [FD refinement]
+[staged] FD done — IoU: 0.573  (Δ=+0.016)  ✓
+[staged] Done — final IoU: 0.573  loss: 0.4289
+[staged] Popsize: per-robot phases=32  final=32  (theory optimum for 6 DOF = 10)
+
+[staged] Hungarian pre-assignment  (3×3 cost matrix, 8 samples/entry = 72 renders)...
+[staged]   robot_a → zone 2  robot_b → zone 0  robot_c → zone 1
+
+[staged] Phase 1 — forward greedy  (8 iters × 3 robot(s), sigma=0.40×1.00, popsize=32)
+[staged]   Ph1 robot a  zone 2  (uncovered: 26% of target)
+    voronoi warm-start: IoU 0.170 → 0.193 ✓
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 0.0px of uncovered area  (2 samples)
+[staged]   → robot a: IoU 0.170 → 0.302  ✓
+    ↑ new global best IoU 0.302  [phase Ph1 robot a]
+[staged]   Ph1 robot b  zone 0  (uncovered: 12% of target)
+    voronoi warm-start: IoU 0.302 → 0.304 ✓
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 135.0px of uncovered area  (2 samples)
+[staged]   → robot b: IoU 0.302 → 0.434  ✓
+    ↑ new global best IoU 0.434  [phase Ph1 robot b]
+[staged]   Ph1 robot c  zone 1  (uncovered: 9% of target)
+    voronoi warm-start: IoU 0.434 → 0.442 ✓
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 6.0px of uncovered area  (2 samples)
+[staged]   → robot c: IoU 0.434 → 0.531  ✓
+    ↑ new global best IoU 0.531  [phase Ph1 robot c]
+[staged] Phase 1 done — composite IoU: 0.531
+
+[staged] Phase 2 — backward pass  (8 iters × 3 robots, sigma=0.300)
+[staged]   contributions before Phase 2:
+[staged]     robot a: +0.132 IoU
+[staged]     robot b: +0.127 IoU
+[staged]     robot c: +0.097 IoU
+[staged]   Ph2 robot c  zone 1  (uncovered: 37% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 351.0px of uncovered area  (4 samples)
+[staged]   → robot c: candidate 0.524 < current 0.531  ✗ rejected
+[staged]   Ph2 robot b  zone 0  (uncovered: 45% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 242.0px of uncovered area  (4 samples)
+[staged]   → robot b: candidate 0.439 < current 0.531  ✗ rejected
+[staged]   Ph2 robot a  zone 2  (uncovered: 48% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 694.0px of uncovered area  (4 samples)
+[staged]   → robot a: IoU 0.531 → 0.592  ✓
+    ↑ new global best IoU 0.592  [phase Ph2 robot a]
+[staged] Phase 2 done — composite IoU: 0.592
+
+[staged] Best snapshot: Phase 2  IoU=0.592
+[staged] Final refinement — all joints  (10 iters, popsize=32, sigma=0.160)
+    [parallel] 10 worker threads, one renderer clone each
+    ↑ new global best IoU 0.603  [final refinement]
+[staged] Final done — IoU: 0.603  ✓
+[staged] FD refinement — 5 Adam steps  (180 renders, lr=0.01, ε=0.02)
+    ↑ new global best IoU 0.623  [FD refinement]
+[staged] FD done — IoU: 0.623  (Δ=+0.020)  ✓
+[staged] Done — final IoU: 0.623  loss: 0.3795
+[staged] Popsize: per-robot phases=32  final=32  (theory optimum for 6 DOF = 10)
+
+[staged] Hungarian pre-assignment  (3×3 cost matrix, 8 samples/entry = 72 renders)...
+[staged]   robot_a → zone 0  robot_b → zone 2  robot_c → zone 1
+
+[staged] Phase 1 — forward greedy  (8 iters × 3 robot(s), sigma=0.40×1.00, popsize=32)
+[staged]   Ph1 robot a  zone 0  (uncovered: 26% of target)
+    voronoi warm-start: IoU 0.170 → 0.193 ✓
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 867.0px of uncovered area  (2 samples)
+[staged]   → robot a: IoU 0.170 → 0.449  ✓
+    ↑ new global best IoU 0.449  [phase Ph1 robot a]
+[staged]   Ph1 robot b  zone 2  (uncovered: 34% of target)
+    voronoi warm-start: IoU 0.449 → 0.450 ✓
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 130.0px of uncovered area  (2 samples)
+[staged]   → robot b: IoU 0.449 → 0.522  ✓
+    ↑ new global best IoU 0.522  [phase Ph1 robot b]
+[staged]   Ph1 robot c  zone 1  (uncovered: 4% of target)
+    voronoi warm-start: IoU 0.489 ≤ 0.522, kept current
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 0.0px of uncovered area  (4 samples)
+[staged]   → robot c: IoU 0.522 → 0.600  ✓
+    ↑ new global best IoU 0.600  [phase Ph1 robot c]
+[staged] Phase 1 done — composite IoU: 0.600
+
+[staged] Phase 2 — backward pass  (8 iters × 3 robots, sigma=0.300)
+[staged]   contributions before Phase 2:
+[staged]     robot a: +0.285 IoU
+[staged]     robot b: +0.075 IoU
+[staged]     robot c: +0.079 IoU
+[staged]   Ph2 robot c  zone 1  (uncovered: 38% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 84.0px of uncovered area  (4 samples)
+[staged]   → robot c: IoU 0.600 → 0.616  ✓
+    ↑ new global best IoU 0.616  [phase Ph2 robot c]
+[staged]   Ph2 robot b  zone 2  (uncovered: 35% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 375.0px of uncovered area  (4 samples)
+[staged]   → robot b: candidate 0.593 < current 0.616  ✗ rejected
+[staged]   Ph2 robot a  zone 0  (uncovered: 64% of target)
+    [parallel] 10 worker threads, one renderer clone each
+    init sampling: best coverage score 632.0px of uncovered area  (4 samples)
+[staged]   → robot a: candidate 0.548 < current 0.616  ✗ rejected
+[staged] Phase 2 done — composite IoU: 0.616
+
+[staged] Best snapshot: Phase 2  IoU=0.616
+[staged] Final refinement — all joints  (10 iters, popsize=32, sigma=0.160)
+    [parallel] 10 worker threads, one renderer clone each
+[staged] Final done — IoU: 0.616  ✓
+[staged] FD refinement — 5 Adam steps  (180 renders, lr=0.01, ε=0.02)
+    ↑ new global best IoU 0.631  [FD refinement]
+[staged] FD done — IoU: 0.631  (Δ=+0.015)  ✓
+[staged] Done — final IoU: 0.631  loss: 0.3700
+[shard 0] 2/10 letters_upper/H_dejavusans-bold  best=0.631 mean=0.591±0.030  88s  eta 0.2h

@@ -107,6 +107,11 @@ def compact(d3, d5):
     print(f" & \\textsc{{umbra}}, IoU ${mean(d3,'full',g3):.3f}$ & & & {rend(d3,'full',g3):.1f}k \\\\")
     print(r"\midrule")
     print(f" & $N{{=}}5$: monolithic ${mean(d5,'flat',g5):.3f}$, \\textsc{{umbra}} ${mean(d5,'full',g5):.3f}$ & & & {rend(d5,'full',g5):.1f}k \\\\")
+    # aimed start at a quarter of the budget (aimed_start_probe.sh, tiny, N=3)
+    da = load(os.path.join(ROOT, "optimized", "aimed-start-probe10"), 3)
+    if "full-tiny" in da and "no_aimed-tiny" in da:
+        ga = sorted(set(da["full-tiny"]) & set(da["no_aimed-tiny"]))
+        print(f"3 & quarter budget, aimed start removed & & {fmt(delta(da,'no_aimed-tiny','full-tiny',ga))} & {rend(da,'full-tiny',ga):.1f}k \\\\")
     gl = sorted(set(d3["full_long"]) & set(d3["full_long_no_icp"]))
     print(f"5 & sequence budget, restart direction random & & {fmt(delta(d3,'full_long_no_icp','full_long',gl))} & {rend(d3,'full_long',gl):.0f}k \\\\")
     print(r"\bottomrule")
