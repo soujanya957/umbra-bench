@@ -511,6 +511,7 @@ table.gref td.note{color:var(--muted); font-size:11px}
     <div class="grp">
       <div class="lbl">View</div>
       <div class="seg" id="segPage">
+        <button data-v="about" aria-pressed="false">about</button>
         <button data-v="results" aria-pressed="true">results</button>
       </div>
     </div>
@@ -576,6 +577,65 @@ table.gref td.note{color:var(--muted); font-size:11px}
   <section class="rescue" id="teleopView" hidden></section>
   <section class="rescue" id="seqView" hidden></section>
   <section class="bench" id="guideView" hidden></section>
+  <section class="bench" id="aboutView" hidden>
+    <div>
+      <h2>About Umbra Bench</h2>
+      <p>Umbra Bench is a shadow-art benchmark for a fleet of robot arms. Each target is a
+      silhouette to cast on a wall in front of a light. The benchmark asks whether the fleet can
+      cast that shape, how well, and where it fails. This page is the dashboard over the dataset;
+      the dataset itself is the repository this page is built from.</p>
+    </div>
+
+    <div class="fig">
+      <h3>One target, three ways to cast it</h3>
+      <div class="tblwrap"><table class="gref">
+        <thead><tr><th>source</th><th>who or what casts it</th><th>what the comparison isolates</th></tr></thead>
+        <tbody>
+          <tr><td class="mn">hand</td><td>a person, with their own hands</td><td class="note">the human-expert reference</td></tr>
+          <tr><td class="mn">teleop</td><td>a person driving the robot fleet</td><td class="note">vs hand: what the robot's embodiment costs, since a human is driving in both cases</td></tr>
+          <tr><td class="mn">optimizer</td><td>the solver, on the same fleet</td><td class="note">vs teleop: what the algorithm costs, since the hardware is the same in both cases</td></tr>
+        </tbody>
+      </table></div>
+      <div class="cap">A target the optimizer misses but a teleoperating human hits is an
+      <b>algorithm</b> problem. One that both miss is a <b>reachability</b> problem.</div>
+    </div>
+
+    <div class="fig">
+      <h3>What is in it</h3>
+      <p>562 static targets: 1-bit 512×512 masks, black shape on white. Every target carries a
+      text prompt, 33 auto-computed shape attributes (area, stroke width, holes, limbs, …) and a
+      slot for each of the three shadows, <span class="mono">null</span> until captured.</p>
+      <div class="tblwrap" style="margin-top:10px"><table class="gref">
+        <thead><tr><th>subset</th><th>what it is</th><th>what it probes</th></tr></thead>
+        <tbody>
+          <tr><td class="mn">digits</td><td>0–9 in three bold fonts</td><td class="note">controlled glyphs; topology varies (0, 6, 9 have a hole, 8 has two)</td></tr>
+          <tr><td class="mn">letters_upper / letters_lower</td><td>A–Z and a–z in three bold fonts</td><td class="note">wider stroke and topology variety; lowercase adds thin strokes, ascenders, descenders</td></tr>
+          <tr><td class="mn">animals</td><td>MPEG-7 animal silhouettes</td><td class="note">organic outlines, thin limbs</td></tr>
+          <tr><td class="mn">objects</td><td>MPEG-7 man-made objects</td><td class="note">handles, holes, thin protrusions</td></tr>
+          <tr><td class="mn">abstract</td><td>MPEG-7 device shapes</td><td class="note">no semantic prior: the control group separating geometric matching from recognisability</td></tr>
+          <tr><td class="mn">hand_shadow</td><td>binarised HaSPeR exemplars</td><td class="note">what human shadowgraphists actually cast</td></tr>
+          <tr><td class="mn">teleop</td><td>masks recovered from the fleet's own teleop captures</td><td class="note">shapes the hardware is known to reach</td></tr>
+        </tbody>
+      </table></div>
+      <div class="cap">A separate <b>sequences</b> track holds animated targets as ordered frames.
+      A frame is solved from the pose of the frame before it, so a sequence scores continuity
+      between frames, not only the silhouette of each one.</div>
+    </div>
+
+    <div class="fig">
+      <h3>Where to look in the repository</h3>
+      <div class="tblwrap"><table class="gref">
+        <thead><tr><th>path</th><th>what</th></tr></thead>
+        <tbody>
+          <tr><td class="mn">metadata.jsonl</td><td>the index: one JSON line per target. Start here.</td></tr>
+          <tr><td class="mn">targets/&lt;subset&gt;/</td><td>the masks, named <span class="mono">&lt;class&gt;_&lt;variant&gt;.png</span></td></tr>
+          <tr><td class="mn">sequences/ · sequences.jsonl</td><td>the sequences track and its index</td></tr>
+          <tr><td class="mn">docs/DATASET.md · docs/METRICS.md · docs/SEQUENCES.md</td><td>the schema, every metric's definition and purpose, the sequences track</td></tr>
+          <tr><td class="mn">benchmark/build_benchmark.py</td><td>generates this page from <span class="mono">benchmark/src/benchmark.tpl.html</span>. Edit the template, never the built file.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
 
   <main class="main" id="resultsView">
     <header class="top">
@@ -653,7 +713,7 @@ const store = {
    page:"rescue" from before that view was removed would have every view hidden
    and no button pressed -- a blank page with no way back except clearing storage.
    Anything not on this list falls back to the dashboard. */
-const PAGES = ["results"];
+const PAGES = ["results", "about"];
 /* The teleop set is read here, ahead of the dashboard, because the dashboard uses it:
    a target somebody has actually cast by hand is a different kind of row, and
    the grid says so rather than making you switch views to find out. */
@@ -2848,6 +2908,7 @@ function applyPage(){
   $("#teleopView").hidden = p !== "teleop";
   $("#seqView").hidden    = p !== "sequences";
   $("#guideView").hidden  = p !== "guide";
+  $("#aboutView").hidden  = p !== "about";
   $("#resultsView").hidden  = p !== "results";
   document.querySelectorAll('[data-only="results"]').forEach(e => e.hidden = p !== "results");
   document.querySelector(".strip").hidden = p !== "results";
