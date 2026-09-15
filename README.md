@@ -33,8 +33,6 @@ One that both miss is a reachability problem.
 | `letters_lower` | 78 | a–z × 3 bold fonts | thinner strokes, ascenders/descenders |
 | `animals` | 110 | MPEG-7 animal silhouettes | organic outlines, thin limbs; 8 classes overlap `hand_shadow` for comparison |
 | `objects` | 115 | MPEG-7 man-made objects | handles, holes, thin protrusions (fork, key, cup) |
-| `vehicles` | 30 | MPEG-7 cars/trucks/... | boxy outlines + wheels, distinct attribute profile |
-| `figures` | 10 | MPEG-7 human silhouettes | human forms — closest to shadow-theatre storyboards |
 | `abstract` | 85 | MPEG-7 device0–9, heart, ... | **no semantic prior** — control group separating geometric matching from recognizability |
 | `hand_shadow` | 10 | binarized HaSPeR exemplars | what human shadowgraphists actually cast; human-expert reference |
 
@@ -42,14 +40,12 @@ One that both miss is a reachability problem.
 
 ```
 metadata.jsonl        the index — one JSON line per sample; start here
-targets/              ← the final targets to cast (546 masks)
+targets/              ← the final targets to cast (562 masks)
   digits/               0-9 × 3 bold fonts            (generated)
   letters_upper/        A-Z × 3 bold fonts            (generated)
   letters_lower/        a-z × 3 bold fonts            (generated)
   animals/              22 classes × ≤5               (curated from MPEG-7)
   objects/              23 classes × ≤5               (curated from MPEG-7)
-  vehicles/             6 classes × ≤5                (curated from MPEG-7)
-  figures/              human silhouettes             (curated from MPEG-7)
   abstract/             device0-9, heart, ... — no semantic prior (MPEG-7)
   hand_shadow/          real hand-shadow exemplars    (curated from HaSPeR)
 shadows/<sample_id>/  captured results: hand.png, teleop.png, optimizer.png
@@ -60,8 +56,8 @@ external/             raw third-party downloads (gitignored; see its README)
 All targets are 1-bit PNGs, **black shape on white background**, 512×512,
 centered with 10% margin. Every target has a record in `metadata.jsonl` with its
 prompt, auto-computed shape attributes, and slots for the three shadow captures —
-`null` until captured. Full schema and workflow: [DATASET.md](DATASET.md).
-Credits for third-party data: [CITATIONS.md](CITATIONS.md).
+`null` until captured. Full schema and workflow: [DATASET.md](docs/DATASET.md).
+Credits for third-party data: [CITATIONS.md](docs/CITATIONS.md).
 
 To find a specific target: filenames are `<class>_<variant>.png` under
 `targets/<subset>/`, and each metadata record's `target` field holds the
@@ -70,7 +66,7 @@ repo-relative path.
 ## Shape attributes
 
 Each target carries 33 auto-computed attributes in four groups. Full definitions,
-ranges and the reason each one exists: [METRICS.md](METRICS.md), Part A.
+ranges and the reason each one exists: [METRICS.md](docs/METRICS.md), Part A.
 
 | group | attributes | what it captures |
 | --- | --- | --- |
@@ -93,10 +89,10 @@ IoU alone is misleading here: across the 546-target big-budget sweep it correlat
 ρ = +0.64 with median stroke width and +0.51 with area fraction, so it largely
 measures **how fat the target is**. The top-scoring samples are `hcircle`, `jar`
 and `bell` — convex blobs, the first from the subset defined by having *no*
-semantic content — while `vehicles` peaks at 0.686 because wheels are thin. Hole
-count barely moves it (ρ = −0.15), so filling both eyes of an `8` is nearly free.
+semantic content. Hole count barely moves it (ρ = −0.15), so filling both eyes
+of an `8` is nearly free.
 
-[METRICS.md](METRICS.md) defines the full metric set and what each one answers:
+[METRICS.md](docs/METRICS.md) defines the full metric set and what each one answers:
 overlap, boundary (`boundary_iou`, `nsd`, `chamfer`, `hd95`), thin structure
 (`cldice`), topology (`betti_error`, persistence-diagram Wasserstein), limb
 placement, classical shape descriptors, recognizability (CLIP retrieval, VLM
@@ -111,5 +107,5 @@ shadow attributes, their deltas and every pairwise metric side by side.
 
 ## Status
 
-Early. Targets + metadata done (546 samples). Attribute and metric definitions
-done ([METRICS.md](METRICS.md)). Collecting shadow captures.
+Early. Targets + metadata done (562 samples). Attribute and metric definitions
+done ([METRICS.md](docs/METRICS.md)). Collecting shadow captures.

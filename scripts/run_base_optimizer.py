@@ -185,6 +185,35 @@ Subsets: {", ".join(a.subsets)}
         )
 
 
+def _parse_cfg_overrides(items):
+    """KEY=VAL strings -> dict typed against OptimizerConfig's fields."""
+    import dataclasses
+
+    from optimizer import OptimizerConfig
+
+    types = {f.name: f.type for f in dataclasses.fields(OptimizerConfig)}
+    out = {}
+    for item in items:
+        if "=" not in item:
+            raise SystemExit(f"--cfg expects KEY=VAL, got {item!r}")
+        k, v = item.split("=", 1)
+        if k not in types:
+            raise SystemExit(f"--cfg: unknown OptimizerConfig field {k!r}")
+        t = str(types[k])
+        vl = v.strip().lower()
+        if vl == "none":
+            out[k] = None
+        elif "bool" in t:
+            out[k] = vl in ("1", "true", "yes", "on")
+        elif "int" in t and "float" not in t:
+            out[k] = int(v)
+        elif "float" in t:
+            out[k] = float(v)
+        else:
+            out[k] = v
+    return out
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--repo", default=_default_repo())
@@ -221,6 +250,22 @@ def main():
         default=0,
         help="Optimizer threads per process (0 = auto, which picks 8). Running S "
         "shards at W workers oversubscribes above S*W = core count",
+    )
+    p.add_argument(
+        "--cfg",
+        action="append",
+        default=[],
+        metavar="KEY=VAL",
+        help="Override any OptimizerConfig field (repeatable), e.g. --cfg fd_iters=0 "
+        "--cfg use_icp_restarts=false. Values are coerced to the field's type; "
+        "'none' gives None. This is how the ablation variants are expressed.",
+    )
+    p.add_argument(
+        "--flat",
+        action="store_true",
+        help="Monolithic baseline: one CMA-ES population over all N*d joints, no "
+        "zones, no staging, no polish. Iterations are matched to the staged "
+        "schedule (N*(phase1+phase2)+final) so the render budget is comparable.",
     )
     p.add_argument(
         "--no-adaptive-final",
@@ -312,7 +357,7 @@ def main():
     os.chdir(ms)  # URDF meshes resolve relative to the package root
 
     from loss import compute_iou
-    from optimizer import OptimizerConfig, optimize_staged
+    from optimizer import OptimizerConfig, optimize, optimize_staged
     from renderer import ShadowRenderer, build_scene
 
     outroot = a.out or os.path.join(a.bench, "optimized", "base-optimizer")
@@ -362,6 +407,29 @@ def main():
         n_workers=a.n_workers,
         adaptive_final=a.adaptive_final,
     )
+    cfg_common.update(_parse_cfg_overrides(a.cfg))
+    if a.flat:
+        # Match RENDERS, not iterations: the staged per-arm phases run at their own
+        # population (max(32, 4+3*ceil(ln d)) in optimize_staged), the joint stage
+        # at --popsize, so the staged schedule costs about
+        #   N*(phase1+phase2)*ph_pop + final*popsize
+        # renders. Spend the same on one population at --popsize.
+        import math
+
+        ph_pop = max(32, 4 + 3 * math.ceil(math.log(6)))
+        staged_renders = (
+            n_robots * (a.phase1_iters + a.phase2_iters) * ph_pop
+            + a.final_iters * a.popsize
+        )
+        cfg_common.update(
+            max_iter=max(1, round(staged_renders / a.popsize)),
+            use_hungarian=False,
+            use_voronoi_warmstart=False,
+            use_icp_restarts=False,
+            fd_iters=0,
+        )
+    variant = "flat" if a.flat else ("staged" if not a.cfg else "staged+" + ",".join(a.cfg))
+    print(f"[shard {a.shard}] variant={variant}", flush=True)
     rig = {
         "n_robots": n_robots,
         "arm_gap_m": a.arm_gap,
@@ -461,7 +529,12 @@ def main():
 
         def do_run(k: int, extra: bool = False):
             nonlocal best_i, best_iou
-            res = optimize_staged(renderer, T, OptimizerConfig(seed=k, **cfg_common))
+            _cfg = OptimizerConfig(seed=k, **cfg_common)
+            res = (
+                optimize(renderer, T, _cfg)
+                if a.flat
+                else optimize_staged(renderer, T, _cfg)
+            )
             shadow = renderer.get_shadow_mask(res.best_q)
             iou = float(compute_iou(shadow, T))
             save_mask(shadow, os.path.join(odir, f"{stem}_run{k:02d}.png"))
@@ -510,6 +583,7 @@ def main():
                     "rig": rig,
                     "fit": fit_info,
                     "optimizer": cfg_common,
+                    "variant": variant,
                     "n_runs": len(runs),
                     "n_base_runs": a.runs,
                     "n_extra_runs": n_extra,
