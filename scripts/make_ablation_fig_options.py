@@ -83,8 +83,9 @@ ax.plot([FULL, FULL], [-0.6, len(loo) - 0.45], color=INK, lw=0.8, zorder=1)
 ax.plot([FLAT, FLAT], [-0.6, len(loo) - 0.45], color=MUTED, lw=0.8, ls=(0, (3, 2)), zorder=1)
 for y, (lab, s) in zip(ys, loo):
     v = mean(s[4]); d, sem = paired(s[4], "full")
-    ax.plot([FULL, v], [y, y], color=ORANGE if d < -0.0005 else BLUE, lw=1.2, zorder=2)
-    ax.errorbar(v, y, xerr=sem, fmt="o", ms=4, color=ORANGE if d < -0.0005 else BLUE,
+    c = ORANGE if d > 0.0005 else BLUE  # orange = the component hurts, as in A
+    ax.plot([FULL, v], [y, y], color=c, lw=1.2, zorder=2)
+    ax.errorbar(v, y, xerr=sem, fmt="o", ms=4, color=c,
                 mec="white", mew=0.6, elinewidth=0.6, capsize=1.5, ecolor=INK, zorder=3)
 ax.text(FULL, len(loo) - 0.4, "UMBRA", ha="center", va="bottom", fontsize=6.5, color=INK)
 ax.text(FLAT, len(loo) - 0.4, "monolithic", ha="center", va="bottom", fontsize=6.5, color=MUTED)
@@ -109,7 +110,8 @@ for ax, title, col in ((a1, "added, cumulative", 2), (a2, "removed from UMBRA", 
         if v is None:
             ax.text(0.0015, y, "n/a", va="center", fontsize=6, color=MUTED); continue
         d, sem = paired(v, ref)
-        c = BLUE if d >= -0.0005 else ORANGE
+        hurts = d < -0.0005 if col == 2 else d > 0.0005  # orange = the component hurts
+        c = ORANGE if hurts else BLUE
         ax.plot([0, d], [y, y], color=c, lw=1.2, zorder=2)
         ax.errorbar(d, y, xerr=sem, fmt="o", ms=4, color=c, mec="white", mew=0.6,
                     elinewidth=0.6, capsize=1.5, ecolor=INK, zorder=3)
