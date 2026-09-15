@@ -83,8 +83,13 @@ def compact(d3, d5):
     g5 = sorted(set.intersection(*(set(c) for c in d5.values() if c)))
     mean = lambda d, v, gs: st.mean(d[v][g][0] for g in gs)
     rend = lambda d, v, gs: st.mean(d[v][g][1] for g in gs) / 1000
-    delta = lambda d, v, ref, gs: st.mean(d[v][g][0] - d[ref][g][0] for g in gs)
-    fmt = lambda x: "$0$" if abs(x) < 5e-4 else f"${x:+.3f}$"
+    def delta(d, v, ref, gs):
+        x = [d[v][g][0] - d[ref][g][0] for g in gs]
+        return st.mean(x), st.stdev(x) / len(x) ** 0.5
+    def fmt(ms):  # bold when the paired mean is more than two s.e.m. from zero
+        m, sem = ms
+        if abs(m) < 5e-4: return "$0$"
+        return f"$\\mathbf{{{m:+.3f}}}$" if abs(m) > 2 * sem else f"${m:+.3f}$"
     ROWS = [  # number, label, (added variant, its predecessor), (removed variant) or None
         ("1", "arm-by-arm sweep, joint stage", ("fwd_joint", "flat"), None),
         ("2", "zone assignment", ("plus_assign", "fwd_joint"), "full_no_assign"),
@@ -106,14 +111,15 @@ def compact(d3, d5):
         print(f"{num} & {lab} & {a} & {r} & {rend(d3,v,g3):.1f}k \\\\")
     print(f" & \\textsc{{umbra}}, IoU ${mean(d3,'full',g3):.3f}$ & & & {rend(d3,'full',g3):.1f}k \\\\")
     print(r"\midrule")
-    print(f" & $N{{=}}5$: monolithic ${mean(d5,'flat',g5):.3f}$, \\textsc{{umbra}} ${mean(d5,'full',g5):.3f}$ & & & {rend(d5,'full',g5):.1f}k \\\\")
+    print(f" & $N{{=}}5$: monolithic ${mean(d5,'flat',g5):.3f}$, \\textsc{{umbra}} ${mean(d5,'full',g5):.3f}$ & {fmt(delta(d5,'full','flat',g5))} & & {rend(d5,'full',g5):.1f}k \\\\")
     # aimed start at a quarter of the budget (aimed_start_probe.sh, tiny, N=3)
     da = load(os.path.join(ROOT, "optimized", "aimed-start-probe10"), 3)
-    if "full-tiny" in da and "no_aimed-tiny" in da:
-        ga = sorted(set(da["full-tiny"]) & set(da["no_aimed-tiny"]))
-        print(f"3 & quarter budget, aimed start removed & & {fmt(delta(da,'no_aimed-tiny','full-tiny',ga))} & {rend(da,'full-tiny',ga):.1f}k \\\\")
+    for b, lab in (("tiny", "quarter"), ("small", "half")):
+        if f"full-{b}" in da and f"no_aimed-{b}" in da:
+            ga = sorted(set(da[f"full-{b}"]) & set(da[f"no_aimed-{b}"]))
+            print(f"3 & aimed start removed, {lab} budget & & {fmt(delta(da,f'no_aimed-{b}',f'full-{b}',ga))} & {rend(da,f'full-{b}',ga):.1f}k \\\\")
     gl = sorted(set(d3["full_long"]) & set(d3["full_long_no_icp"]))
-    print(f"5 & sequence budget, restart direction random & & {fmt(delta(d3,'full_long_no_icp','full_long',gl))} & {rend(d3,'full_long',gl):.0f}k \\\\")
+    print(f"5 & restart direction random, sequence budget & & {fmt(delta(d3,'full_long_no_icp','full_long',gl))} & {rend(d3,'full_long',gl):.0f}k \\\\")
     print(r"\bottomrule")
     print(r"\end{tabular}")
 
