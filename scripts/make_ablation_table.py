@@ -76,13 +76,15 @@ def row(data, n, v, ref, label):
     return f"{label} & " + " & ".join(marks) + f" & ${iou:.3f}$ & {dl} & {rend:.1f}k \\\\"
 
 def compact(d3, d5):
-    """Seven rows, two delta columns. `added`: each component on top of the rows
-    above it, starting from a monolithic CMA-ES; `removed`: that component alone
-    taken out of UMBRA. The N=5 and sequence-budget results are one footer row each."""
+    """Four rows, two delta columns, for the system WITHOUT zone assignment or
+    aimed start (nz_* variants; flat / fwd_joint / full_no_assign are the same
+    configurations under their original names). `added`: each component on top
+    of the rows above it, from a monolithic CMA-ES; `removed`: that component
+    alone taken out of UMBRA. Rows whose runs are missing print as --."""
     g3 = sorted(set.intersection(*(set(c) for c in d3.values() if c)))
-    g5 = sorted(set.intersection(*(set(c) for c in d5.values() if c)))
-    mean = lambda d, v, gs: st.mean(d[v][g][0] for g in gs)
-    rend = lambda d, v, gs: st.mean(d[v][g][1] for g in gs) / 1000
+    g5 = sorted(set.intersection(*(set(c) for c in d5.values() if c))) if d5 else []
+    def mean(d, v, gs): return st.mean(d[v][g][0] for g in gs)
+    def rend(d, v, gs): return st.mean(d[v][g][1] for g in gs) / 1000
     def delta(d, v, ref, gs):
         x = [d[v][g][0] - d[ref][g][0] for g in gs]
         return st.mean(x), st.stdev(x) / len(x) ** 0.5
@@ -90,13 +92,13 @@ def compact(d3, d5):
         m, sem = ms
         if abs(m) < 5e-4: return "$0$"
         return f"$\\mathbf{{{m:+.3f}}}$" if abs(m) > 2 * sem else f"${m:+.3f}$"
-    ROWS = [  # number, label, (added variant, its predecessor), (removed variant) or None
+    def have(d, *vs): return all(v in d and len(set(d[v]) & set(g3 if d is d3 else g5)) == 10 for v in vs)
+    UMBRA = "full_no_assign"   # == nz_full at N=3
+    ROWS = [  # number, label, (added variant, its predecessor), removed variant
         ("1", "arm-by-arm sweep, joint stage", ("fwd_joint", "flat"), None),
-        ("2", "zone assignment", ("plus_assign", "fwd_joint"), "full_no_assign"),
-        ("3", "aimed start", ("plus_voronoi", "plus_assign"), "full_no_voronoi"),
-        ("4", "backward sweep", ("plus_backward", "plus_voronoi"), "full_no_backward"),
-        ("5", "ICP-guided restart", ("plus_icp", "plus_backward"), "full_no_icp"),
-        ("6", "FD polish", ("full", "plus_icp"), "full_no_fd"),
+        ("2", "backward sweep", ("nz_plus_backward", "fwd_joint"), "nz_full_no_backward"),
+        ("3", "ICP-guided restart", ("nz_plus_icp", "nz_plus_backward"), "nz_full_no_icp"),
+        ("4", "FD polish", (UMBRA, "nz_plus_icp"), "nz_full_no_fd"),
     ]
     print(r"\begin{tabular}{@{}rlrrr@{}}")
     print(r"\toprule")
@@ -106,23 +108,21 @@ def compact(d3, d5):
     print(r"\midrule")
     print(f" & monolithic CMA-ES, IoU ${mean(d3,'flat',g3):.3f}$ & & & {rend(d3,'flat',g3):.1f}k \\\\")
     for num, lab, (v, ref), rm in ROWS:
-        a = fmt(delta(d3, v, ref, g3))
-        r = fmt(delta(d3, rm, "full", g3)) if rm else ""
-        print(f"{num} & {lab} & {a} & {r} & {rend(d3,v,g3):.1f}k \\\\")
-    print(f" & \\textsc{{umbra}}, IoU ${mean(d3,'full',g3):.3f}$ & & & {rend(d3,'full',g3):.1f}k \\\\")
+        a = fmt(delta(d3, v, ref, g3)) if have(d3, v, ref) else "--"
+        r = (fmt(delta(d3, rm, UMBRA, g3)) if have(d3, rm, UMBRA) else "--") if rm else ""
+        rd = f"{rend(d3,v,g3):.1f}k" if have(d3, v) else "--"
+        print(f"{num} & {lab} & {a} & {r} & {rd} \\\\")
+    print(f" & \\textsc{{umbra}}, IoU ${mean(d3,UMBRA,g3):.3f}$ & & & {rend(d3,UMBRA,g3):.1f}k \\\\")
     print(r"\midrule")
-    print(f" & $N{{=}}5$: monolithic ${mean(d5,'flat',g5):.3f}$, \\textsc{{umbra}} ${mean(d5,'full',g5):.3f}$ & {fmt(delta(d5,'full','flat',g5))} & & {rend(d5,'full',g5):.1f}k \\\\")
-    # aimed start at a quarter of the budget (aimed_start_probe.sh, tiny, N=3)
-    da = load(os.path.join(ROOT, "optimized", "aimed-start-probe10"), 3)
-    # no zones means nothing to aim at, so no_zones-tiny removes 2 and 3 together
-    for v, num, lab in (("no_zones-tiny", "2, 3", "zone assignment and aimed start removed"),
-                        ("no_aimed-tiny", "3", "aimed start removed")):
-        if "full-tiny" in da and v in da:
-            ga = sorted(set(da["full-tiny"]) & set(da[v]))
-            if len(ga) == 10:
-                print(f"{num} & {lab}, quarter budget & & {fmt(delta(da,v,'full-tiny',ga))} & {rend(da,'full-tiny',ga):.1f}k \\\\")
-    gl = sorted(set(d3["full_long"]) & set(d3["full_long_no_icp"]))
-    print(f"5 & restart direction random, sequence budget & & {fmt(delta(d3,'full_long_no_icp','full_long',gl))} & {rend(d3,'full_long',gl):.0f}k \\\\")
+    if have(d5, "flat", "nz_full"):
+        print(f" & $N{{=}}5$: monolithic ${mean(d5,'flat',g5):.3f}$, \\textsc{{umbra}} ${mean(d5,'nz_full',g5):.3f}$ & {fmt(delta(d5,'nz_full','flat',g5))} & & {rend(d5,'nz_full',g5):.1f}k \\\\")
+    else:
+        print(f" & $N{{=}}5$: monolithic ${mean(d5,'flat',g5):.3f}$, \\textsc{{umbra}} -- & -- & & -- \\\\")
+    if have(d3, "nz_full_long", "nz_full_long_no_icp"):
+        gl = sorted(set(d3["nz_full_long"]) & set(d3["nz_full_long_no_icp"]))
+        print(f"3 & restart direction random, sequence budget & & {fmt(delta(d3,'nz_full_long_no_icp','nz_full_long',gl))} & {rend(d3,'nz_full_long',gl):.0f}k \\\\")
+    else:
+        print(r"3 & restart direction random, sequence budget & & -- & -- \\")
     print(r"\bottomrule")
     print(r"\end{tabular}")
 
