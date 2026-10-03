@@ -666,7 +666,7 @@ table.gref td.note{color:var(--muted); font-size:11px}
     <button class="act" id="copyIds">copy ids</button>
     <button class="act" id="copyJson">copy json</button>
     <button class="act" id="copyDeploy"
-      title="Copy the command that writes these shadows into the robot UI's Play library (fleet-shadow-art/choreographies/). Run it from the umbra-bench repo root; refresh Play to deploy them.">copy export cmd</button>
+      title="Copy the command that writes these shadows into the robot UI's Play library (robot-ui/choreographies/). Run it from the umbra-bench repo root; refresh Play to deploy them.">copy export cmd</button>
     <button class="act" id="clearPicks">clear</button>
   </div>
   <div class="reel" id="reel"><div class="empty">No frames yet — star the shots you want, in order.</div></div>
@@ -1458,7 +1458,7 @@ $("#copyJson").addEventListener("click", (e) => copy(JSON.stringify({
 /* Starred shadows -> the robot. The dashboard is one self-contained file with no
    backend, and it stays that way: rather than calling an exporter it cannot
    reach, it hands you the exact command. export_library_clip.py writes into
-   fleet-shadow-art/choreographies/, which IS the robot UI's Play library
+   robot-ui/choreographies/, which IS the robot UI's Play library
    (render_server serves it at GET /choreographies), so a starred target is
    deployable from the UI on the next refresh -- no package build.
 
@@ -2474,7 +2474,7 @@ function seqCard(q){
       <div class="libline"><button class="libbtn" hidden data-sid="${q.id}"
         title="Write this clip onto the UI's Targets shelf (Shadow_robot_ui/library/models.json) as a frame sequence">&rarr; shape library</button><button
         class="libcopy" data-sid="${q.id}"
-        title="Copy the command that writes this whole clip into the robot UI's Play library (fleet-shadow-art/choreographies/). Run it from the umbra-bench repo root; refresh Play to deploy.">copy export cmd</button><button
+        title="Copy the command that writes this whole clip into the robot UI's Play library (robot-ui/choreographies/). Run it from the umbra-bench repo root; refresh Play to deploy.">copy export cmd</button><button
         class="libcopy seqhide" data-sid="${q.id}"
         title="Hide this clip from the sequences view. Nothing on disk is touched — the count above stays visible and 'show all' brings it back.">hide</button><label
         class="seqpick" title="Select for a batch hide"><input type="checkbox" data-sid="${q.id}"${
@@ -2620,7 +2620,7 @@ function renderSequences(){
     the sequence actually loops. The guide view explains each number.</p>
     <p class="libhint intro" hidden><b>copy export cmd</b> on any card copies the command that writes
     that whole clip into the robot UI&rsquo;s Play library
-    (<span class="mono">fleet-shadow-art/choreographies/</span>); run it from the repo root and
+    (<span class="mono">robot-ui/choreographies/</span>); run it from the repo root and
     refresh Play. Pushing a clip onto the UI&rsquo;s Targets shelf <em>in one click</em> additionally
     needs this page served by the studio rather than opened from disk &mdash; run
     <span class="mono">python scripts/teleop_studio.py</span> and open
@@ -2697,7 +2697,7 @@ function renderSequences(){
 /* ── guide view ──────────────────────────────────────────────────────────────
    The metric reference. Ranges and directions here are checked against
    scripts/metrics.py, scripts/sequence_metrics.py, semantic_metrics.py and
-   fleet-shadow-art's target_fit.py / motion_planner.py — if this table and the
+   robot-ui's target_fit.py / motion_planner.py — if this table and the
    code ever disagree, the code is right and this table has rotted. */
 function gtable(rows){
   return `<div class="tblwrap"><table class="gref">
@@ -2896,7 +2896,7 @@ function renderGuide(){
     solver,
     mkfig("Sequence metrics — S1 frames, S2 transitions, S3 the clip",
       "From scripts/sequence_metrics.py: one row per frame plus one aggregate row per (sequence, source), " +
-      "in results/sequence_metrics_&lt;tag&gt;.csv. S2's threshold is imported from fleet-shadow-art at " +
+      "in results/sequence_metrics_&lt;tag&gt;.csv. S2's threshold is imported from robot-ui at " +
       "run time so it can never drift from what the planner enforces.", seq));
 }
 
