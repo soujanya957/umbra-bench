@@ -1,0 +1,21 @@
+\begin{tabular}{@{}rlrrr@{}}
+\toprule
+ & & \multicolumn{2}{c}{$\Delta$ IoU when} & \\
+\cmidrule(lr){3-4}
+ & component & added & removed & renders \\
+\midrule
+ & monolithic CMA-ES, IoU $0.726$ & & & 4.5k \\
+1 & arm-by-arm sweep, joint stage & $+0.011$ &  & 3.0k \\
+2 & zone assignment & $-0.002$ & $\mathbf{+0.009}$ & 3.0k \\
+3 & aimed start & $-0.007$ & $+0.002$ & 3.0k \\
+4 & backward sweep & $\mathbf{+0.014}$ & $\mathbf{-0.015}$ & 4.5k \\
+5 & ICP-guided restart & $0$ & $0$ & 4.5k \\
+6 & FD polish & $\mathbf{+0.004}$ & $\mathbf{-0.004}$ & 4.7k \\
+ & \textsc{umbra}, IoU $0.747$ & & & 4.7k \\
+\midrule
+ & $N{=}5$: monolithic $0.766$, \textsc{umbra} $0.785$ & $\mathbf{+0.019}$ & & 6.9k \\
+2, 3 & zone assignment and aimed start removed, quarter budget & & $+0.001$ & 1.1k \\
+3 & aimed start removed, quarter budget & & $-0.008$ & 1.1k \\
+5 & restart direction random, sequence budget & & $-0.001$ & 15k \\
+\bottomrule
+\end{tabular}

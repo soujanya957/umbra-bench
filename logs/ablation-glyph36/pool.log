@@ -1,0 +1,169 @@
+
+# 2026-09-15 13:12:51 C:\Users\hexia\miniconda3\envs\fleet-shadow\python.exe scripts\ablation_pool.py --reference optimized/ablation-probe10 --glyphs dvsb36 --out-sub ablation-glyph36 --no-seed-from-reference --procs 18 --speed 1.05 --status-every 300
+[pool] reference  optimized/ablation-probe10: 19 variant dirs, 19 scheduled, 0 skipped
+[pool] glyphs     dvsb36: 36 (letters_upper 26, digits 10), stratified order: A 0 B C D 1 E F G 2 H I 3 J K L 4 M N 5 O P Q 6 R S T 7 U V 8 W X Y 9 Z
+[pool] output     optimized/ablation-glyph36   targets targets_ablation-glyph36   logs logs/ablation-glyph36
+[pool] solver     C:\Users\hexia\miniconda3\envs\fleet-shadow\python.exe
+[pool]            fleet-shadow-art C:\Users\hexia\Documents\GitHub\fleet-shadow-art-main @ b86634c (vs 7bdef82: 1 file(s) differ, 0 .py, optimizer.py/renderer.py/loss.py identical)
+[pool] children   18 processes, --n-workers 1, MUJOCO_GL unset (win32), OMP/MKL/OPENBLAS_NUM_THREADS=1
+
+variants (reference glyphs, mean reference seconds per glyph, reference machine@sha, flags):
+  [N=3 main block]
+    flat-n3                   10 ref    83s  dutchman@7bdef82   --n-robots 3 --arm-gap 0.2 --size 128 --popsize 48 --phase1-iters 16 --phase2-iters 16 --final-iters 30 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --flat --runs 5
+    fwd_joint-n3              10 ref    69s  dutchman@7bdef82   --n-robots 3 --arm-gap 0.2 --size 128 --popsize 48 --phase1-iters 16 --phase2-iters 16 --final-iters 30 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --cfg use_hungarian=false --cfg use_voronoi_warmstart=false --cfg phase2_iters=0 --cfg use_icp_restarts=false --cfg fd_iters=0 --runs 5
+    plus_assign-n3            10 ref    69s  dutchman@7bdef82   --n-robots 3 --arm-gap 0.2 --size 128 --popsize 48 --phase1-iters 16 --phase2-iters 16 --final-iters 30 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --cfg use_voronoi_warmstart=false --cfg phase2_iters=0 --cfg use_icp_restarts=false --cfg fd_iters=0 --runs 5
+    plus_voronoi-n3           10 ref    69s  dutchman@7bdef82   --n-robots 3 --arm-gap 0.2 --size 128 --popsize 48 --phase1-iters 16 --phase2-iters 16 --final-iters 30 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --cfg phase2_iters=0 --cfg use_icp_restarts=false --cfg fd_iters=0 --runs 5
+    plus_backward-n3          10 ref   112s  dutchman@7bdef82   --n-robots 3 --arm-gap 0.2 --size 128 --popsize 48 --phase1-iters 16 --phase2-iters 16 --final-iters 30 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --cfg use_icp_restarts=false --cfg fd_iters=0 --runs 5
+    plus_icp-n3               10 ref   111s  dutchman@7bdef82   --n-robots 3 --arm-gap 0.2 --size 128 --popsize 48 --phase1-iters 16 --phase2-iters 16 --final-iters 30 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --cfg fd_iters=0 --runs 5
+    full-n3                   10 ref   122s  dutchman@7bdef82   --n-robots 3 --arm-gap 0.2 --size 128 --popsize 48 --phase1-iters 16 --phase2-iters 16 --final-iters 30 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --runs 5
+    full_no_assign-n3         10 ref   122s  dutchman@7bdef82   --n-robots 3 --arm-gap 0.2 --size 128 --popsize 48 --phase1-iters 16 --phase2-iters 16 --final-iters 30 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --cfg use_hungarian=false --runs 5
+    full_no_voronoi-n3        10 ref   122s  dutchman@7bdef82   --n-robots 3 --arm-gap 0.2 --size 128 --popsize 48 --phase1-iters 16 --phase2-iters 16 --final-iters 30 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --cfg use_voronoi_warmstart=false --runs 5
+    full_no_backward-n3       10 ref    79s  dutchman@7bdef82   --n-robots 3 --arm-gap 0.2 --size 128 --popsize 48 --phase1-iters 16 --phase2-iters 16 --final-iters 30 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --cfg phase2_iters=0 --runs 5
+    full_no_icp-n3            10 ref   122s  dutchman@7bdef82   --n-robots 3 --arm-gap 0.2 --size 128 --popsize 48 --phase1-iters 16 --phase2-iters 16 --final-iters 30 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --cfg use_icp_restarts=false --runs 5
+    full_no_fd-n3             10 ref   112s  dutchman@7bdef82   --n-robots 3 --arm-gap 0.2 --size 128 --popsize 48 --phase1-iters 16 --phase2-iters 16 --final-iters 30 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --cfg fd_iters=0 --runs 5
+  [table footer]
+    flat-n5                   10 ref   172s  dutchman@7bdef82   --n-robots 5 --arm-gap 0.2 --size 128 --popsize 48 --phase1-iters 16 --phase2-iters 16 --final-iters 30 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --flat --runs 5
+    full-n5                   10 ref   285s  dutchman@7bdef82   --n-robots 5 --arm-gap 0.2 --size 128 --popsize 48 --phase1-iters 16 --phase2-iters 16 --final-iters 30 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --runs 5
+    full_long-n3              10 ref   162s  dutchman@7bdef82   --n-robots 3 --arm-gap 0.2 --size 128 --popsize 128 --phase1-iters 64 --phase2-iters 48 --final-iters 32 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --runs 3
+    full_long_no_icp-n3       10 ref   162s  dutchman@7bdef82   --n-robots 3 --arm-gap 0.2 --size 128 --popsize 128 --phase1-iters 64 --phase2-iters 48 --final-iters 32 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --cfg use_icp_restarts=false --runs 3
+  [N=5 extras]
+    full_no_icp-n5            10 ref   193s  dutchman@7bdef82   --n-robots 5 --arm-gap 0.2 --size 128 --popsize 48 --phase1-iters 16 --phase2-iters 16 --final-iters 30 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --cfg use_icp_restarts=false --runs 5
+    full_no_fd-n5             10 ref   179s  dutchman@7bdef82   --n-robots 5 --arm-gap 0.2 --size 128 --popsize 48 --phase1-iters 16 --phase2-iters 16 --final-iters 30 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --cfg fd_iters=0 --runs 5
+    full_no_manifold-n5       10 ref   259s  dutchman@7bdef82   --n-robots 5 --arm-gap 0.2 --size 128 --popsize 48 --phase1-iters 16 --phase2-iters 16 --final-iters 30 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --cfg use_manifold_search=false --runs 5
+
+shard index = position in run_base_optimizer's job list over targets_ablation-glyph36 (--subsets letters_upper digits; sorted .png), --num-shards 36
+  self-check deferred until the target tree is built
+  letters_upper/A_dejavusans-bold            --shard   0 --num-shards 36
+  digits/0_dejavusans-bold                   --shard  26 --num-shards 36
+  letters_upper/B_dejavusans-bold            --shard   1 --num-shards 36
+  letters_upper/C_dejavusans-bold            --shard   2 --num-shards 36
+  digits/9_dejavusans-bold                   --shard  35 --num-shards 36
+  letters_upper/Z_dejavusans-bold            --shard  25 --num-shards 36
+
+tier                     variants  cells on disk seeded to solve   ref-h  pool-h  done by
+N=3 main block                 12    432     432      0        0    0.00    0.00    0.00h
+table footer                    4    144      72      0       72    3.24    0.19    0.19h
+N=5 extras                      3    108     108      0        0    0.00    0.00    0.19h
+total                          19    684     612      0       72    3.24    0.19    0.19h
+  ref-h = reference seconds of the cells to solve; pool-h = ref-h x --speed 1.05 / --procs 18; done by = the pool simulated in job order (tiers in sequence, glyph-major inside each)
+first job: full_long-n3 letters_upper/A_dejavusans-bold -> logs/ablation-glyph36/full_long-n3/letters_upper_A_dejavusans-bold.log
+  C:\Users\hexia\miniconda3\envs\fleet-shadow\python.exe C:\Users\hexia\Documents\GitHub\umbra-bench\scripts\run_base_optimizer.py --repo C:\Users\hexia\Documents\GitHub\fleet-shadow-art-main --bench C:\Users\hexia\Documents\GitHub\umbra-bench --targets-dir targets_ablation-glyph36 --subsets letters_upper digits --out C:\Users\hexia\Documents\GitHub\umbra-bench\optimized\ablation-glyph36\full_long-n3 --shard 0 --num-shards 36 --n-workers 1 --n-robots 3 --arm-gap 0.2 --size 128 --popsize 128 --phase1-iters 64 --phase2-iters 48 --final-iters 32 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --runs 3
+shard self-check passed: run_base_optimizer.py's own job-collection code selects exactly the scheduled glyph for all 36 shards
+[pool] note: optimized/ablation-glyph36/PROVENANCE.md was not written by this pool; kept verbatim at its end
+
+[pool] 2026-09-15 13:12:52 launching 72 job(s) on 18 process slot(s); Ctrl+C stops all cleanly
+
+# 2026-09-15 13:14:23 C:\Users\hexia\miniconda3\envs\fleet-shadow\python.exe scripts\ablation_pool.py --reference optimized/ablation-probe10 --glyphs dvsb36 --out-sub ablation-glyph36 --no-seed-from-reference --specs full_long-n3 full_long_no_icp-n3 --procs 18 --speed 1.05 --status-every 300
+[pool] reference  optimized/ablation-probe10: 19 variant dirs, 2 scheduled, 0 skipped
+[pool] glyphs     dvsb36: 36 (letters_upper 26, digits 10), stratified order: A 0 B C D 1 E F G 2 H I 3 J K L 4 M N 5 O P Q 6 R S T 7 U V 8 W X Y 9 Z
+[pool] output     optimized/ablation-glyph36   targets targets_ablation-glyph36   logs logs/ablation-glyph36
+[pool] solver     C:\Users\hexia\miniconda3\envs\fleet-shadow\python.exe
+[pool]            fleet-shadow-art C:\Users\hexia\Documents\GitHub\fleet-shadow-art-main @ b86634c (vs 7bdef82: 1 file(s) differ, 0 .py, optimizer.py/renderer.py/loss.py identical)
+[pool] children   18 processes, --n-workers 1, MUJOCO_GL unset (win32), OMP/MKL/OPENBLAS_NUM_THREADS=1
+
+variants (reference glyphs, mean reference seconds per glyph, reference machine@sha, flags):
+  [table footer]
+    full_long-n3              10 ref   162s  dutchman@7bdef82   --n-robots 3 --arm-gap 0.2 --size 128 --popsize 128 --phase1-iters 64 --phase2-iters 48 --final-iters 32 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --runs 3
+    full_long_no_icp-n3       10 ref   162s  dutchman@7bdef82   --n-robots 3 --arm-gap 0.2 --size 128 --popsize 128 --phase1-iters 64 --phase2-iters 48 --final-iters 32 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --cfg use_icp_restarts=false --runs 3
+
+shard index = position in run_base_optimizer's job list over targets_ablation-glyph36 (--subsets letters_upper digits; sorted .png), --num-shards 36
+  self-check deferred until the target tree is built
+  letters_upper/A_dejavusans-bold            --shard   0 --num-shards 36
+  digits/0_dejavusans-bold                   --shard  26 --num-shards 36
+  letters_upper/B_dejavusans-bold            --shard   1 --num-shards 36
+  letters_upper/C_dejavusans-bold            --shard   2 --num-shards 36
+  digits/9_dejavusans-bold                   --shard  35 --num-shards 36
+  letters_upper/Z_dejavusans-bold            --shard  25 --num-shards 36
+
+tier                     variants  cells on disk seeded to solve   ref-h  pool-h  done by
+table footer                    2     72       0      0       72    3.24    0.19    0.19h
+total                           2     72       0      0       72    3.24    0.19    0.19h
+  ref-h = reference seconds of the cells to solve; pool-h = ref-h x --speed 1.05 / --procs 18; done by = the pool simulated in job order (tiers in sequence, glyph-major inside each)
+first job: full_long-n3 letters_upper/A_dejavusans-bold -> logs/ablation-glyph36/full_long-n3/letters_upper_A_dejavusans-bold.log
+  C:\Users\hexia\miniconda3\envs\fleet-shadow\python.exe C:\Users\hexia\Documents\GitHub\umbra-bench\scripts\run_base_optimizer.py --repo C:\Users\hexia\Documents\GitHub\fleet-shadow-art-main --bench C:\Users\hexia\Documents\GitHub\umbra-bench --targets-dir targets_ablation-glyph36 --subsets letters_upper digits --out C:\Users\hexia\Documents\GitHub\umbra-bench\optimized\ablation-glyph36\full_long-n3 --shard 0 --num-shards 36 --n-workers 1 --n-robots 3 --arm-gap 0.2 --size 128 --popsize 128 --phase1-iters 64 --phase2-iters 48 --final-iters 32 --floor-penalty 40.0 --collision-penalty 400.0 --self-collision-penalty 200.0 --no-adaptive-final --runs 3
+[pool] note: replacing stale optimized/ablation-glyph36/POOL.lock (node ivy, driver pid 14180, started 2026-09-15 13:12:51)
+shard self-check passed: run_base_optimizer.py's own job-collection code selects exactly the scheduled glyph for all 36 shards
+
+[pool] 2026-09-15 13:14:25 launching 72 job(s) on 18 process slot(s); Ctrl+C stops all cleanly
+[13:17:59] 1/72  ok 1  fail 0  run 17  elapsed 0.06h  eta 0.18h (x1.32 of reference, measured on 1)  ok   full_long-n3 letters_upper/A_dejavusans-bold best=0.708 214s
+[13:18:03] 2/72  ok 2  fail 0  run 17  elapsed 0.06h  eta 0.18h (x1.33 of reference, measured on 2)  ok   full_long_no_icp-n3 letters_upper/A_dejavusans-bold best=0.708 218s
+[13:18:07] 3/72  ok 3  fail 0  run 17  elapsed 0.06h  eta 0.18h (x1.34 of reference, measured on 3)  ok   full_long-n3 digits/0_dejavusans-bold best=0.846 221s
+[13:18:10] 4/72  ok 4  fail 0  run 17  elapsed 0.06h  eta 0.18h (x1.35 of reference, measured on 4)  ok   full_long_no_icp-n3 digits/0_dejavusans-bold best=0.855 223s
+[13:18:12] 5/72  ok 5  fail 0  run 17  elapsed 0.06h  eta 0.18h (x1.36 of reference, measured on 5)  ok   full_long-n3 letters_upper/B_dejavusans-bold best=0.781 225s
+[13:18:14] 6/72  ok 6  fail 0  run 17  elapsed 0.06h  eta 0.19h (x1.37 of reference, measured on 6)  ok   full_long_no_icp-n3 letters_upper/B_dejavusans-bold best=0.781 227s
+[13:18:17] 7/72  ok 7  fail 0  run 17  elapsed 0.06h  eta 0.19h (x1.37 of reference, measured on 7)  ok   full_long-n3 letters_upper/C_dejavusans-bold best=0.779 228s
+[13:18:18] 8/72  ok 8  fail 0  run 17  elapsed 0.06h  eta 0.19h (x1.38 of reference, measured on 8)  ok   full_long_no_icp-n3 letters_upper/C_dejavusans-bold best=0.779 229s
+[13:18:20] 9/72  ok 9  fail 0  run 17  elapsed 0.07h  eta 0.19h (x1.38 of reference, measured on 9)  ok   full_long-n3 letters_upper/D_dejavusans-bold best=0.804 231s
+[13:18:20] 10/72  ok 10  fail 0  run 17  elapsed 0.07h  eta 0.19h (x1.39 of reference, measured on 10)  ok   full_long_no_icp-n3 letters_upper/D_dejavusans-bold best=0.804 230s
+[13:18:22] 11/72  ok 11  fail 0  run 17  elapsed 0.07h  eta 0.19h (x1.39 of reference, measured on 11)  ok   full_long-n3 digits/1_dejavusans-bold best=0.859 231s
+[13:18:22] 12/72  ok 12  fail 0  run 16  elapsed 0.07h  eta 0.19h (x1.39 of reference, measured on 12)  ok   full_long_no_icp-n3 digits/1_dejavusans-bold best=0.859 231s
+[13:18:22] 13/72  ok 13  fail 0  run 15  elapsed 0.07h  eta 0.19h (x1.39 of reference, measured on 13)  ok   full_long-n3 letters_upper/F_dejavusans-bold best=0.807 229s
+[13:18:23] 14/72  ok 14  fail 0  run 15  elapsed 0.07h  eta 0.19h (x1.40 of reference, measured on 14)  ok   full_long-n3 letters_upper/E_dejavusans-bold best=0.713 231s
+[13:18:23] 15/72  ok 15  fail 0  run 14  elapsed 0.07h  eta 0.19h (x1.40 of reference, measured on 15)  ok   full_long_no_icp-n3 letters_upper/F_dejavusans-bold best=0.809 229s
+[13:18:23] 16/72  ok 16  fail 0  run 14  elapsed 0.07h  eta 0.19h (x1.40 of reference, measured on 16)  ok   full_long_no_icp-n3 letters_upper/E_dejavusans-bold best=0.713 231s
+[13:18:25] 17/72  ok 17  fail 0  run 15  elapsed 0.07h  eta 0.19h (x1.40 of reference, measured on 17)  ok   full_long-n3 letters_upper/G_dejavusans-bold best=0.719 230s
+[13:18:26] 18/72  ok 18  fail 0  run 16  elapsed 0.07h  eta 0.19h (x1.40 of reference, measured on 18)  ok   full_long_no_icp-n3 letters_upper/G_dejavusans-bold best=0.735 230s
+[13:19:25] 18/72  ok 18  fail 0  run 18  elapsed 0.08h  eta 0.17h (x1.40 of reference, measured on 18)  status
+           tiers: table footer 18/72 eta 0.17h
+[13:21:49] 19/72  ok 19  fail 0  run 17  elapsed 0.12h  eta 0.13h (x1.40 of reference, measured on 19)  ok   full_long-n3 digits/2_dejavusans-bold best=0.761 229s
+[13:21:53] 20/72  ok 20  fail 0  run 17  elapsed 0.12h  eta 0.13h (x1.40 of reference, measured on 20)  ok   full_long_no_icp-n3 digits/2_dejavusans-bold best=0.671 230s
+[13:21:56] 21/72  ok 21  fail 0  run 17  elapsed 0.13h  eta 0.13h (x1.40 of reference, measured on 21)  ok   full_long-n3 letters_upper/H_dejavusans-bold best=0.699 230s
+[13:22:00] 22/72  ok 22  fail 0  run 17  elapsed 0.13h  eta 0.13h (x1.40 of reference, measured on 22)  ok   full_long_no_icp-n3 letters_upper/H_dejavusans-bold best=0.729 230s
+[13:22:02] 23/72  ok 23  fail 0  run 17  elapsed 0.13h  eta 0.13h (x1.40 of reference, measured on 23)  ok   full_long-n3 letters_upper/I_dejavusans-bold best=0.887 230s
+[13:22:04] 24/72  ok 24  fail 0  run 17  elapsed 0.13h  eta 0.13h (x1.40 of reference, measured on 24)  ok   full_long_no_icp-n3 letters_upper/I_dejavusans-bold best=0.887 230s
+[13:22:06] 25/72  ok 25  fail 0  run 17  elapsed 0.13h  eta 0.13h (x1.40 of reference, measured on 25)  ok   full_long-n3 digits/3_dejavusans-bold best=0.659 230s
+[13:22:08] 26/72  ok 26  fail 0  run 17  elapsed 0.13h  eta 0.13h (x1.41 of reference, measured on 26)  ok   full_long_no_icp-n3 digits/3_dejavusans-bold best=0.659 230s
+[13:22:08] 27/72  ok 27  fail 0  run 16  elapsed 0.13h  eta 0.13h (x1.41 of reference, measured on 27)  ok   full_long-n3 letters_upper/J_dejavusans-bold best=0.844 227s
+[13:22:08] 28/72  ok 28  fail 0  run 15  elapsed 0.13h  eta 0.13h (x1.40 of reference, measured on 28)  ok   full_long_no_icp-n3 letters_upper/J_dejavusans-bold best=0.844 227s
+[13:22:13] 29/72  ok 29  fail 0  run 17  elapsed 0.13h  eta 0.13h (x1.41 of reference, measured on 29)  ok   full_long-n3 letters_upper/K_dejavusans-bold best=0.678 231s
+[13:22:13] 30/72  ok 30  fail 0  run 16  elapsed 0.13h  eta 0.13h (x1.41 of reference, measured on 30)  ok   full_long_no_icp-n3 letters_upper/K_dejavusans-bold best=0.678 230s
+[13:22:14] 31/72  ok 31  fail 0  run 16  elapsed 0.13h  eta 0.13h (x1.41 of reference, measured on 31)  ok   full_long-n3 letters_upper/L_dejavusans-bold best=0.833 230s
+[13:22:15] 32/72  ok 32  fail 0  run 16  elapsed 0.13h  eta 0.13h (x1.41 of reference, measured on 32)  ok   full_long_no_icp-n3 letters_upper/L_dejavusans-bold best=0.833 230s
+[13:22:17] 33/72  ok 33  fail 0  run 17  elapsed 0.13h  eta 0.13h (x1.41 of reference, measured on 33)  ok   full_long-n3 digits/4_dejavusans-bold best=0.721 232s
+[13:22:17] 34/72  ok 34  fail 0  run 16  elapsed 0.13h  eta 0.13h (x1.41 of reference, measured on 34)  ok   full_long_no_icp-n3 digits/4_dejavusans-bold best=0.721 231s
+[13:22:17] 35/72  ok 35  fail 0  run 16  elapsed 0.13h  eta 0.13h (x1.41 of reference, measured on 35)  ok   full_long-n3 letters_upper/M_dejavusans-bold best=0.633 231s
+[13:22:17] 36/72  ok 36  fail 0  run 15  elapsed 0.13h  eta 0.13h (x1.41 of reference, measured on 36)  ok   full_long_no_icp-n3 letters_upper/M_dejavusans-bold best=0.633 230s
+[13:24:26] 36/72  ok 36  fail 0  run 18  elapsed 0.17h  eta 0.09h (x1.41 of reference, measured on 36)  status
+           tiers: table footer 36/72 eta 0.09h
+[13:25:39] 37/72  ok 37  fail 0  run 17  elapsed 0.19h  eta 0.07h (x1.41 of reference, measured on 37)  ok   full_long-n3 letters_upper/N_dejavusans-bold best=0.724 230s
+[13:25:43] 38/72  ok 38  fail 0  run 17  elapsed 0.19h  eta 0.07h (x1.41 of reference, measured on 38)  ok   full_long_no_icp-n3 letters_upper/N_dejavusans-bold best=0.724 230s
+[13:25:47] 39/72  ok 39  fail 0  run 17  elapsed 0.19h  eta 0.07h (x1.41 of reference, measured on 39)  ok   full_long-n3 digits/5_dejavusans-bold best=0.714 231s
+[13:25:51] 40/72  ok 40  fail 0  run 17  elapsed 0.19h  eta 0.07h (x1.41 of reference, measured on 40)  ok   full_long_no_icp-n3 digits/5_dejavusans-bold best=0.714 231s
+[13:25:53] 41/72  ok 41  fail 0  run 17  elapsed 0.19h  eta 0.07h (x1.41 of reference, measured on 41)  ok   full_long-n3 letters_upper/O_dejavusans-bold best=0.845 231s
+[13:25:55] 42/72  ok 42  fail 0  run 17  elapsed 0.19h  eta 0.07h (x1.41 of reference, measured on 42)  ok   full_long_no_icp-n3 letters_upper/O_dejavusans-bold best=0.845 231s
+[13:25:57] 43/72  ok 43  fail 0  run 17  elapsed 0.19h  eta 0.07h (x1.41 of reference, measured on 43)  ok   full_long-n3 letters_upper/P_dejavusans-bold best=0.743 231s
+[13:25:59] 44/72  ok 44  fail 0  run 17  elapsed 0.19h  eta 0.07h (x1.41 of reference, measured on 44)  ok   full_long_no_icp-n3 letters_upper/P_dejavusans-bold best=0.743 231s
+[13:26:00] 45/72  ok 45  fail 0  run 17  elapsed 0.19h  eta 0.07h (x1.41 of reference, measured on 45)  ok   full_long-n3 letters_upper/Q_dejavusans-bold best=0.745 231s
+[13:26:00] 46/72  ok 46  fail 0  run 16  elapsed 0.19h  eta 0.07h (x1.41 of reference, measured on 46)  ok   full_long_no_icp-n3 letters_upper/Q_dejavusans-bold best=0.745 231s
+[13:26:04] 47/72  ok 47  fail 0  run 17  elapsed 0.19h  eta 0.06h (x1.41 of reference, measured on 47)  ok   full_long-n3 digits/6_dejavusans-bold best=0.750 230s
+[13:26:04] 48/72  ok 48  fail 0  run 17  elapsed 0.19h  eta 0.06h (x1.41 of reference, measured on 48)  ok   full_long_no_icp-n3 digits/6_dejavusans-bold best=0.750 230s
+[13:26:06] 49/72  ok 49  fail 0  run 17  elapsed 0.19h  eta 0.06h (x1.41 of reference, measured on 49)  ok   full_long-n3 letters_upper/R_dejavusans-bold best=0.717 231s
+[13:26:07] 50/72  ok 50  fail 0  run 17  elapsed 0.20h  eta 0.06h (x1.41 of reference, measured on 50)  ok   full_long_no_icp-n3 letters_upper/R_dejavusans-bold best=0.717 232s
+[13:26:08] 51/72  ok 51  fail 0  run 17  elapsed 0.20h  eta 0.06h (x1.41 of reference, measured on 51)  ok   full_long-n3 letters_upper/S_dejavusans-bold best=0.687 231s
+[13:26:08] 52/72  ok 52  fail 0  run 16  elapsed 0.20h  eta 0.06h (x1.41 of reference, measured on 52)  ok   full_long_no_icp-n3 letters_upper/S_dejavusans-bold best=0.687 231s
+[13:26:09] 53/72  ok 53  fail 0  run 16  elapsed 0.20h  eta 0.06h (x1.41 of reference, measured on 53)  ok   full_long-n3 letters_upper/T_dejavusans-bold best=0.824 231s
+[13:26:09] 54/72  ok 54  fail 0  run 16  elapsed 0.20h  eta 0.06h (x1.41 of reference, measured on 54)  ok   full_long_no_icp-n3 letters_upper/T_dejavusans-bold best=0.824 231s
+[13:29:27] 54/72  ok 54  fail 0  run 18  elapsed 0.25h  eta 0.01h (x1.41 of reference, measured on 54)  status
+           tiers: table footer 54/72 eta 0.01h
+[13:29:30] 55/72  ok 55  fail 0  run 17  elapsed 0.25h  eta 0.01h (x1.41 of reference, measured on 55)  ok   full_long-n3 digits/7_dejavusans-bold best=0.821 231s
+[13:29:34] 56/72  ok 56  fail 0  run 16  elapsed 0.25h  eta 0.01h (x1.41 of reference, measured on 56)  ok   full_long_no_icp-n3 digits/7_dejavusans-bold best=0.836 230s
+[13:29:38] 57/72  ok 57  fail 0  run 15  elapsed 0.25h  eta 0.01h (x1.41 of reference, measured on 57)  ok   full_long-n3 letters_upper/U_dejavusans-bold best=0.826 230s
+[13:29:41] 58/72  ok 58  fail 0  run 14  elapsed 0.25h  eta 0.01h (x1.41 of reference, measured on 58)  ok   full_long_no_icp-n3 letters_upper/U_dejavusans-bold best=0.826 230s
+[13:29:43] 59/72  ok 59  fail 0  run 13  elapsed 0.26h  eta 0.00h (x1.41 of reference, measured on 59)  ok   full_long-n3 letters_upper/V_dejavusans-bold best=0.843 230s
+[13:29:45] 60/72  ok 60  fail 0  run 12  elapsed 0.26h  eta 0.00h (x1.41 of reference, measured on 60)  ok   full_long_no_icp-n3 letters_upper/V_dejavusans-bold best=0.843 230s
+[13:29:46] 61/72  ok 61  fail 0  run 11  elapsed 0.26h  eta 0.00h (x1.41 of reference, measured on 61)  ok   full_long-n3 digits/8_dejavusans-bold best=0.760 228s
+[13:29:47] 62/72  ok 62  fail 0  run 10  elapsed 0.26h  eta 0.00h (x1.41 of reference, measured on 62)  ok   full_long_no_icp-n3 digits/8_dejavusans-bold best=0.760 228s
+[13:29:48] 63/72  ok 63  fail 0  run 9  elapsed 0.26h  eta 0.00h (x1.41 of reference, measured on 63)  ok   full_long-n3 letters_upper/W_dejavusans-bold best=0.683 228s
+[13:29:48] 64/72  ok 64  fail 0  run 8  elapsed 0.26h  eta 0.00h (x1.41 of reference, measured on 64)  ok   full_long_no_icp-n3 letters_upper/W_dejavusans-bold best=0.683 227s
+[13:29:50] 65/72  ok 65  fail 0  run 7  elapsed 0.26h  eta 0.00h (x1.41 of reference, measured on 65)  ok   full_long-n3 letters_upper/X_dejavusans-bold best=0.687 226s
+[13:29:50] 66/72  ok 66  fail 0  run 6  elapsed 0.26h  eta 0.00h (x1.41 of reference, measured on 66)  ok   full_long_no_icp-n3 letters_upper/X_dejavusans-bold best=0.689 225s
+[13:29:50] 67/72  ok 67  fail 0  run 5  elapsed 0.26h  eta 0.00h (x1.41 of reference, measured on 67)  ok   full_long-n3 letters_upper/Y_dejavusans-bold best=0.851 224s
+[13:29:51] 68/72  ok 68  fail 0  run 4  elapsed 0.26h  eta 0.00h (x1.41 of reference, measured on 68)  ok   full_long_no_icp-n3 letters_upper/Y_dejavusans-bold best=0.845 224s
+[13:29:51] 69/72  ok 69  fail 0  run 3  elapsed 0.26h  eta 0.00h (x1.41 of reference, measured on 69)  ok   full_long-n3 digits/9_dejavusans-bold best=0.771 223s
+[13:29:51] 70/72  ok 70  fail 0  run 2  elapsed 0.26h  eta 0.00h (x1.41 of reference, measured on 70)  ok   full_long_no_icp-n3 digits/9_dejavusans-bold best=0.771 222s
+[13:29:51] 71/72  ok 71  fail 0  run 1  elapsed 0.26h  eta 0.00h (x1.41 of reference, measured on 71)  ok   full_long-n3 letters_upper/Z_dejavusans-bold best=0.692 221s
+[13:29:51] 72/72  ok 72  fail 0  run 0  elapsed 0.26h  eta 0.00h (x1.41 of reference, measured on 72)  ok   full_long_no_icp-n3 letters_upper/Z_dejavusans-bold best=0.696 221s
+[pool] tier 'table footer' finished: 72/72 ok
+
+[pool] 2026-09-15 13:29:51 ok 72, failed 0, skipped 0, interrupted 0, not launched 0; 0.26h; x1.41 of reference, measured on 72
+[pool] provenance: optimized/ablation-glyph36/PROVENANCE.md

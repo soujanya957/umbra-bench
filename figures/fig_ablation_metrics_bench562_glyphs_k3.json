@@ -1,0 +1,1000 @@
+{
+ "root": "optimized/ablation-bench562",
+ "csv": "results/ablation_metrics/ablation-bench562_k3.csv",
+ "N": 3,
+ "k": 3,
+ "k_in_csv": [
+  3
+ ],
+ "tag": "bench562_glyphs_k3",
+ "subsets": [
+  "digits",
+  "letters_lower",
+  "letters_upper"
+ ],
+ "generated": "2026-09-15 15:19:57",
+ "n_targets": 186,
+ "n_by_subset": {
+  "digits": 30,
+  "letters_lower": 78,
+  "letters_upper": 78
+ },
+ "n_seen": 186,
+ "limited_by": {},
+ "freshness": {
+  "results_json_on_disk": 2232,
+  "not_in_csv": 0,
+  "resolved_since_scoring": 0
+ },
+ "sign": "bar = s * (metric with the component - metric without it), per target; s = +1 for iou and nsd, -1 for hu_distance; positive = the component helps",
+ "series": {
+  "added": "with = the variant, without = its predecessor (blue, 'gain when added')",
+  "removed": "with = full, without = full_no_<x> (orange, 'loss when removed')"
+ },
+ "statistics": {
+  "iou": "mean over targets; sem = sample sd / sqrt(n); marked = |mean| > 2 sem",
+  "nsd": "mean over targets; sem = sample sd / sqrt(n); marked = |mean| > 2 sem",
+  "hu_distance": "median of per-target differences; percentile bootstrap 95% CI over targets, 5000 resamples, rng seeded with [seed, component index, series index] (seed 0); marked = CI excludes 0"
+ },
+ "caveats": [
+  "zone assignment removed = full_no_assign (--cfg use_hungarian=false): the zone masks stay None and the aimed start only runs with a zone mask, so this removes components 2 AND 3.",
+  "5 ICP-guided restart: IoU, NSD and Hu identical with and without it on added 179/186 (digits 30/30, letters_lower 74/78, letters_upper 75/78); removed 182/186 (digits 30/30, letters_lower 76/78, letters_upper 76/78); the restarts changed the result on the targets not counted identical."
+ ],
+ "icp_identical": {
+  "added": {
+   "digits": {
+    "targets": 30,
+    "identical": 30
+   },
+   "letters_lower": {
+    "targets": 78,
+    "identical": 74
+   },
+   "letters_upper": {
+    "targets": 78,
+    "identical": 75
+   }
+  },
+  "removed": {
+   "digits": {
+    "targets": 30,
+    "identical": 30
+   },
+   "letters_lower": {
+    "targets": 78,
+    "identical": 76
+   },
+   "letters_upper": {
+    "targets": 78,
+    "identical": 76
+   }
+  }
+ },
+ "metrics": {
+  "iou": {
+   "name": "IoU",
+   "sign": 1,
+   "statistic": "mean",
+   "rows": [
+    {
+     "component": 1,
+     "label": "arm-by-arm sweep + joint stage",
+     "added_pair": {
+      "with_": "fwd_joint",
+      "without": "flat"
+     },
+     "removed_pair": null,
+     "added": {
+      "stat": "mean",
+      "value": 0.01137521505376344,
+      "sem": 0.002708117783746156,
+      "lo": 0.008667097270017283,
+      "hi": 0.014083332837509595,
+      "marked": true,
+      "n": 186,
+      "n_helps": 117,
+      "n_hurts": 69,
+      "n_zero": 0
+     },
+     "removed": null
+    },
+    {
+     "component": 2,
+     "label": "zone assignment",
+     "added_pair": {
+      "with_": "plus_assign",
+      "without": "fwd_joint"
+     },
+     "removed_pair": {
+      "with_": "full",
+      "without": "full_no_assign"
+     },
+     "added": {
+      "stat": "mean",
+      "value": 0.0018501720430107544,
+      "sem": 0.0022998662951451638,
+      "lo": -0.0004496942521344093,
+      "hi": 0.004150038338155918,
+      "marked": false,
+      "n": 186,
+      "n_helps": 81,
+      "n_hurts": 90,
+      "n_zero": 15
+     },
+     "removed": {
+      "stat": "mean",
+      "value": 0.0024435322580645146,
+      "sem": 0.001986396180494995,
+      "lo": 0.00045713607756951973,
+      "hi": 0.0044299284385595095,
+      "marked": false,
+      "n": 186,
+      "n_helps": 94,
+      "n_hurts": 88,
+      "n_zero": 4
+     }
+    },
+    {
+     "component": 3,
+     "label": "aimed start",
+     "added_pair": {
+      "with_": "plus_voronoi",
+      "without": "plus_assign"
+     },
+     "removed_pair": {
+      "with_": "full",
+      "without": "full_no_voronoi"
+     },
+     "added": {
+      "stat": "mean",
+      "value": -0.0033051075268817186,
+      "sem": 0.002150869527633226,
+      "lo": -0.0054559770545149445,
+      "hi": -0.0011542379992484928,
+      "marked": false,
+      "n": 186,
+      "n_helps": 64,
+      "n_hurts": 79,
+      "n_zero": 43
+     },
+     "removed": {
+      "stat": "mean",
+      "value": -0.0008268064516129073,
+      "sem": 0.0015945256114879883,
+      "lo": -0.0024213320631008956,
+      "hi": 0.0007677191598750811,
+      "marked": false,
+      "n": 186,
+      "n_helps": 72,
+      "n_hurts": 68,
+      "n_zero": 46
+     }
+    },
+    {
+     "component": 4,
+     "label": "backward sweep",
+     "added_pair": {
+      "with_": "plus_backward",
+      "without": "plus_voronoi"
+     },
+     "removed_pair": {
+      "with_": "full",
+      "without": "full_no_backward"
+     },
+     "added": {
+      "stat": "mean",
+      "value": 0.015387532258064515,
+      "sem": 0.0016302766825354842,
+      "lo": 0.01375725557552903,
+      "hi": 0.0170178089406,
+      "marked": true,
+      "n": 186,
+      "n_helps": 142,
+      "n_hurts": 33,
+      "n_zero": 11
+     },
+     "removed": {
+      "stat": "mean",
+      "value": 0.014546413978494621,
+      "sem": 0.0016083268557581002,
+      "lo": 0.012938087122736521,
+      "hi": 0.016154740834252723,
+      "marked": true,
+      "n": 186,
+      "n_helps": 138,
+      "n_hurts": 36,
+      "n_zero": 12
+     }
+    },
+    {
+     "component": 5,
+     "label": "ICP-guided restart",
+     "added_pair": {
+      "with_": "plus_icp",
+      "without": "plus_backward"
+     },
+     "removed_pair": {
+      "with_": "full",
+      "without": "full_no_icp"
+     },
+     "added": {
+      "stat": "mean",
+      "value": 0.00038264516129032206,
+      "sem": 0.00031299005105575616,
+      "lo": 6.96551102345659e-05,
+      "hi": 0.0006956352123460782,
+      "marked": false,
+      "n": 186,
+      "n_helps": 5,
+      "n_hurts": 2,
+      "n_zero": 179
+     },
+     "removed": {
+      "stat": "mean",
+      "value": -0.0001233387096774193,
+      "sem": 0.0001682146540123868,
+      "lo": -0.0002915533636898061,
+      "hi": 4.48759443349675e-05,
+      "marked": false,
+      "n": 186,
+      "n_helps": 2,
+      "n_hurts": 2,
+      "n_zero": 182
+     }
+    },
+    {
+     "component": 6,
+     "label": "FD polish",
+     "added_pair": {
+      "with_": "full",
+      "without": "plus_icp"
+     },
+     "removed_pair": {
+      "with_": "full",
+      "without": "full_no_fd"
+     },
+     "added": {
+      "stat": "mean",
+      "value": 0.003689188172043009,
+      "sem": 0.0002730560150249313,
+      "lo": 0.003416132157018078,
+      "hi": 0.00396224418706794,
+      "marked": true,
+      "n": 186,
+      "n_helps": 173,
+      "n_hurts": 2,
+      "n_zero": 11
+     },
+     "removed": {
+      "stat": "mean",
+      "value": 0.0037713870967741913,
+      "sem": 0.0002621175495237839,
+      "lo": 0.0035092695472504075,
+      "hi": 0.0040335046462979755,
+      "marked": true,
+      "n": 186,
+      "n_helps": 173,
+      "n_hurts": 2,
+      "n_zero": 11
+     }
+    }
+   ]
+  },
+  "nsd": {
+   "name": "NSD",
+   "sign": 1,
+   "statistic": "mean",
+   "rows": [
+    {
+     "component": 1,
+     "label": "arm-by-arm sweep + joint stage",
+     "added_pair": {
+      "with_": "fwd_joint",
+      "without": "flat"
+     },
+     "removed_pair": null,
+     "added": {
+      "stat": "mean",
+      "value": -0.0013847365591397828,
+      "sem": 0.005192825383993332,
+      "lo": -0.006577561943133114,
+      "hi": 0.003808088824853549,
+      "marked": false,
+      "n": 186,
+      "n_helps": 89,
+      "n_hurts": 97,
+      "n_zero": 0
+     },
+     "removed": null
+    },
+    {
+     "component": 2,
+     "label": "zone assignment",
+     "added_pair": {
+      "with_": "plus_assign",
+      "without": "fwd_joint"
+     },
+     "removed_pair": {
+      "with_": "full",
+      "without": "full_no_assign"
+     },
+     "added": {
+      "stat": "mean",
+      "value": -0.002176306451612905,
+      "sem": 0.004148012819908787,
+      "lo": -0.006324319271521692,
+      "hi": 0.0019717063682958822,
+      "marked": false,
+      "n": 186,
+      "n_helps": 82,
+      "n_hurts": 89,
+      "n_zero": 15
+     },
+     "removed": {
+      "stat": "mean",
+      "value": -0.0069792204301075255,
+      "sem": 0.004255495551274999,
+      "lo": -0.011234715981382525,
+      "hi": -0.002723724878832526,
+      "marked": false,
+      "n": 186,
+      "n_helps": 83,
+      "n_hurts": 99,
+      "n_zero": 4
+     }
+    },
+    {
+     "component": 3,
+     "label": "aimed start",
+     "added_pair": {
+      "with_": "plus_voronoi",
+      "without": "plus_assign"
+     },
+     "removed_pair": {
+      "with_": "full",
+      "without": "full_no_voronoi"
+     },
+     "added": {
+      "stat": "mean",
+      "value": -0.010640274193548386,
+      "sem": 0.004149262261282564,
+      "lo": -0.01478953645483095,
+      "hi": -0.0064910119322658215,
+      "marked": true,
+      "n": 186,
+      "n_helps": 60,
+      "n_hurts": 83,
+      "n_zero": 43
+     },
+     "removed": {
+      "stat": "mean",
+      "value": -0.005499182795698924,
+      "sem": 0.003529285220003065,
+      "lo": -0.00902846801570199,
+      "hi": -0.0019698975756958594,
+      "marked": false,
+      "n": 186,
+      "n_helps": 64,
+      "n_hurts": 76,
+      "n_zero": 46
+     }
+    },
+    {
+     "component": 4,
+     "label": "backward sweep",
+     "added_pair": {
+      "with_": "plus_backward",
+      "without": "plus_voronoi"
+     },
+     "removed_pair": {
+      "with_": "full",
+      "without": "full_no_backward"
+     },
+     "added": {
+      "stat": "mean",
+      "value": 0.02619022580645161,
+      "sem": 0.004569450798053325,
+      "lo": 0.021620775008398287,
+      "hi": 0.030759676604504935,
+      "marked": true,
+      "n": 186,
+      "n_helps": 115,
+      "n_hurts": 60,
+      "n_zero": 11
+     },
+     "removed": {
+      "stat": "mean",
+      "value": 0.021220940860215053,
+      "sem": 0.0040379199767494964,
+      "lo": 0.017183020883465558,
+      "hi": 0.025258860836964547,
+      "marked": true,
+      "n": 186,
+      "n_helps": 115,
+      "n_hurts": 59,
+      "n_zero": 12
+     }
+    },
+    {
+     "component": 5,
+     "label": "ICP-guided restart",
+     "added_pair": {
+      "with_": "plus_icp",
+      "without": "plus_backward"
+     },
+     "removed_pair": {
+      "with_": "full",
+      "without": "full_no_icp"
+     },
+     "added": {
+      "stat": "mean",
+      "value": 0.0010792688172043018,
+      "sem": 0.0006597622029087992,
+      "lo": 0.00041950661429550264,
+      "hi": 0.0017390310201131011,
+      "marked": false,
+      "n": 186,
+      "n_helps": 6,
+      "n_hurts": 1,
+      "n_zero": 179
+     },
+     "removed": {
+      "stat": "mean",
+      "value": -0.0005846344086021508,
+      "sem": 0.00034926793083204057,
+      "lo": -0.0009339023394341914,
+      "hi": -0.00023536647777011024,
+      "marked": false,
+      "n": 186,
+      "n_helps": 0,
+      "n_hurts": 4,
+      "n_zero": 182
+     }
+    },
+    {
+     "component": 6,
+     "label": "FD polish",
+     "added_pair": {
+      "with_": "full",
+      "without": "plus_icp"
+     },
+     "removed_pair": {
+      "with_": "full",
+      "without": "full_no_fd"
+     },
+     "added": {
+      "stat": "mean",
+      "value": 0.006948231182795697,
+      "sem": 0.0018351923820661999,
+      "lo": 0.005113038800729497,
+      "hi": 0.008783423564861897,
+      "marked": true,
+      "n": 186,
+      "n_helps": 123,
+      "n_hurts": 52,
+      "n_zero": 11
+     },
+     "removed": {
+      "stat": "mean",
+      "value": 0.0077298440860215055,
+      "sem": 0.0017739173102683842,
+      "lo": 0.005955926775753122,
+      "hi": 0.00950376139628989,
+      "marked": true,
+      "n": 186,
+      "n_helps": 125,
+      "n_hurts": 50,
+      "n_zero": 11
+     }
+    }
+   ]
+  },
+  "hu_distance": {
+   "name": "Hu distance",
+   "sign": -1,
+   "statistic": "median",
+   "rows": [
+    {
+     "component": 1,
+     "label": "arm-by-arm sweep + joint stage",
+     "added_pair": {
+      "with_": "fwd_joint",
+      "without": "flat"
+     },
+     "removed_pair": null,
+     "added": {
+      "stat": "median",
+      "value": 0.17478700000000003,
+      "lo": 0.05254907500000018,
+      "hi": 0.25774700000000006,
+      "marked": true,
+      "level": 0.95,
+      "boot": 5000,
+      "seed": [
+       0,
+       0,
+       0
+      ],
+      "n": 186,
+      "n_helps": 114,
+      "n_hurts": 72,
+      "n_zero": 0
+     },
+     "removed": null
+    },
+    {
+     "component": 2,
+     "label": "zone assignment",
+     "added_pair": {
+      "with_": "plus_assign",
+      "without": "fwd_joint"
+     },
+     "removed_pair": {
+      "with_": "full",
+      "without": "full_no_assign"
+     },
+     "added": {
+      "stat": "median",
+      "value": 0.0,
+      "lo": -0.0021199999999998997,
+      "hi": 0.10999050000000031,
+      "marked": false,
+      "level": 0.95,
+      "boot": 5000,
+      "seed": [
+       0,
+       1,
+       0
+      ],
+      "n": 186,
+      "n_helps": 91,
+      "n_hurts": 80,
+      "n_zero": 15
+     },
+     "removed": {
+      "stat": "median",
+      "value": 0.010847999999999969,
+      "lo": -0.03373599999999999,
+      "hi": 0.09626100000000015,
+      "marked": false,
+      "level": 0.95,
+      "boot": 5000,
+      "seed": [
+       0,
+       1,
+       1
+      ],
+      "n": 186,
+      "n_helps": 97,
+      "n_hurts": 85,
+      "n_zero": 4
+     }
+    },
+    {
+     "component": 3,
+     "label": "aimed start",
+     "added_pair": {
+      "with_": "plus_voronoi",
+      "without": "plus_assign"
+     },
+     "removed_pair": {
+      "with_": "full",
+      "without": "full_no_voronoi"
+     },
+     "added": {
+      "stat": "median",
+      "value": 0.0,
+      "lo": -0.017189999999999817,
+      "hi": 0.0,
+      "marked": false,
+      "level": 0.95,
+      "boot": 5000,
+      "seed": [
+       0,
+       2,
+       0
+      ],
+      "n": 186,
+      "n_helps": 62,
+      "n_hurts": 81,
+      "n_zero": 43
+     },
+     "removed": {
+      "stat": "median",
+      "value": 0.0,
+      "lo": 0.0,
+      "hi": 0.0,
+      "marked": false,
+      "level": 0.95,
+      "boot": 5000,
+      "seed": [
+       0,
+       2,
+       1
+      ],
+      "n": 186,
+      "n_helps": 69,
+      "n_hurts": 71,
+      "n_zero": 46
+     }
+    },
+    {
+     "component": 4,
+     "label": "backward sweep",
+     "added_pair": {
+      "with_": "plus_backward",
+      "without": "plus_voronoi"
+     },
+     "removed_pair": {
+      "with_": "full",
+      "without": "full_no_backward"
+     },
+     "added": {
+      "stat": "median",
+      "value": 0.0,
+      "lo": -0.052447000000000014,
+      "hi": 0.051112999999999964,
+      "marked": false,
+      "level": 0.95,
+      "boot": 5000,
+      "seed": [
+       0,
+       3,
+       0
+      ],
+      "n": 186,
+      "n_helps": 86,
+      "n_hurts": 89,
+      "n_zero": 11
+     },
+     "removed": {
+      "stat": "median",
+      "value": 0.0,
+      "lo": -0.010597999999999885,
+      "hi": 0.08041599999999999,
+      "marked": false,
+      "level": 0.95,
+      "boot": 5000,
+      "seed": [
+       0,
+       3,
+       1
+      ],
+      "n": 186,
+      "n_helps": 90,
+      "n_hurts": 84,
+      "n_zero": 12
+     }
+    },
+    {
+     "component": 5,
+     "label": "ICP-guided restart",
+     "added_pair": {
+      "with_": "plus_icp",
+      "without": "plus_backward"
+     },
+     "removed_pair": {
+      "with_": "full",
+      "without": "full_no_icp"
+     },
+     "added": {
+      "stat": "median",
+      "value": 0.0,
+      "lo": 0.0,
+      "hi": 0.0,
+      "marked": false,
+      "level": 0.95,
+      "boot": 5000,
+      "seed": [
+       0,
+       4,
+       0
+      ],
+      "n": 186,
+      "n_helps": 4,
+      "n_hurts": 3,
+      "n_zero": 179
+     },
+     "removed": {
+      "stat": "median",
+      "value": 0.0,
+      "lo": 0.0,
+      "hi": 0.0,
+      "marked": false,
+      "level": 0.95,
+      "boot": 5000,
+      "seed": [
+       0,
+       4,
+       1
+      ],
+      "n": 186,
+      "n_helps": 3,
+      "n_hurts": 1,
+      "n_zero": 182
+     }
+    },
+    {
+     "component": 6,
+     "label": "FD polish",
+     "added_pair": {
+      "with_": "full",
+      "without": "plus_icp"
+     },
+     "removed_pair": {
+      "with_": "full",
+      "without": "full_no_fd"
+     },
+     "added": {
+      "stat": "median",
+      "value": 0.01924250000000001,
+      "lo": 0.0,
+      "hi": 0.033099000000000045,
+      "marked": false,
+      "level": 0.95,
+      "boot": 5000,
+      "seed": [
+       0,
+       5,
+       0
+      ],
+      "n": 186,
+      "n_helps": 105,
+      "n_hurts": 70,
+      "n_zero": 11
+     },
+     "removed": {
+      "stat": "median",
+      "value": 0.017552499999999985,
+      "lo": 0.0,
+      "hi": 0.03238800000000008,
+      "marked": false,
+      "level": 0.95,
+      "boot": 5000,
+      "seed": [
+       0,
+       5,
+       1
+      ],
+      "n": 186,
+      "n_helps": 104,
+      "n_hurts": 71,
+      "n_zero": 11
+     }
+    }
+   ]
+  }
+ },
+ "figures": [
+  "figures/fig_ablation_iou_bench562_glyphs_k3.pdf",
+  "figures/fig_ablation_iou_bench562_glyphs_k3.png",
+  "figures/fig_ablation_shape_bench562_glyphs_k3.pdf",
+  "figures/fig_ablation_shape_bench562_glyphs_k3.png"
+ ],
+ "targets": [
+  "digits/0_dejavusans-bold",
+  "digits/0_dejavusansmono-bold",
+  "digits/0_dejavuserif-bold",
+  "digits/1_dejavusans-bold",
+  "digits/1_dejavusansmono-bold",
+  "digits/1_dejavuserif-bold",
+  "digits/2_dejavusans-bold",
+  "digits/2_dejavusansmono-bold",
+  "digits/2_dejavuserif-bold",
+  "digits/3_dejavusans-bold",
+  "digits/3_dejavusansmono-bold",
+  "digits/3_dejavuserif-bold",
+  "digits/4_dejavusans-bold",
+  "digits/4_dejavusansmono-bold",
+  "digits/4_dejavuserif-bold",
+  "digits/5_dejavusans-bold",
+  "digits/5_dejavusansmono-bold",
+  "digits/5_dejavuserif-bold",
+  "digits/6_dejavusans-bold",
+  "digits/6_dejavusansmono-bold",
+  "digits/6_dejavuserif-bold",
+  "digits/7_dejavusans-bold",
+  "digits/7_dejavusansmono-bold",
+  "digits/7_dejavuserif-bold",
+  "digits/8_dejavusans-bold",
+  "digits/8_dejavusansmono-bold",
+  "digits/8_dejavuserif-bold",
+  "digits/9_dejavusans-bold",
+  "digits/9_dejavusansmono-bold",
+  "digits/9_dejavuserif-bold",
+  "letters_lower/a_dejavusans-bold",
+  "letters_lower/a_dejavusansmono-bold",
+  "letters_lower/a_dejavuserif-bold",
+  "letters_lower/b_dejavusans-bold",
+  "letters_lower/b_dejavusansmono-bold",
+  "letters_lower/b_dejavuserif-bold",
+  "letters_lower/c_dejavusans-bold",
+  "letters_lower/c_dejavusansmono-bold",
+  "letters_lower/c_dejavuserif-bold",
+  "letters_lower/d_dejavusans-bold",
+  "letters_lower/d_dejavusansmono-bold",
+  "letters_lower/d_dejavuserif-bold",
+  "letters_lower/e_dejavusans-bold",
+  "letters_lower/e_dejavusansmono-bold",
+  "letters_lower/e_dejavuserif-bold",
+  "letters_lower/f_dejavusans-bold",
+  "letters_lower/f_dejavusansmono-bold",
+  "letters_lower/f_dejavuserif-bold",
+  "letters_lower/g_dejavusans-bold",
+  "letters_lower/g_dejavusansmono-bold",
+  "letters_lower/g_dejavuserif-bold",
+  "letters_lower/h_dejavusans-bold",
+  "letters_lower/h_dejavusansmono-bold",
+  "letters_lower/h_dejavuserif-bold",
+  "letters_lower/i_dejavusans-bold",
+  "letters_lower/i_dejavusansmono-bold",
+  "letters_lower/i_dejavuserif-bold",
+  "letters_lower/j_dejavusans-bold",
+  "letters_lower/j_dejavusansmono-bold",
+  "letters_lower/j_dejavuserif-bold",
+  "letters_lower/k_dejavusans-bold",
+  "letters_lower/k_dejavusansmono-bold",
+  "letters_lower/k_dejavuserif-bold",
+  "letters_lower/l_dejavusans-bold",
+  "letters_lower/l_dejavusansmono-bold",
+  "letters_lower/l_dejavuserif-bold",
+  "letters_lower/m_dejavusans-bold",
+  "letters_lower/m_dejavusansmono-bold",
+  "letters_lower/m_dejavuserif-bold",
+  "letters_lower/n_dejavusans-bold",
+  "letters_lower/n_dejavusansmono-bold",
+  "letters_lower/n_dejavuserif-bold",
+  "letters_lower/o_dejavusans-bold",
+  "letters_lower/o_dejavusansmono-bold",
+  "letters_lower/o_dejavuserif-bold",
+  "letters_lower/p_dejavusans-bold",
+  "letters_lower/p_dejavusansmono-bold",
+  "letters_lower/p_dejavuserif-bold",
+  "letters_lower/q_dejavusans-bold",
+  "letters_lower/q_dejavusansmono-bold",
+  "letters_lower/q_dejavuserif-bold",
+  "letters_lower/r_dejavusans-bold",
+  "letters_lower/r_dejavusansmono-bold",
+  "letters_lower/r_dejavuserif-bold",
+  "letters_lower/s_dejavusans-bold",
+  "letters_lower/s_dejavusansmono-bold",
+  "letters_lower/s_dejavuserif-bold",
+  "letters_lower/t_dejavusans-bold",
+  "letters_lower/t_dejavusansmono-bold",
+  "letters_lower/t_dejavuserif-bold",
+  "letters_lower/u_dejavusans-bold",
+  "letters_lower/u_dejavusansmono-bold",
+  "letters_lower/u_dejavuserif-bold",
+  "letters_lower/v_dejavusans-bold",
+  "letters_lower/v_dejavusansmono-bold",
+  "letters_lower/v_dejavuserif-bold",
+  "letters_lower/w_dejavusans-bold",
+  "letters_lower/w_dejavusansmono-bold",
+  "letters_lower/w_dejavuserif-bold",
+  "letters_lower/x_dejavusans-bold",
+  "letters_lower/x_dejavusansmono-bold",
+  "letters_lower/x_dejavuserif-bold",
+  "letters_lower/y_dejavusans-bold",
+  "letters_lower/y_dejavusansmono-bold",
+  "letters_lower/y_dejavuserif-bold_v2",
+  "letters_lower/z_dejavusans-bold",
+  "letters_lower/z_dejavusansmono-bold",
+  "letters_lower/z_dejavuserif-bold",
+  "letters_upper/A_dejavusans-bold",
+  "letters_upper/A_dejavusansmono-bold",
+  "letters_upper/A_dejavuserif-bold",
+  "letters_upper/B_dejavusans-bold",
+  "letters_upper/B_dejavusansmono-bold",
+  "letters_upper/B_dejavuserif-bold",
+  "letters_upper/C_dejavusans-bold",
+  "letters_upper/C_dejavusansmono-bold",
+  "letters_upper/C_dejavuserif-bold",
+  "letters_upper/D_dejavusans-bold",
+  "letters_upper/D_dejavusansmono-bold",
+  "letters_upper/D_dejavuserif-bold",
+  "letters_upper/E_dejavusans-bold",
+  "letters_upper/E_dejavusansmono-bold",
+  "letters_upper/E_dejavuserif-bold",
+  "letters_upper/F_dejavusans-bold",
+  "letters_upper/F_dejavusansmono-bold",
+  "letters_upper/F_dejavuserif-bold",
+  "letters_upper/G_dejavusans-bold",
+  "letters_upper/G_dejavusansmono-bold",
+  "letters_upper/G_dejavuserif-bold",
+  "letters_upper/H_dejavusans-bold",
+  "letters_upper/H_dejavusansmono-bold",
+  "letters_upper/H_dejavuserif-bold",
+  "letters_upper/I_dejavusans-bold",
+  "letters_upper/I_dejavusansmono-bold",
+  "letters_upper/I_dejavuserif-bold",
+  "letters_upper/J_dejavusans-bold",
+  "letters_upper/J_dejavusansmono-bold",
+  "letters_upper/J_dejavuserif-bold",
+  "letters_upper/K_dejavusans-bold",
+  "letters_upper/K_dejavusansmono-bold",
+  "letters_upper/K_dejavuserif-bold",
+  "letters_upper/L_dejavusans-bold",
+  "letters_upper/L_dejavusansmono-bold",
+  "letters_upper/L_dejavuserif-bold",
+  "letters_upper/M_dejavusans-bold",
+  "letters_upper/M_dejavusansmono-bold",
+  "letters_upper/M_dejavuserif-bold_v2",
+  "letters_upper/N_dejavusans-bold",
+  "letters_upper/N_dejavusansmono-bold",
+  "letters_upper/N_dejavuserif-bold_v2",
+  "letters_upper/O_dejavusans-bold",
+  "letters_upper/O_dejavusansmono-bold",
+  "letters_upper/O_dejavuserif-bold",
+  "letters_upper/P_dejavusans-bold",
+  "letters_upper/P_dejavusansmono-bold",
+  "letters_upper/P_dejavuserif-bold",
+  "letters_upper/Q_dejavusans-bold",
+  "letters_upper/Q_dejavusansmono-bold",
+  "letters_upper/Q_dejavuserif-bold",
+  "letters_upper/R_dejavusans-bold",
+  "letters_upper/R_dejavusansmono-bold",
+  "letters_upper/R_dejavuserif-bold",
+  "letters_upper/S_dejavusans-bold",
+  "letters_upper/S_dejavusansmono-bold",
+  "letters_upper/S_dejavuserif-bold",
+  "letters_upper/T_dejavusans-bold",
+  "letters_upper/T_dejavusansmono-bold",
+  "letters_upper/T_dejavuserif-bold",
+  "letters_upper/U_dejavusans-bold",
+  "letters_upper/U_dejavusansmono-bold",
+  "letters_upper/U_dejavuserif-bold_v2",
+  "letters_upper/V_dejavusans-bold",
+  "letters_upper/V_dejavusansmono-bold",
+  "letters_upper/V_dejavuserif-bold_v2",
+  "letters_upper/W_dejavusans-bold",
+  "letters_upper/W_dejavusansmono-bold",
+  "letters_upper/W_dejavuserif-bold",
+  "letters_upper/X_dejavusans-bold",
+  "letters_upper/X_dejavusansmono-bold",
+  "letters_upper/X_dejavuserif-bold",
+  "letters_upper/Y_dejavusans-bold",
+  "letters_upper/Y_dejavusansmono-bold",
+  "letters_upper/Y_dejavuserif-bold",
+  "letters_upper/Z_dejavusans-bold",
+  "letters_upper/Z_dejavusansmono-bold",
+  "letters_upper/Z_dejavuserif-bold"
+ ],
+ "table": [
+  "# optimized/ablation-bench562  N=3, best-of-k k=3: 186 targets common to the 12 variants (digits 30, letters_lower 78, letters_upper 78)",
+  "# csv results/ablation_metrics/ablation-bench562_k3.csv; subsets digits, letters_lower, letters_upper",
+  "# bar = s * (metric with the component - metric without it), per target; s = +1 IoU, NSD; s = -1 Hu",
+  "#   so + = the component helps. added = variant vs its predecessor (blue, 'gain when added');",
+  "#   removed = full vs full_no_<x> (orange, 'loss when removed', make_ablation_fig.py's sign)",
+  "",
+  "IoU: mean paired d +- s.e.m.; * = |mean| > 2 s.e.m.",
+  "  #  component                       added (vs predecessor)       removed (full vs full_no_x)    n",
+  "  1  arm-by-arm sweep + joint stage  +0.0114 +- 0.0027 *          n/a                            186",
+  "  2  zone assignment                 +0.0019 +- 0.0023            +0.0024 +- 0.0020 ^            186",
+  "  3  aimed start                     -0.0033 +- 0.0022            -0.0008 +- 0.0016              186",
+  "  4  backward sweep                  +0.0154 +- 0.0016 *          +0.0145 +- 0.0016 *            186",
+  "  5  ICP-guided restart              +0.0004 +- 0.0003            -0.0001 +- 0.0002              186",
+  "  6  FD polish                       +0.0037 +- 0.0003 *          +0.0038 +- 0.0003 *            186",
+  "",
+  "NSD: mean paired d +- s.e.m.; * = |mean| > 2 s.e.m.",
+  "  #  component                       added (vs predecessor)       removed (full vs full_no_x)    n",
+  "  1  arm-by-arm sweep + joint stage  -0.0014 +- 0.0052            n/a                            186",
+  "  2  zone assignment                 -0.0022 +- 0.0041            -0.0070 +- 0.0043 ^            186",
+  "  3  aimed start                     -0.0106 +- 0.0041 *          -0.0055 +- 0.0035              186",
+  "  4  backward sweep                  +0.0262 +- 0.0046 *          +0.0212 +- 0.0040 *            186",
+  "  5  ICP-guided restart              +0.0011 +- 0.0007            -0.0006 +- 0.0003              186",
+  "  6  FD polish                       +0.0069 +- 0.0018 *          +0.0077 +- 0.0018 *            186",
+  "",
+  "Hu distance, sign flipped (lower Hu is better; + = Hu drops with the component): median paired d [percentile bootstrap 95% CI, 5000 resamples, seed 0]; * = CI excludes 0",
+  "  #  component                       added (vs predecessor)       removed (full vs full_no_x)    n",
+  "  1  arm-by-arm sweep + joint stage  +0.175 [+0.053, +0.258] *    n/a                            186",
+  "  2  zone assignment                 +0.000 [-0.002, +0.110]      +0.011 [-0.034, +0.096] ^      186",
+  "  3  aimed start                     +0.000 [-0.017, +0.000]      +0.000 [+0.000, +0.000]        186",
+  "  4  backward sweep                  +0.000 [-0.052, +0.051]      +0.000 [-0.011, +0.080]        186",
+  "  5  ICP-guided restart              +0.000 [+0.000, +0.000]      +0.000 [+0.000, +0.000]        186",
+  "  6  FD polish                       +0.019 [+0.000, +0.033]      +0.018 [+0.000, +0.032]        186",
+  "",
+  "Caveats",
+  "  ^ zone assignment removed = full_no_assign (--cfg use_hungarian=false): the zone masks stay None and the aimed start only runs with a zone mask, so this removes components 2 AND 3.",
+  "  5 ICP-guided restart: IoU, NSD and Hu identical with and without it on added 179/186 (digits 30/30, letters_lower 74/78, letters_upper 75/78); removed 182/186 (digits 30/30, letters_lower 76/78, letters_upper 76/78); the restarts changed the result on the targets not counted identical."
+ ]
+}

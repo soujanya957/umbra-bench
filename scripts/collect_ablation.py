@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Summarise optimized/ablation-probe10 into the paper's ablation table.
+"""Summarise an ablation root (e.g. optimized/ablation-probe10) into the paper's ablation table.
 
     python3 scripts/collect_ablation.py optimized/ablation-probe10 [--n 3] [--tex]
 
@@ -7,6 +7,10 @@ Per variant: mean over glyphs of best-of-seeds IoU vs the authored target,
 paired delta against a reference row, how many glyphs the change helped/hurt by
 more than SPREAD, and mean measured renders per solve. Build-up rows are
 referenced to the row above; leave-one-out rows to `full`.
+
+Any root and glyph count works. Rows use the glyphs common to every variant
+found at that N, so one variant still solving shrinks them all; the variants
+holding fewer glyphs are named on stderr, leaving stdout as it was.
 """
 import glob, json, os, statistics as st, sys
 
@@ -30,13 +34,22 @@ ORDER = [  # (variant, label, reference)
 
 
 def load(root, n):
-    """variant -> {glyph_id: (best_iou_vs_original, mean_renders)}"""
+    """variant -> {glyph_id: (best_iou_vs_original, mean_renders)}
+
+    run_base_optimizer.py writes results.json in place, so a table built while
+    solves are running can meet a half-written one: it is skipped (noted on
+    stderr) and that glyph counts as not solved yet."""
     out = {}
     for d in sorted(glob.glob(os.path.join(root, f"*-n{n}"))):
         v = os.path.basename(d)[: -len(f"-n{n}")]
         cells = {}
         for f in glob.glob(os.path.join(d, "*", "*", "results.json")):
-            r = json.load(open(f))
+            try:
+                with open(f, encoding="utf-8") as fh:
+                    r = json.load(fh)
+            except (OSError, ValueError) as e:
+                print(f"skipping {f}: {e}", file=sys.stderr)
+                continue
             ev = [x["n_evals"] for x in r["runs"] if x.get("n_evals")]
             cells[r["id"]] = (float(r["best_iou_vs_original"]), st.mean(ev) if ev else float("nan"))
         if cells:
@@ -52,6 +65,12 @@ def main():
     if not data:
         sys.exit(f"no results under {root} for N={n}")
     glyphs = sorted(set.intersection(*(set(c) for c in data.values())))
+    every = set.union(*(set(c) for c in data.values()))
+    for v in sorted(data):
+        if set(data[v]) != every:
+            print(f"{v}-n{n}: {len(data[v])} of {len(every)} glyphs", file=sys.stderr)
+    if not glyphs:
+        sys.exit(f"no glyph is solved by all {len(data)} variants under {root} for N={n}")
     print(f"# N={n}: {len(glyphs)} glyphs common to all {len(data)} variants\n")
     hdr = ("variant", "IoU", "delta", "helped", "hurt", "renders")
     if not tex:
