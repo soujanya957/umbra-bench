@@ -116,7 +116,10 @@ def _tc_iou(S, t: Target):
     sy = cyS[:, None, None] + (yy - cyT) * s[:, None, None]
     sx = cxS[:, None, None] + (xx - cxT) * s[:, None, None]
     grid = torch.stack([sx / W * 2 - 1, sy / H * 2 - 1], -1)
-    Sw = (F.grid_sample(S[:, None], grid, mode="nearest", align_corners=False)[:, 0] > 0.5).float()
+    if S.requires_grad:  # Adam: soft resample so the gradient reaches S
+        Sw = F.grid_sample(S[:, None], grid, mode="bilinear", align_corners=False)[:, 0]
+    else:
+        Sw = (F.grid_sample(S[:, None], grid, mode="nearest", align_corners=False)[:, 0] > 0.5).float()
     v = iou_t(Sw, t.T[None])
     return torch.where(empty, torch.zeros_like(v), v)
 
@@ -152,8 +155,7 @@ class _Clip:
         self.mean = torch.tensor([0.48145466, 0.4578275, 0.40821073], device=dev).view(1, 3, 1, 1)
         self.std = torch.tensor([0.26862954, 0.26130258, 0.27577711], device=dev).view(1, 3, 1, 1)
 
-    @torch.no_grad()
-    def prob(self, S, subset, label):
+    def prob(self, S, subset, label):  # differentiable; scoring callers use no_grad
         # what the grader sees: a dark shadow on a white wall, the whole frame
         img = (1 - S)[:, None].expand(-1, 3, -1, -1)
         img = F.interpolate(img, size=224, mode="bicubic", align_corners=False).clamp(0, 1)
@@ -233,7 +235,8 @@ def use_objective(optimizer_module, renderer, name: str | None, targets: TargetC
 
     def single(mask, T, *_a, **_k):
         S = torch.as_tensor(np.asarray(mask), dtype=torch.float32, device=dev)[None]
-        return float(fn(S, targets(T))[0])
+        with torch.no_grad():
+            return float(fn(S, targets(T))[0])
 
     optimizer_module.shadow_loss = single
     optimizer_module.compute_iou = lambda mask, T, *_a, **_k: 1.0 - single(mask, T)

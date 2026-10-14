@@ -83,9 +83,9 @@ class GlyphClassifier:
         self.net.load_state_dict(torch.load(weights, map_location=self.dev))
         self.idx = {s: torch.tensor([CLASSES.index(c) for c in cl], device=self.dev) for s, cl in SUBSET_CLASSES.items()}
 
-    @torch.no_grad()
     def prob(self, M: torch.Tensor, subset: str, label: str) -> torch.Tensor:
-        """p(label) among the subset's classes, (B,)."""
+        """p(label) among the subset's classes, (B,). Differentiable in M (for
+        Adam); callers that only score wrap it in torch.no_grad()."""
         logits = self.net(crop_center(M.to(self.dev)))[:, self.idx[subset]]
         return logits.softmax(1)[:, SUBSET_CLASSES[subset].index(label)]
 

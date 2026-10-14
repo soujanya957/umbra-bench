@@ -277,11 +277,27 @@ def adam_refine(obj: Objective, Q0: torch.Tensor, cfg: GradConfig, iters: int, s
     return best_q, best_l, n_hard, n_soft
 
 
-def solve(fr, pen: Penalties, target: np.ndarray, cfg: GradConfig, init_q: np.ndarray | None = None) -> GradResult:
+class FnObjective(Objective):
+    """Objective whose shadow term is any fastshadow.objectives function. During
+    the blurred stages the shadow is blurred before scoring, which is what lets a
+    silhouette edge feel target pixels several pixels away."""
+
+    def __init__(self, fr, pen, target, cfg, fn, tconst):
+        super().__init__(fr, pen, target, cfg)
+        self.fn, self.tconst = fn, tconst
+
+    def shadow_terms(self, S, sigma=0.0):
+        Sb = gaussian_blur(S, sigma).clamp(0, 1) if sigma > 0 else S
+        return self.fn(Sb, self.tconst)
+
+
+def solve(fr, pen: Penalties, target: np.ndarray, cfg: GradConfig, init_q: np.ndarray | None = None,
+          obj: Objective | None = None) -> GradResult:
     """Pure gradient solve: random multi-start + Adam. `init_q` (k, n_dof) adds
-    caller-chosen starts (e.g. CMA-ES solutions) ahead of the random ones."""
+    caller-chosen starts (e.g. CMA-ES solutions) ahead of the random ones. `obj`
+    replaces the default CMA-ES objective (e.g. an FnObjective)."""
     t0 = time.perf_counter()
-    obj = Objective(fr, pen, target, cfg)
+    obj = obj or Objective(fr, pen, target, cfg)
     g = torch.Generator(device="cpu").manual_seed(cfg.seed)
     lo, hi = fr._qlo.cpu(), fr._qhi.cpu()
     Qr = (lo + (hi - lo) * torch.rand(cfg.n_init, fr.n_dof, generator=g)).to(fr.device)

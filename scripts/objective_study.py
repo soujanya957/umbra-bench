@@ -126,6 +126,93 @@ def run(a):
         print(f"[{ti + 1}/{len(ids)}] {tid}  {el / 60:.1f} min", flush=True)
 
 
+def run_adam(a):
+    """The same objectives, solved by Adam on the nvdiffrast soft renderer
+    (64 starts × 300 steps, worse half re-seeded per blur stage). Final pick among
+    the top 8 starts is by the objective itself on MuJoCo masks, plus MuJoCo's
+    floor and contact penalties. Objective-major, CLIP last (it is the slow one)."""
+    fastshadow.use_fleet()
+    import torch
+    from optimizer import floor_penalty_loss
+    from renderer import ShadowRenderer, build_scene
+
+    from fastshadow.grad_opt import FnObjective, GradConfig, Objective, Penalties, solve
+    from fastshadow.objectives import OBJECTIVES, TargetCache
+    from fastshadow.renderer import FastShadowRenderer
+    from loss import shadow_loss
+
+    root = os.path.abspath(a.results)
+    ids = all_glyphs(root, target_list(a.src)) if a.all_glyphs else target_list(a.src)
+    if a.limit:
+        ids = ids[: a.limit]
+    first = json.load(open(os.path.join(root, *ids[0].split("/"), "results.json"), encoding="utf-8"))
+    rig, ocfg = first["rig"], first["optimizer"]
+    model, data, n = build_scene("urdf/SO101/so101_new_calib.urdf", n_robots=rig["n_robots"], arm_gap=rig["arm_gap_m"])
+    mj = ShadowRenderer(model, data, size=rig["render_size"], n_robots=n)
+    fr = FastShadowRenderer(mj)
+    picked = set(ids)
+    solved = []
+    for sub in os.listdir(root):
+        d = os.path.join(root, sub)
+        if os.path.isdir(d):
+            for stem in os.listdir(d):
+                f = os.path.join(d, stem, "results.json")
+                if f"{sub}/{stem}" not in picked and os.path.exists(f):
+                    solved += [r["q_rad"] for r in json.load(open(f, encoding="utf-8"))["runs"]]
+    solved = np.array(solved)
+    np.random.default_rng(0).shuffle(solved)
+    pen = Penalties(fr, solved_q=solved[:3000])
+    os.makedirs(os.path.join(OUT, "masks"), exist_ok=True)
+    path = os.path.join(OUT, "solves.jsonl")
+    done = set()
+    if os.path.exists(path):
+        done = {(r["id"], r["objective"], r["seed"]) for r in map(json.loads, open(path, encoding="utf-8"))}
+    objs = a.objectives or ALL
+    objs = [o for o in objs if o != "clip"] + (["clip"] if "clip" in objs else [])
+    json.dump({"optimizer": "adam", "objectives": objs, "targets": ids, "seeds": a.seeds,
+               "adam": {"n_restarts": 64, "iters": 300, "reseed_sigma": 0.15, "top_k": 8}, "rig": rig},
+              open(os.path.join(OUT, "meta.json"), "w"), indent=2)
+    t_all = time.time()
+    for name in objs:
+        for tid in ids:
+            sub, stem = tid.split("/")
+            T = load_target(os.path.join(root, sub, stem, f"{stem}_shown.png"), mj.size)
+            label = stem.split("_")[0]
+            tc = TargetCache(sub, label)
+            fn = None if name == "current" else OBJECTIVES[name]
+            for s in range(a.seeds):
+                if (tid, name, s) in done:
+                    continue
+                cfg = GradConfig(floor_penalty=ocfg["floor_penalty"], collision_penalty=ocfg["collision_penalty"],
+                                 self_collision_penalty=ocfg["self_collision_penalty"], reseed_sigma=0.15, seed=s)
+                obj = Objective(fr, pen, T, cfg) if fn is None else FnObjective(fr, pen, T, cfg, fn, tc(T))
+                r = solve(fr, pen, T, cfg, obj=obj)
+                t0 = time.perf_counter()
+                best = None
+                for q in r.top_q:  # re-score the finalists on MuJoCo with this objective
+                    mask, min_z, cross, self_ = mj.eval_q(q)
+                    if fn is None:
+                        sh = shadow_loss(mask, T, cfg.alpha, cfg.beta)
+                    else:
+                        with torch.no_grad():
+                            sh = float(fn(torch.tensor(mask, device="cuda")[None], tc(T))[0])
+                    tot = sh + floor_penalty_loss(min_z, cfg.floor_z, cfg.floor_penalty, cfg.floor_margin,
+                                                  cfg.floor_barrier) + cfg.collision_penalty * cross \
+                        + cfg.self_collision_penalty * self_
+                    if best is None or tot < best[0]:
+                        best = (tot, q, mask, cross, self_)
+                dt = r.seconds + time.perf_counter() - t0
+                _, q, mask, cross, self_ = best
+                mp = os.path.join("masks", f"{sub}__{stem}__{name}__s{s}.png")
+                save_mask(mask, os.path.join(OUT, mp))
+                rec = {"id": tid, "subset": sub, "label": label, "objective": name, "seed": s,
+                       "seconds": round(dt, 3), "mask": mp, "collision_free": bool(cross <= 0 and self_ <= 0),
+                       "q_rad": [round(float(v), 6) for v in q]}
+                with open(path, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(rec) + "\n")
+        print(f"[{name}] done, {(time.time() - t_all) / 60:.1f} min", flush=True)
+
+
 def grade(a):
     """Metrics for every solve, written to graded.jsonl (recomputed in full)."""
     import torch
@@ -180,7 +267,7 @@ def grade(a):
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("cmd", choices=["run", "grade"])
+    p.add_argument("cmd", choices=["run", "run_adam", "grade"])
     p.add_argument("--src", default="letters_digits")
     p.add_argument("--results", default=os.path.join(BENCH, "optimized", "big-budget-grounded"))
     p.add_argument("--seeds", type=int, default=3)
@@ -191,4 +278,4 @@ if __name__ == "__main__":
     p.add_argument("--out", default=OUT)
     a = p.parse_args()
     OUT = os.path.abspath(a.out)
-    {"run": run, "grade": grade}[a.cmd](a)
+    {"run": run, "run_adam": run_adam, "grade": grade}[a.cmd](a)
