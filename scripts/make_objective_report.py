@@ -119,7 +119,9 @@ def main():
         for o, *_ in objs:
             r = min(by[o][i], key=lambda r: r["seed"])
             S = load_target(os.path.join(OUT, r["mask"]), 128) > 0.5
-            cells.append({"uri": png_uri(overlay(T, S)), "iou": r["iou"], "cls": r["cls_top1"], "clip": r["clip_rank"]})
+            sh = np.tile(WALL, S.shape + (1,))
+            sh[S] = INK  # the arms' shadow alone; the target sits in its own column
+            cells.append({"uri": png_uri(sh), "iou": r["iou"], "cls": r["cls_top1"], "clip": r["clip_rank"]})
         tgt = np.tile(WALL, T.shape + (1,))
         tgt[T] = INK
         grid.append({"id": i, "label": stem.split("_")[0], "target": png_uri(tgt), "cells": cells})
@@ -217,7 +219,7 @@ svg .lab{fill:var(--fg);font:11px var(--f-body)}
   </section>
   <section>
     <div class="head"><span class="eyebrow">2 · same glyphs, every objective</span><h2>Shadows</h2></div>
-    <div class="legend"><span><i style="background:var(--ink)"></i>shadow on target</span><span><i style="background:var(--extra)"></i>extra shadow</span><span><i style="background:var(--miss)"></i>missed target</span><span>caption: IoU · classifier ✓/✗ · CLIP rank · seed 0</span></div>
+    <div class="legend"><span>shadow cast by the arms, nothing overlaid</span><span>caption: IoU · classifier ✓/✗ · CLIP rank · seed 0</span></div>
     <div class="scroll"><div class="grid" id="grid"></div></div>
   </section>
   <p class="foot" id="foot"></p>

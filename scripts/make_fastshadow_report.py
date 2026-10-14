@@ -179,7 +179,7 @@ def main():
         c = {"target": png_uri(plain(T))}
         for key, fn in (("cma", "cma0.png"), ("cma_fast", "cma_fast0.png"), ("adam", f"{main_m}.png")):
             Sm = load_mask(base + fn)
-            c[key] = (png_uri(overlay(T, Sm)), iou(T, Sm))
+            c[key] = (png_uri(plain(Sm)), iou(T, Sm))  # the arms' shadow alone
         return c
 
     feat = [(i, cells(i)) for i in featured]
@@ -355,7 +355,7 @@ table.cmp .grp{color:var(--muted);font-size:12px}
 
   <section>
     <div class="head"><span class="eyebrow">2 · same targets, three solvers</span><h2>Shadows cast by each solver</h2></div>
-    <div class="legend"><span><i style="background:var(--ink)"></i>shadow on target</span><span><i style="background:var(--extra)"></i>extra shadow</span><span><i style="background:var(--miss)"></i>missed target</span><span class="num">number = IoU, best in blue · seed 0 of each</span></div>
+    <div class="legend"><span>shadow cast by the arms, nothing overlaid</span><span class="num">number = IoU, best in blue · seed 0 of each</span></div>
     <div class="scroll">
       <div class="grid-head"><span></span><span>target</span><span>CMA-ES<br>MuJoCo</span><span class="f">CMA-ES<br>nvdiffrast</span><span class="g">Adam<br>{AN} starts</span></div>
       <!--FEATURED-->
