@@ -45,6 +45,24 @@ def target_list(src):
     return [r["id"] for r in rows]
 
 
+def all_glyphs(root, studied):
+    """One target per character (A-Z, a-z, 0-9). A character already in `studied`
+    keeps that target; the rest take the DejaVu Sans Bold one."""
+    have = {i.split("/")[1].split("_")[0]: i for i in studied}
+    out = []
+    for sub in ("letters_upper", "letters_lower", "digits"):
+        stems = sorted(s for s in os.listdir(os.path.join(root, sub))
+                       if os.path.exists(os.path.join(root, sub, s, f"{s}_shown.png")))
+        for ch in sorted({s.split("_")[0] for s in stems}):
+            if ch in have and have[ch].startswith(sub):
+                out.append(have[ch])
+                continue
+            pick = [s for s in stems if s.split("_")[0] == ch]
+            pref = [s for s in pick if s.endswith("_dejavusans-bold")]
+            out.append(f"{sub}/{(pref or pick)[0]}")
+    return out
+
+
 def run(a):
     ms = fastshadow.use_fleet()
     import optimizer as opt
@@ -59,6 +77,8 @@ def run(a):
 
     root = os.path.abspath(a.results)
     ids = target_list(a.src)
+    if a.all_glyphs:
+        ids = all_glyphs(root, ids)
     if a.limit:
         ids = ids[: a.limit]
     first = json.load(open(os.path.join(root, *ids[0].split("/"), "results.json"), encoding="utf-8"))
@@ -166,6 +186,8 @@ if __name__ == "__main__":
     p.add_argument("--seeds", type=int, default=3)
     p.add_argument("--objectives", nargs="*", default=None)
     p.add_argument("--limit", type=int, default=0)
+    p.add_argument("--all-glyphs", action="store_true",
+                   help="one target per character, A-Z a-z 0-9 (62), instead of the --src sample")
     p.add_argument("--out", default=OUT)
     a = p.parse_args()
     OUT = os.path.abspath(a.out)

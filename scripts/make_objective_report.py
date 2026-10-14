@@ -103,16 +103,11 @@ def main():
         row["cf"] = float(np.mean([r["collision_free"] for i in ids for r in by[o][i]]))
         table.append(row)
 
-    # same featured glyphs as the solver page: 2 evenly spaced per subset
-    featured = []
-    for sub in ORDER:
-        rs = [i for i in ids if i.split("/")[0] == sub]
-        if rs:
-            idx = np.unique(np.linspace(0, len(rs) - 1, min(2, len(rs))).round().astype(int))
-            featured += [rs[k] for k in idx]
+    # gallery: every character, seed 0 of every objective
+    seeds_per = [len(by["current"][i]) for i in ids]
     root = os.path.join(BENCH, "optimized", "big-budget-grounded")
     grid = []
-    for i in featured:
+    for i in ids:
         sub, stem = i.split("/")
         T = load_target(os.path.join(root, sub, stem, f"{stem}_shown.png"), 128) > 0.5
         cells = []
@@ -124,9 +119,12 @@ def main():
             cells.append({"uri": png_uri(sh), "iou": r["iou"], "cls": r["cls_top1"], "clip": r["clip_rank"]})
         tgt = np.tile(WALL, T.shape + (1,))
         tgt[T] = INK
-        grid.append({"id": i, "label": stem.split("_")[0], "target": png_uri(tgt), "cells": cells})
+        grid.append({"id": i, "sub": sub, "label": stem.split("_")[0], "target": png_uri(tgt), "cells": cells})
 
-    D = {"n": len(ids), "seeds": meta["seeds"], "objs": [{"o": o, "label": l, "family": f} for o, l, f, _ in objs],
+    ns = sorted(set(seeds_per))
+    seeds_txt = (f"{ns[0]} seed{'s' if ns[0] > 1 else ''} each" if len(ns) == 1 else
+                 ", ".join(f"{seeds_per.count(k)} with {k} seed{'s' if k > 1 else ''}" for k in ns[::-1]))
+    D = {"n": len(ids), "seeds": seeds_txt, "objs": [{"o": o, "label": l, "family": f} for o, l, f, _ in objs],
          "met": [{"k": k, "label": l, "hb": hb, "group": g} for k, l, hb, g in MET], "table": table, "grid": grid}
     html = TEMPLATE.replace("/*DATA*/", json.dumps(D))
     out = os.path.join(FS, "report", "objective_report.html")
@@ -183,10 +181,17 @@ table.hm td .d{display:block;font-size:11px;color:var(--muted)}
 table.hm td.own{outline:1.5px dashed var(--muted);outline-offset:-3px}
 table.hm td.grp{background:none}
 table.hm tr.base td{background:var(--panel)}
-.grid{display:grid;gap:8px;min-width:1100px}
-.grow{display:grid;grid-template-columns:56px 72px repeat(13,minmax(0,72px));gap:6px;align-items:start}
-.grow.h{font:500 10px/1.2 var(--f-mono);color:var(--muted);align-items:end}
-.grow.h span{writing-mode:horizontal-tb;text-align:center}
+.grid{display:grid;gap:6px;width:max-content}
+.grow{display:grid;grid-auto-flow:column;grid-auto-columns:72px;grid-template-columns:44px;gap:6px;align-items:start}
+.grow.h{font:500 10px/1.2 var(--f-mono);color:var(--muted);align-items:end;position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);padding-block:4px;z-index:1}
+.grow.h span{text-align:center;overflow-wrap:anywhere}
+.grow .off,.grow.h .off{display:none}
+.subhead{font:600 15px var(--f-display);padding-top:10px;border-top:1px solid var(--rule)}
+.tabs,.chips{display:flex;flex-wrap:wrap;gap:6px}
+.tabs button,.chips button{font:500 12px var(--f-mono);border:1px solid var(--rule);background:var(--panel);color:var(--fg);border-radius:999px;padding:5px 12px;cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.chips button[aria-pressed="false"]{opacity:.45;text-decoration:line-through}
+.tabs button:focus-visible,.chips button:focus-visible{outline:2px solid var(--shape);outline-offset:2px}
 .glyph b{font:600 26px/1 var(--f-display)}
 figure.m{margin:0;display:grid;gap:2px;justify-items:center}
 figure.m img{width:72px;height:72px;image-rendering:pixelated;background:var(--wall);border-radius:3px}
@@ -218,8 +223,10 @@ svg .lab{fill:var(--fg);font:11px var(--f-body)}
     <div class="card"><h3>Seconds per solve</h3><p class="note">Fast CMA-ES, same budget for every objective.</p><div id="time"></div></div>
   </section>
   <section>
-    <div class="head"><span class="eyebrow">2 · same glyphs, every objective</span><h2>Shadows</h2></div>
-    <div class="legend"><span>shadow cast by the arms, nothing overlaid</span><span>caption: IoU · classifier ✓/✗ · CLIP rank · seed 0</span></div>
+    <div class="head"><span class="eyebrow">2 · every character, every objective</span><h2>Shadows</h2></div>
+    <div class="tabs" role="tablist" id="tabs"></div>
+    <div class="chips" id="chips"></div>
+    <div class="legend"><span>shadow cast by the arms, nothing overlaid · seed 0</span><span>caption: IoU · classifier ✓/✗ · CLIP rank</span></div>
     <div class="scroll"><div class="grid" id="grid"></div></div>
   </section>
   <p class="foot" id="foot"></p>
@@ -229,7 +236,7 @@ const D = /*DATA*/;
 const f3 = v => v == null ? '–' : v.toFixed(3), sg = v => (v >= 0 ? '+' : '') + v.toFixed(3);
 const fam = {baseline: 'var(--base)', shape: 'var(--shape)', semantic: 'var(--sem)'};
 const base = D.table.find(r => r.o === 'current');
-document.getElementById('sub').textContent = `${D.objs.length} objectives, the same ${D.n} letters and digits, ${D.seeds} seeds each. Every shadow is re-rendered with MuJoCo and graded on all ${D.met.length} metrics.`;
+document.getElementById('sub').textContent = `${D.objs.length} objectives on the same ${D.n} letters and digits (${D.seeds}). Every shadow is re-rendered with MuJoCo and graded on all ${D.met.length} metrics.`;
 
 // KPIs: best objective per metric group, by mean paired Δ over its group's metrics (sign-corrected), excluding own metrics
 (function () {
@@ -298,12 +305,34 @@ function svg(w, h, body) { return `<svg viewBox="0 0 ${w} ${h}" width="100%" rol
   document.getElementById('time').innerHTML = svg(W, H, b);
 })();
 (function () {
-  let h = `<div class="grow h"><span></span><span>target</span>${D.objs.map(o => `<span style="color:${fam[o.family]}">${o.o}</span>`).join('')}</div>`;
-  D.grid.forEach(g => {
-    h += `<div class="grow"><div class="glyph"><b>${g.label}</b></div><figure class="m"><img src="${g.target}" alt=""></figure>` +
-      g.cells.map(c => `<figure class="m"><img src="${c.uri}" alt=""><figcaption>${c.iou.toFixed(2)} <span class="${c.cls ? 'ok' : 'no'}">${c.cls ? '✓' : '✗'}</span> #${c.clip}</figcaption></figure>`).join('') + '</div>';
-  });
-  document.getElementById('grid').innerHTML = h;
+  const SUBS = [['all', 'All'], ['letters_upper', 'Uppercase'], ['letters_lower', 'Lowercase'], ['digits', 'Digits']];
+  const on = Object.fromEntries(D.objs.map(o => [o.o, true]));
+  let tab = 'all';
+  const counts = s => s === 'all' ? D.grid.length : D.grid.filter(g => g.sub === s).length;
+  function draw() {
+    const head = `<div class="grow h"><span></span><span>target</span>${D.objs.map(o => `<span class="${on[o.o] ? '' : 'off'}" style="color:${fam[o.family]}">${o.o}</span>`).join('')}</div>`;
+    let h = '';
+    SUBS.slice(1).forEach(([s, name]) => {
+      if (tab !== 'all' && tab !== s) return;
+      const rows = D.grid.filter(g => g.sub === s);
+      if (!rows.length) return;
+      h += `<div class="subhead">${name}</div>` + head;
+      rows.forEach(g => {
+        h += `<div class="grow"><div class="glyph"><b>${g.label}</b></div><figure class="m"><img src="${g.target}" alt="target ${g.label}"></figure>` +
+          g.cells.map((c, k) => `<figure class="m ${on[D.objs[k].o] ? '' : 'off'}"><img src="${c.uri}" alt="${D.objs[k].o} ${g.label}" loading="lazy"><figcaption>${c.iou.toFixed(2)} <span class="${c.cls ? 'ok' : 'no'}">${c.cls ? '✓' : '✗'}</span> #${c.clip}</figcaption></figure>`).join('') + '</div>';
+      });
+    });
+    document.getElementById('grid').innerHTML = h;
+  }
+  const tabs = document.getElementById('tabs');
+  tabs.innerHTML = SUBS.map(([s, n]) => `<button role="tab" id="tab-${s}" aria-selected="${s === tab}" data-s="${s}">${n} (${counts(s)})</button>`).join('');
+  tabs.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; tab = b.dataset.s;
+    tabs.querySelectorAll('button').forEach(x => x.setAttribute('aria-selected', x === b)); draw(); });
+  const chips = document.getElementById('chips');
+  chips.innerHTML = D.objs.map(o => `<button id="chip-${o.o}" aria-pressed="true" data-o="${o.o}" style="color:${fam[o.family]}">${o.o}</button>`).join('');
+  chips.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; on[b.dataset.o] = !on[b.dataset.o];
+    b.setAttribute('aria-pressed', on[b.dataset.o]); draw(); });
+  draw();
 })();
 document.getElementById('foot').textContent =
   `Each objective replaces both the CMA-ES loss and the staged pipeline's accept/keep test (as 1 − loss), so the whole search chases it. ` +
