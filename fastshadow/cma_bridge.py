@@ -19,6 +19,8 @@ class BatchedShadowRenderer:
         self._mj = mj
         self._fast = fast
         self.n_batched = 0  # poses rendered through eval_q_batch
+        self.objective = None  # (fn, TargetCache) from fastshadow.objectives.use_objective
+        self._last = None  # GPU masks of the last eval_q_batch
 
     def __getattr__(self, name):
         return getattr(self._mj, name)
@@ -54,7 +56,19 @@ class BatchedShadowRenderer:
         """(B, n_dof) → masks (B,H,W) float32, min_z (B,), cross (B,), self (B,).
         Same contract as calling ShadowRenderer.eval_q on each row."""
         Q = np.clip(np.asarray(Q, np.float64), self._mj.q_lower, self._mj.q_upper)
-        masks = self._fast.render(Q).cpu().numpy()  # async-free: .cpu() syncs
+        self._last = self._fast.render(Q)
+        masks = self._last.cpu().numpy()
         pen = np.array([self._penalties(q) for q in Q])
         self.n_batched += len(Q)
         return masks, pen[:, 0], pen[:, 1], pen[:, 2]
+
+    def batch_shadow_loss(self, target):
+        """Shadow loss of every mask from the last eval_q_batch, on the GPU, or
+        None to let the optimizer use its own shadow_loss."""
+        if self.objective is None:
+            return None
+        import torch
+
+        fn, targets = self.objective
+        with torch.no_grad():
+            return fn(self._last, targets(target)).float().cpu().numpy()
