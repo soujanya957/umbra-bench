@@ -70,7 +70,9 @@ def study(dirname):
         for o in objs:
             r = s0[i][o]
             S = load_target(os.path.join(FS, dirname, r["mask"]), 128) > 0.5
-            cands.append({"o": o, "img": uri(S), "m": {k: r.get(k) for k, *_ in METRICS}})
+            m = {k: r.get(k) for k, *_ in METRICS}
+            m.update(cls_top1=r.get("cls_top1"), clip_top1=r.get("clip_top1"))
+            cands.append({"o": o, "img": uri(S), "m": m})
         glyphs.append({"key": i.replace("/", "__"), "sub": sub, "label": stem.split("_")[0], "target": uri(T), "cands": cands})
     summary = []
     for o in objs:
@@ -173,14 +175,52 @@ table.sum td{font-family:var(--f-mono)}
 table.sum td.best{color:var(--good);font-weight:600}
 table.sum td.you{background:color-mix(in srgb,var(--good) 10%,transparent)}
 table.sum i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+#markview{display:grid;gap:24px}
+#markview[hidden],#guessview[hidden]{display:none}
+.gv{display:grid;gap:18px}
+.gdesk{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:820px){.gdesk{grid-template-columns:1fr}}
+.gshow{background:var(--panel);border:1px solid var(--rule);border-radius:8px;padding:16px;display:grid;gap:10px;justify-items:center}
+.gshow img{width:100%;max-width:300px;aspect-ratio:1;image-rendering:pixelated;background:var(--wall);border-radius:4px}
+.gcat{font:500 12px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.gfb{min-height:2.2em;font:600 18px var(--f-display);text-align:center}
+.gfb .ok{color:var(--good)} .gfb .no{color:var(--none)}
+.gpad{display:grid;gap:12px}
+.keys{display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:6px}
+.keys button{font:600 20px var(--f-display);padding:8px 0;border-radius:6px}
+.keys button.right{background:var(--good);color:#fff;border-color:var(--good)}
+.keys button.wrong{background:var(--none);color:#fff;border-color:var(--none)}
+#gopts label{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--muted);cursor:pointer}
 </style>
 <div class="wrap">
   <header>
     <span class="eyebrow">umbra-bench · glyph objective study · blind</span>
-    <h1>Which shadows look like the target?</h1>
-    <p class="sub">Each card is the shadow the three arms cast under a different objective, shuffled, names hidden. Mark every one that looks like the target — as many as you like — or mark none. One tab per optimizer.</p>
+    <h1>Can you read the shadow?</h1>
+    <p class="sub">Guess the glyph: a shadow appears alone, you say which character it is. That measures readability without anyone judging similarity. The marking tabs show the target and let you mark every shadow that looks like it.</p>
   </header>
   <div class="tabs" role="tablist" id="tabs"></div>
+  <section id="guessview" class="gv">
+    <div class="bar"><span class="prog" id="gprog"></span>
+      <span style="display:flex;gap:14px;align-items:center;flex-wrap:wrap" id="gopts"></span></div>
+    <div class="gdesk">
+      <div class="gshow">
+        <span class="gcat" id="gcat"></span>
+        <img id="gimg" alt="shadow to identify">
+        <div class="gfb" id="gfb" aria-live="polite"></div>
+      </div>
+      <div class="gpad">
+        <div class="keys" id="keys"></div>
+        <div class="nav"><button id="gskip" title="can't tell (space)">Can't tell</button><button id="gnext" title="next (enter)" hidden>Next →</button></div>
+        <div class="help">Type the character or click it · <kbd>space</kbd> can't tell · <kbd>enter</kbd> next. Every objective gets the same number of questions; the same character never comes twice in a row.</div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Readability by objective: you vs the machine judges</h3>
+      <p class="note">Your accuracy on the shadows you saw, with a 95% interval; the classifier's and CLIP's top-1 on exactly the same shadows. Chance: 1/26 for letters, 1/10 for digits.</p>
+      <div class="scroll"><table class="sum" id="gsum"></table></div>
+    </div>
+  </section>
+  <div id="markview" hidden>
   <div class="bar"><span class="prog" id="prog"></span>
     <span style="display:flex;gap:16px;align-items:center"><label class="sw"><input type="checkbox" id="names"> show names</label><span class="status" id="status">Loading saved picks…</span></span></div>
   <section class="desk">
@@ -209,6 +249,7 @@ table.sum i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-r
     <div class="card"><h3>How often each objective is good</h3><p class="note">Share of judged characters where you marked it good.</p><div id="tally"></div></div>
     <div class="card"><h3>Which metric agrees with you?</h3><p class="note">Solid: the metric's top shadow is one you marked good. Faded: AUC, the chance the metric ranks a good shadow above a not-good one (0.5 = no better than chance).</p><div id="agree"></div></div>
   </section>
+  </div>
 </div>
 <script>
 const D = /*DATA*/;
@@ -216,9 +257,9 @@ const famOf = Object.fromEntries(D.objs.map(o => [o.o, o.family]));
 const fam = {baseline: 'var(--base)', shape: 'var(--shape)', semantic: 'var(--sem)'};
 const KEYS = 'abcdefghijklmnopqrstuvwxyz';
 const $ = id => document.getElementById(id);
-let tab = D.tabs[0].key;
+let tab = D.tabs[0].key, mode = 'guess';
 const cur = Object.fromEntries(D.tabs.map(t => [t.key, 0]));
-let store = {}; for (const t of D.tabs) store[t.key] = {};
+let store = {guesses: []}; for (const t of D.tabs) store[t.key] = {};
 let legacy = null, docRef = null, writing = Promise.resolve(), dirty = false, moved = false;
 ['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, () => { moved = true; }, {once: true}));
 const T = () => D.tabs.find(t => t.key === tab);
@@ -234,8 +275,95 @@ function order(gi) {  // fixed shuffle per glyph so a reload shows the same line
 }
 
 function renderTabs() {
-  $('tabs').innerHTML = D.tabs.map(t => `<button role="tab" id="tab-${t.key}" aria-selected="${t.key === tab}" data-t="${t.key}">${t.label}<span class="n">${t.glyphs.filter(g => judged(store[t.key][g.key])).length}/${t.glyphs.length}</span></button>`).join('');
+  $('tabs').innerHTML = `<button role="tab" id="tab-guess" aria-selected="${mode === 'guess'}" data-m="guess">Guess the glyph<span class="n">${store.guesses.length}</span></button>` +
+    D.tabs.map(t => `<button role="tab" id="tab-${t.key}" aria-selected="${mode === 'mark' && t.key === tab}" data-m="mark" data-t="${t.key}">Mark good · ${t.label}<span class="n">${t.glyphs.filter(g => judged(store[t.key][g.key])).length}/${t.glyphs.length}</span></button>`).join('');
 }
+function render() {
+  $('guessview').hidden = mode !== 'guess';
+  $('markview').hidden = mode !== 'mark';
+  if (mode === 'guess') { renderTabs(); renderGuess(); } else renderDesk();
+}
+
+// ── Guess the glyph ─────────────────────────────────────────────────────
+const SUBS = {letters_upper: [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'], letters_lower: [...'abcdefghijklmnopqrstuvwxyz'], digits: [...'0123456789']};
+const CAT = {letters_upper: 'uppercase letter', letters_lower: 'lowercase letter', digits: 'digit'};
+const useTab = Object.fromEntries(D.tabs.map(t => [t.key, true]));
+let trial = null, answered = null, advanceTimer = null;
+const condName = (tk, o) => (D.tabs.length > 1 ? D.tabs.find(t => t.key === tk).label + ' · ' : '') + o;
+function nextTrial() {
+  clearTimeout(advanceTimer);
+  const conds = D.tabs.filter(t => useTab[t.key]).flatMap(t => t.objs.map(o => [t.key, o]));
+  if (!conds.length) { trial = null; return; }
+  const count = {}, seen = {};
+  store.guesses.forEach(([g, c]) => { count[c] = (count[c] || 0) + 1; (seen[c] = seen[c] || new Set()).add(g); });
+  const recent = new Set(store.guesses.slice(-6).map(x => x[0]));
+  const minN = Math.min(...conds.map(([tk, o]) => count[tk + ':' + o] || 0));
+  const pool = conds.filter(([tk, o]) => (count[tk + ':' + o] || 0) === minN);
+  const [tk, o] = pool[Math.floor(Math.random() * pool.length)];
+  const t = D.tabs.find(x => x.key === tk), c = tk + ':' + o;
+  let cand = t.glyphs.filter(g => !(seen[c] && seen[c].has(g.key)) && !recent.has(g.key));
+  if (!cand.length) cand = t.glyphs.filter(g => !recent.has(g.key));
+  if (!cand.length) cand = t.glyphs;
+  const g = cand[Math.floor(Math.random() * cand.length)];
+  trial = {tk, o, c, g, ci: g.cands.findIndex(x => x.o === o), t0: performance.now()};
+  answered = null;
+}
+function answer(ch) {
+  if (!trial || answered) return;
+  const ok = ch === trial.g.label;
+  answered = {ch, ok};
+  store.guesses.push([trial.g.key, trial.c, ch, ok ? 1 : 0, Math.round(performance.now() - trial.t0)]);
+  save(); renderGuess();
+  if (ok) advanceTimer = setTimeout(() => { nextTrial(); renderGuess(); }, 650);
+}
+function renderGuess() {
+  if (!trial) nextTrial();
+  $('gopts').innerHTML = D.tabs.length > 1 ? D.tabs.map(t => `<label><input type="checkbox" id="use-${t.key}" data-t="${t.key}" ${useTab[t.key] ? 'checked' : ''}> ${t.label}</label>`).join('') : '';
+  const n = store.guesses.length, k = store.guesses.filter(x => x[3]).length;
+  $('gprog').innerHTML = `<b>${n}</b> answered · ${n ? Math.round(100 * k / n) : 0}% right`;
+  if (!trial) { $('gimg').removeAttribute('src'); $('keys').innerHTML = '<p class="empty">Pick at least one optimizer above.</p>'; renderGuessSummary(); return; }
+  const g = trial.g, c = g.cands[trial.ci];
+  $('gcat').textContent = CAT[g.sub];
+  $('gimg').src = c.img;
+  $('keys').innerHTML = SUBS[g.sub].map(ch => {
+    const cls = answered ? (ch === g.label ? 'right' : ch === answered.ch ? 'wrong' : '') : '';
+    return `<button data-ch="${ch}" class="${cls}" aria-label="${ch}">${ch}</button>`;
+  }).join('');
+  $('gfb').innerHTML = !answered ? '' : answered.ok ? `<span class="ok">✓ ${g.label}</span>` :
+    `<span class="no">✗ it was ${g.label}${answered.ch === '?' ? '' : ` (you said ${answered.ch})`}</span>`;
+  $('gnext').hidden = !answered || answered.ok;
+  $('gskip').hidden = !!answered;
+  renderTabs(); renderGuessSummary();
+}
+function wilson(k, n) {
+  if (!n) return [0, 0];
+  const z = 1.96, p = k / n, d = 1 + z * z / n, c = (p + z * z / (2 * n)) / d, h = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d;
+  return [Math.max(0, c - h), Math.min(1, c + h)];
+}
+function renderGuessSummary() {
+  const by = {};
+  const look = {};
+  D.tabs.forEach(t => t.glyphs.forEach(g => g.cands.forEach(c => { look[t.key + ':' + c.o + '|' + g.key] = c.m; })));
+  store.guesses.forEach(([gk, c, , ok]) => {
+    const m = look[c + '|' + gk]; if (!m) return;
+    const b = by[c] = by[c] || {n: 0, k: 0, cls: 0, clip: 0};
+    b.n += 1; b.k += ok; b.cls += m.cls_top1 || 0; b.clip += m.clip_top1 || 0;
+  });
+  const rows = Object.entries(by).map(([c, b]) => ({c, ...b, acc: b.k / b.n})).sort((a, b) => b.acc - a.acc || b.n - a.n);
+  if (!rows.length) { $('gsum').innerHTML = '<tbody><tr><td class="o">Answer a few and the table fills in.</td></tr></tbody>'; return; }
+  const tot = rows.reduce((s, r) => ({n: s.n + r.n, k: s.k + r.k, cls: s.cls + r.cls, clip: s.clip + r.clip}), {n: 0, k: 0, cls: 0, clip: 0});
+  const pct = v => Math.round(100 * v) + '%';
+  const best = Math.max(...rows.filter(r => r.n >= 5).map(r => r.acc), -1);
+  $('gsum').innerHTML = '<thead><tr><th class="o">objective</th><th>shown</th><th>you ↑</th><th>95% interval</th><th>classifier ↑</th><th>CLIP ↑</th></tr></thead><tbody>' +
+    rows.map(r => { const [lo, hi] = wilson(r.k, r.n), o = r.c.split(':')[1];
+      return `<tr><td class="o"><i style="background:${fam[famOf[o]]}"></i>${condName(r.c.split(':')[0], o)}</td><td>${r.n}</td><td class="you ${r.n >= 5 && r.acc === best ? 'best' : ''}">${pct(r.acc)}</td><td>${pct(lo)}–${pct(hi)}</td><td>${pct(r.cls / r.n)}</td><td>${pct(r.clip / r.n)}</td></tr>`; }).join('') +
+    `<tr><td class="o"><b>all</b></td><td>${tot.n}</td><td class="you">${pct(tot.k / tot.n)}</td><td></td><td>${pct(tot.cls / tot.n)}</td><td>${pct(tot.clip / tot.n)}</td></tr></tbody>`;
+}
+$('keys').addEventListener('click', e => { const b = e.target.closest('button'); if (b && b.dataset.ch) answer(b.dataset.ch); });
+$('gskip').onclick = () => answer('?');
+$('gnext').onclick = () => { nextTrial(); renderGuess(); };
+$('gopts').addEventListener('change', e => { const t = e.target.dataset.t; if (t) { useTab[t] = e.target.checked; nextTrial(); renderGuess(); } });
+
 function renderDesk() {
   const t = T(), gi = cur[tab], g = t.glyphs[gi], p = P()[g.key] || {};
   const show = $('names').checked, good = new Set(p.good || []);
@@ -335,18 +463,30 @@ function renderStats() {
   $('agree').innerHTML = hbars(ag, r => `${Math.round(100 * r.v)}% · AUC ${r.bg == null ? '–' : r.bg.toFixed(2)}`);
 }
 
-$('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { tab = b.dataset.t; renderDesk(); } });
+$('tabs').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  mode = b.dataset.m; if (b.dataset.t) tab = b.dataset.t;
+  render();
+});
 $('line').addEventListener('click', e => { const b = e.target.closest('.cand'); if (b) toggle(b.dataset.o); });
 $('strip').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { cur[tab] = +b.dataset.i; renderDesk(); } });
 $('prev').onclick = () => go(-1); $('next').onclick = () => go(1); $('none').onclick = setNone;
-$('names').addEventListener('change', renderDesk);
+$('names').addEventListener('change', render);
 document.addEventListener('keydown', e => {
   if (e.metaKey || e.ctrlKey || e.altKey || e.target.tagName === 'INPUT') return;
+  if (mode === 'guess') {
+    if (e.key === 'Enter' && answered) { e.preventDefault(); nextTrial(); renderGuess(); return; }
+    if (!trial || answered) return;
+    if (e.key === ' ' || e.key === '?') { e.preventDefault(); answer('?'); return; }
+    const sub = trial.g.sub, ch = sub === 'letters_upper' ? e.key.toUpperCase() : sub === 'letters_lower' ? e.key.toLowerCase() : e.key;
+    if (e.key.length === 1 && SUBS[sub].includes(ch)) answer(ch);
+    return;
+  }
   const k = e.key.toLowerCase();
   if (k === 'arrowright') go(1); else if (k === 'arrowleft') go(-1); else if (k === '0') setNone();
   else if (k.length === 1 && KEYS.includes(k)) { const pos = KEYS.indexOf(k), ord = order(cur[tab]); if (pos < ord.length) toggle(T().glyphs[cur[tab]].cands[ord[pos]].o); }
 });
-renderDesk();
+render();
 
 (async () => {
   try {
@@ -358,6 +498,8 @@ renderDesk();
     const data = snap.exists ? (snap.data() || {}) : {};
     legacy = data.picks || null;
     for (const t of D.tabs) store[t.key] = {...(data[t.key] || {}), ...store[t.key]};
+    for (const k of Object.keys(data)) if (!(k in store) && k !== 'picks' && k !== 'updated') store[k] = data[k];  // tabs not built yet (e.g. adam) keep their marks
+    store.guesses = [...(Array.isArray(data.guesses) ? data.guesses : []), ...store.guesses];
     let migrated = 0;
     if (legacy && !data.cma && store.cma) {  // v1: best/second → good set
       for (const [k, v] of Object.entries(legacy)) {
@@ -369,7 +511,7 @@ renderDesk();
     if (!moved) for (const t of D.tabs) { const f = t.glyphs.findIndex(g => !judged(store[t.key][g.key])); if (f >= 0) cur[t.key] = f; }
     $('status').textContent = migrated ? `Loaded your earlier ${migrated} picks as "good" marks` : snap.exists ? 'Loaded saved marks' : 'Marks save as you go';
     if (migrated) save();
-    renderDesk();
+    trial = null; render();
   } catch (e) { $('status').textContent = 'Could not load saved marks.'; }
 })();
 </script>
