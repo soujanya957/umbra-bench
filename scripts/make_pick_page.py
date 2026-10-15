@@ -158,9 +158,9 @@ label.sw{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--mute
 .strip button.done{background:var(--good);color:#fff;border-color:var(--good)}
 .strip button.nonepick{background:var(--none);color:#fff;border-color:var(--none)}
 .strip button.cur{outline:2px solid var(--fg);outline-offset:1px}
-.charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
 @media (max-width:820px){.charts{grid-template-columns:1fr}}
-.card{background:var(--panel);border:1px solid var(--rule);border-radius:8px;padding:16px;display:grid;gap:8px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:8px;padding:16px;display:grid;gap:8px;min-width:0;align-content:start}
 .card h3{font:600 15px/1.2 var(--f-display);margin:0}
 .card .note{font-size:13px;color:var(--muted);margin:0}
 svg text{fill:var(--muted);font:11px var(--f-mono)}
@@ -176,7 +176,16 @@ table.sum td.best{color:var(--good);font-weight:600}
 table.sum td.you{background:color-mix(in srgb,var(--good) 10%,transparent)}
 table.sum i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
 #markview{display:grid;gap:24px}
-#markview[hidden],#guessview[hidden]{display:none}
+#markview[hidden],#guessview[hidden],#abview[hidden]{display:none}
+.abdesk{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,190px) minmax(0,1fr);gap:16px;align-items:end;max-width:900px;margin:0 auto;width:100%}
+.abdesk figure{margin:0;display:grid;gap:6px;justify-items:center;background:var(--panel);border:1px solid var(--rule);border-radius:8px;padding:12px}
+.abdesk img{width:100%;aspect-ratio:1;image-rendering:pixelated;background:var(--wall);border-radius:4px}
+.abside img{max-width:300px} .abtgt img{max-width:170px}
+.abdesk figcaption{font:500 12px var(--f-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.abbtns{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.abbtns button{padding:10px 16px;font-size:14px}
+.abbtns kbd{font:12px var(--f-mono);border:1px solid var(--rule);border-radius:3px;padding:0 4px}
+@media (max-width:640px){.abdesk{grid-template-columns:1fr 1fr}.abtgt{grid-column:1/-1;order:-1}}
 .gv{display:grid;gap:18px}
 .gdesk{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:24px;align-items:start}
 @media (max-width:820px){.gdesk{grid-template-columns:1fr}}
@@ -220,6 +229,24 @@ table.sum i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-r
       <div class="scroll"><table class="sum" id="gsum"></table></div>
     </div>
   </section>
+  <section id="abview" class="gv" hidden>
+    <div class="bar"><span class="prog" id="abprog"></span><span class="help">Blind: the two sides are the same objective under the two optimizers, side chosen at random, same ink. Nothing is revealed per question.</span></div>
+    <div class="abdesk">
+      <figure class="abside"><img id="abL" alt="left shadow"><figcaption>left</figcaption></figure>
+      <figure class="abtgt"><span class="gcat" id="abcat"></span><img id="abT" alt="target"><figcaption>target</figcaption></figure>
+      <figure class="abside"><img id="abR" alt="right shadow"><figcaption>right</figcaption></figure>
+    </div>
+    <div class="abbtns">
+      <button id="ab-left" data-c="L"><kbd>←</kbd> Left looks more like it</button>
+      <button id="ab-tie" data-c="tie"><kbd>↓</kbd> About the same</button>
+      <button id="ab-right" data-c="R">Right looks more like it <kbd>→</kbd></button>
+      <button id="ab-bad" data-c="bad"><kbd>4</kbd> Neither looks like it</button>
+    </div>
+    <div class="charts">
+      <div class="card"><h3>Which optimizer you preferred</h3><p class="note">Ties and "neither" left out of the test; p is a two-sided sign test on the decided pairs.</p><div id="ab_all"></div></div>
+      <div class="card"><h3>By objective</h3><p class="note">Bar = share of decided pairs where Adam won (50% = no preference). Number of decided pairs on the right.</p><div id="ab_obj"></div></div>
+    </div>
+  </section>
   <div id="markview" hidden>
   <div class="bar"><span class="prog" id="prog"></span>
     <span style="display:flex;gap:16px;align-items:center"><label class="sw"><input type="checkbox" id="names"> show names</label><span class="status" id="status">Loading saved picks…</span></span></div>
@@ -259,7 +286,7 @@ const KEYS = 'abcdefghijklmnopqrstuvwxyz';
 const $ = id => document.getElementById(id);
 let tab = D.tabs[0].key, mode = 'guess';
 const cur = Object.fromEntries(D.tabs.map(t => [t.key, 0]));
-let store = {guesses: []}; for (const t of D.tabs) store[t.key] = {};
+let store = {guesses: [], ab: []}; for (const t of D.tabs) store[t.key] = {};
 let legacy = null, docRef = null, writing = Promise.resolve(), dirty = false, moved = false;
 ['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, () => { moved = true; }, {once: true}));
 const T = () => D.tabs.find(t => t.key === tab);
@@ -274,15 +301,86 @@ function order(gi) {  // fixed shuffle per glyph so a reload shows the same line
   return a;
 }
 
+const HAS_AB = ['cma', 'adam'].every(k => D.tabs.some(t => t.key === k));
 function renderTabs() {
   $('tabs').innerHTML = `<button role="tab" id="tab-guess" aria-selected="${mode === 'guess'}" data-m="guess">Guess the glyph<span class="n">${store.guesses.length}</span></button>` +
+    (HAS_AB ? `<button role="tab" id="tab-ab" aria-selected="${mode === 'ab'}" data-m="ab">A/B · CMA-ES vs Adam<span class="n">${store.ab.length}</span></button>` : '') +
     D.tabs.map(t => `<button role="tab" id="tab-${t.key}" aria-selected="${mode === 'mark' && t.key === tab}" data-m="mark" data-t="${t.key}">Mark good · ${t.label}<span class="n">${t.glyphs.filter(g => judged(store[t.key][g.key])).length}/${t.glyphs.length}</span></button>`).join('');
 }
 function render() {
   $('guessview').hidden = mode !== 'guess';
   $('markview').hidden = mode !== 'mark';
-  if (mode === 'guess') { renderTabs(); renderGuess(); } else renderDesk();
+  $('abview').hidden = mode !== 'ab';
+  if (mode === 'guess') { renderTabs(); renderGuess(); } else if (mode === 'ab') { renderTabs(); renderAB(); } else renderDesk();
 }
+
+// ── A/B: CMA-ES vs Adam, blind ──────────────────────────────────────────
+// a record is [glyph key, objective, choice: 'cma' | 'adam' | 'tie' | 'bad' | 'identical', side of CMA-ES: 'L' | 'R', ms]
+let ab = null;
+function abPair(gk, o) {
+  const c = D.tabs.find(t => t.key === 'cma').glyphs.find(g => g.key === gk);
+  const a = D.tabs.find(t => t.key === 'adam').glyphs.find(g => g.key === gk);
+  if (!c || !a) return null;
+  const cc = c.cands.find(x => x.o === o), ac = a.cands.find(x => x.o === o);
+  return cc && ac ? {g: c, cma: cc, adam: ac} : null;
+}
+function nextAB() {
+  const cg = D.tabs.find(t => t.key === 'cma'), objs = cg.objs;
+  const done = new Set(store.ab.map(r => r[0] + '|' + r[1]));
+  const count = {}; store.ab.forEach(r => { count[r[1]] = (count[r[1]] || 0) + 1; });
+  const recent = new Set(store.ab.slice(-6).map(r => r[0]));
+  const open = objs.filter(o => cg.glyphs.some(g => !done.has(g.key + '|' + o)));
+  if (!open.length) { ab = null; return; }
+  const minN = Math.min(...open.map(o => count[o] || 0));
+  const pool = open.filter(o => (count[o] || 0) === minN);
+  const o = pool[Math.floor(Math.random() * pool.length)];
+  let gs = cg.glyphs.filter(g => !done.has(g.key + '|' + o) && !recent.has(g.key));
+  if (!gs.length) gs = cg.glyphs.filter(g => !done.has(g.key + '|' + o));
+  const g = gs[Math.floor(Math.random() * gs.length)];
+  const p = abPair(g.key, o);
+  if (!p || p.cma.img === p.adam.img) { store.ab.push([g.key, o, 'identical', 'L', 0]); return nextAB(); }  // nothing to judge
+  ab = {...p, o, cmaSide: Math.random() < 0.5 ? 'L' : 'R', t0: performance.now()};
+}
+function answerAB(c) {
+  if (!ab) return;
+  const choice = c === 'tie' || c === 'bad' ? c : (c === ab.cmaSide ? 'cma' : 'adam');
+  store.ab.push([ab.g.key, ab.o, choice, ab.cmaSide, Math.round(performance.now() - ab.t0)]);
+  save(); nextAB(); renderAB();
+}
+function signP(a, b) {  // two-sided exact sign test
+  const n = a + b, k = Math.min(a, b);
+  if (!n) return 1;
+  let s = 0, c = 1; for (let i = 0; i <= k; i++) { if (i) c = c * (n - i + 1) / i; s += c; }
+  return Math.min(1, 2 * s / Math.pow(2, n));
+}
+function renderAB() {
+  if (!ab) nextAB();
+  const total = D.tabs.find(t => t.key === 'cma').glyphs.length * D.tabs.find(t => t.key === 'cma').objs.length;
+  $('abprog').innerHTML = `<b>${store.ab.length}</b> / ${total} pairs judged`;
+  if (ab) {
+    const L = ab.cmaSide === 'L' ? ab.cma : ab.adam, R = ab.cmaSide === 'L' ? ab.adam : ab.cma;
+    $('abL').src = L.img; $('abR').src = R.img; $('abT').src = ab.g.target;
+    $('abcat').textContent = ab.g.label + ' · ' + {letters_upper: 'uppercase', letters_lower: 'lowercase', digits: 'digit'}[ab.g.sub];
+  } else { $('abprog').innerHTML += ' · all done, thank you'; }
+  document.querySelectorAll('.abbtns button').forEach(b => { b.disabled = !ab; });
+  renderTabs(); renderABSummary();
+}
+function renderABSummary() {
+  const R = store.ab.filter(r => r[2] !== 'identical');  // identical images were never shown
+  if (!R.length) { $('ab_all').innerHTML = $('ab_obj').innerHTML = '<p class="empty">Judge a few pairs and the results appear here.</p>'; return; }
+  const n = c => R.filter(r => r[2] === c).length;
+  const a = n('adam'), c = n('cma'), t = n('tie'), b = n('bad'), p = signP(a, c);
+  const rows = [{label: 'Adam better', v: a / R.length, color: '#3a3fb0'}, {label: 'CMA-ES better', v: c / R.length, color: '#0f6e66'},
+    {label: 'about the same', v: t / R.length, color: 'var(--base)'}, {label: 'neither', v: b / R.length, color: 'var(--none)'}];
+  $('ab_all').innerHTML = hbars(rows, r => Math.round(100 * r.v) + '%') +
+    `<p class="note">${R.length} pairs. Of the ${a + c} decided, Adam won ${a + c ? Math.round(100 * a / (a + c)) : 0}% (p = ${p < 0.001 ? p.toExponential(1) : p.toFixed(3)}).</p>`;
+  const by = {};
+  R.forEach(r => { const x = by[r[1]] = by[r[1]] || {a: 0, c: 0}; if (r[2] === 'adam') x.a++; if (r[2] === 'cma') x.c++; });
+  const orow = Object.entries(by).filter(([, x]) => x.a + x.c > 0).map(([o, x]) => ({label: o, v: x.a / (x.a + x.c), n: x.a + x.c, color: fam[famOf[o]]}))
+    .sort((x, y) => y.v - x.v);
+  $('ab_obj').innerHTML = orow.length ? hbars(orow, r => `${Math.round(100 * r.v)}% · ${r.n}`) : '<p class="empty">No decided pairs yet.</p>';
+}
+document.querySelector('.abbtns').addEventListener('click', e => { const b = e.target.closest('button'); if (b && !b.disabled) answerAB(b.dataset.c); });
 
 // ── Guess the glyph ─────────────────────────────────────────────────────
 const SUBS = {letters_upper: [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'], letters_lower: [...'abcdefghijklmnopqrstuvwxyz'], digits: [...'0123456789']};
@@ -474,6 +572,11 @@ $('prev').onclick = () => go(-1); $('next').onclick = () => go(1); $('none').onc
 $('names').addEventListener('change', render);
 document.addEventListener('keydown', e => {
   if (e.metaKey || e.ctrlKey || e.altKey || e.target.tagName === 'INPUT') return;
+  if (mode === 'ab') {
+    const c = {ArrowLeft: 'L', '1': 'L', ArrowDown: 'tie', ' ': 'tie', '2': 'tie', ArrowRight: 'R', '3': 'R', '4': 'bad'}[e.key];
+    if (c) { e.preventDefault(); answerAB(c); }
+    return;
+  }
   if (mode === 'guess') {
     if (e.key === 'Enter' && answered) { e.preventDefault(); nextTrial(); renderGuess(); return; }
     if (!trial || answered) return;
@@ -500,6 +603,7 @@ render();
     for (const t of D.tabs) store[t.key] = {...(data[t.key] || {}), ...store[t.key]};
     for (const k of Object.keys(data)) if (!(k in store) && k !== 'picks' && k !== 'updated') store[k] = data[k];  // tabs not built yet (e.g. adam) keep their marks
     store.guesses = [...(Array.isArray(data.guesses) ? data.guesses : []), ...store.guesses];
+    store.ab = [...(Array.isArray(data.ab) ? data.ab : []), ...store.ab];
     let migrated = 0;
     if (legacy && !data.cma && store.cma) {  // v1: best/second → good set
       for (const [k, v] of Object.entries(legacy)) {
@@ -511,7 +615,7 @@ render();
     if (!moved) for (const t of D.tabs) { const f = t.glyphs.findIndex(g => !judged(store[t.key][g.key])); if (f >= 0) cur[t.key] = f; }
     $('status').textContent = migrated ? `Loaded your earlier ${migrated} picks as "good" marks` : snap.exists ? 'Loaded saved marks' : 'Marks save as you go';
     if (migrated) save();
-    trial = null; render();
+    trial = null; ab = null; render();
   } catch (e) { $('status').textContent = 'Could not load saved marks.'; }
 })();
 </script>
