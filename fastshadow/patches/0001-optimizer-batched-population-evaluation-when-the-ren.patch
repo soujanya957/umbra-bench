@@ -1,0 +1,129 @@
+From 6464d62e4ac45f57d33f5206bf083a4eb6c0876c Mon Sep 17 00:00:00 2001
+From: Tony Hwang <godntony@gmail.com>
+Date: Wed, 14 Oct 2026 13:44:09 -0400
+Subject: [PATCH 1/2] optimizer: batched population evaluation when the
+ renderer has eval_q_batch
+
+optimize() scores a CMA-ES population, the init samples and the FD
+gradient through renderer.eval_q_batch(Q) when the renderer provides it
+(umbra-bench fastshadow.BatchedShadowRenderer: nvdiffrast masks, MuJoCo
+kinematics and contacts). The loss is unchanged: eval_one is split into
+rendering and _score, and _full_loss into rendering and _full_loss_from.
+A plain ShadowRenderer takes the old per-pose path.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ motion-aware-shadow/optimizer.py | 62 +++++++++++++++++++++++++++++---
+ 1 file changed, 58 insertions(+), 4 deletions(-)
+
+diff --git a/motion-aware-shadow/optimizer.py b/motion-aware-shadow/optimizer.py
+index 77ffbbf..4ea1487 100644
+--- a/motion-aware-shadow/optimizer.py
++++ b/motion-aware-shadow/optimizer.py
+@@ -795,7 +795,14 @@ def _full_loss(
+     active: np.ndarray,
+ ) -> float:
+     """Evaluate the full penalised loss (shadow + floor + collision + temporal)."""
+-    mask, min_z, cross_pen, self_pen = renderer.eval_q(q_full)
++    return _full_loss_from(
++        *renderer.eval_q(q_full), q_full, target, config, q_ref_frozen, active
++    )
++
++
++def _full_loss_from(
++    mask, min_z, cross_pen, self_pen, q_full, target, config, q_ref_frozen, active
++) -> float:
+     loss = shadow_loss(
+         mask, target, config.alpha, config.beta, config.gamma, config.delta
+     )
+@@ -837,6 +844,23 @@ def _compute_fd_grad(
+     n = len(active)
+     q = q_full.copy()
+ 
++    if hasattr(renderer, "eval_q_batch"):
++        Q = np.tile(q, (2 * n, 1))
++        for j in range(n):
++            Q[2 * j, active[j]] += epsilon
++            Q[2 * j + 1, active[j]] -= epsilon
++        masks, min_zs, crosses, selfs = renderer.eval_q_batch(Q)
++        losses = [
++            _full_loss_from(masks[i], min_zs[i], crosses[i], selfs[i], Q[i],
++                            target, config, q_ref_frozen, active)
++            for i in range(2 * n)
++        ]
++        grad = np.array(
++            [(losses[2 * j] - losses[2 * j + 1]) / (2.0 * epsilon) for j in range(n)],
++            dtype=np.float64,
++        )
++        return grad, 2 * n
++
+     if executor is not None and pool is not None:
+         q_perturbed: list = []
+         for j in range(n):
+@@ -1185,7 +1209,25 @@ def optimize(
+         q_full = x0_full.copy()
+         q_full[active] = x_active
+         mask, min_z, cross_pen, self_pen = _rend.eval_q(q_full)
+-
++        return _score(mask, min_z, cross_pen, self_pen, x_active)
++
++    # A renderer with eval_q_batch (e.g. umbra-bench fastshadow.BatchedShadowRenderer)
++    # renders a whole population in one call; the loss below is unchanged.
++    _batched = hasattr(renderer, "eval_q_batch")
++
++    def eval_many(X_active) -> list:
++        X_active = np.asarray(X_active, dtype=np.float64)
++        if not _batched:
++            return [eval_one(x) for x in X_active]
++        Q_full = np.tile(x0_full, (len(X_active), 1))
++        Q_full[:, active] = X_active
++        masks, min_zs, crosses, selfs = renderer.eval_q_batch(Q_full)
++        return [
++            _score(masks[i], min_zs[i], crosses[i], selfs[i], X_active[i])
++            for i in range(len(X_active))
++        ]
++
++    def _score(mask, min_z, cross_pen, self_pen, x_active) -> float:
+         loss = shadow_loss(mask, target, _alpha, _beta, _gamma, _delta)
+ 
+         loss += floor_penalty_loss(
+@@ -1260,6 +1302,18 @@ def optimize(
+                 _best_ki = int(np.argmin(_init_scores))
+             best_init_x = _init_pts[_best_ki]
+             best_init_score = _init_scores[_best_ki]
++        elif _batched:
++            if coverage_mask is not None:
++                _Q = np.tile(x0_full, (len(_init_pts), 1))
++                _Q[:, active] = _init_pts
++                _masks = renderer.eval_q_batch(_Q)[0]
++                _init_scores = [float(np.sum(m * coverage_mask)) for m in _masks]
++                _best_ki = int(np.argmax(_init_scores))
++            else:
++                _init_scores = eval_many(_init_pts)
++                _best_ki = int(np.argmin(_init_scores))
++            best_init_x = _init_pts[_best_ki]
++            best_init_score = _init_scores[_best_ki]
+         else:
+             for _ki in range(config.init_samples):
+                 x_rand = _init_pts[_ki]
+@@ -1364,7 +1418,7 @@ def optimize(
+                     _executor.map(lambda i: eval_one(sol_arr[i], _pool.get()), real_idx)
+                 )
+             else:
+-                losses_real = [eval_one(sol_arr[i]) for i in real_idx]
++                losses_real = eval_many(sol_arr[real_idx])
+             n_evals += n_real
+             n_surrogate_evals += len(solutions) - n_real
+ 
+@@ -1383,7 +1437,7 @@ def optimize(
+                     _executor.map(lambda x: eval_one(x, _pool.get()), sol_arr)
+                 )
+             else:
+-                losses = [eval_one(sol_arr[i]) for i in range(len(solutions))]
++                losses = eval_many(sol_arr)
+             n_evals += len(solutions)
+             if _surrogate is not None:
+                 _surrogate.push(sol_arr, np.array(losses))
+-- 
+2.52.0.windows.1
+
