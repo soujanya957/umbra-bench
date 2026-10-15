@@ -60,33 +60,56 @@ def overlay(T, S):
     return img
 
 
-def main():
-    global OUT
-    if len(sys.argv) > 1:  # another study folder, e.g. a smoke run
-        OUT = os.path.abspath(sys.argv[1])
-    G = [json.loads(l) for l in open(os.path.join(OUT, "graded.jsonl"), encoding="utf-8")]
-    meta = json.load(open(os.path.join(OUT, "meta.json"), encoding="utf-8"))
-    objs = [o for o in OBJ if any(g["objective"] == o[0] for g in G)]
-    by = defaultdict(lambda: defaultdict(list))
-    for g in G:
-        by[g["objective"]][g["id"]].append(g)
-    ids = sorted({g["id"] for g in G if all(g["id"] in by[o[0]] for o in objs)},
-                 key=lambda i: (ORDER.get(i.split("/")[0], 9), i))
+CMA_INK = np.array([15, 110, 102])  # CMA-ES shadows: teal
+ADAM_INK = np.array([58, 63, 176])  # Adam shadows: indigo
 
-    def tmean(o, k, sel=None):
-        """mean over targets of the per-target seed mean (targets lacking the metric skipped)"""
-        vals = []
-        for i in (sel or ids):
-            v = [r[k] for r in by[o][i] if r.get(k) is not None]
-            if v:
-                vals.append(np.mean(v))
+
+def load_by(folder):
+    path = os.path.join(folder, "graded.jsonl")
+    if not os.path.exists(path):
+        return None
+    by = defaultdict(lambda: defaultdict(list))
+    for l in open(path, encoding="utf-8"):
+        g = json.loads(l)
+        by[g["objective"]][g["id"]].append(g)
+    return by
+
+
+def latest_marks():
+    """Good-marks from the newest picker export (results/fastshadow/picks_v*/picks/*.json)."""
+    import glob
+
+    best = None
+    for f in glob.glob(os.path.join(FS, "picks_v*", "picks", "*.json")):
+        d = json.load(open(f, encoding="utf-8"))
+        d = d.get("data", d)  # ArtifactData exports the body; older dumps wrapped it
+        if best is None or d.get("updated", "") > best.get("updated", ""):
+            best = d
+    if not best:
+        return {}
+    data = best
+    return {tk: {k: set(v.get("good", [])) for k, v in data.get(tk, {}).items()} for tk in ("cma", "adam")}
+
+
+def make_table(by, ids, objs, base_by=None):
+    """Per objective, per metric: mean over targets of seed means, and the paired Δ.
+    Δ is against `current` in the same study, or, with base_by, against the same
+    objective in another study on seed 0 (Adam − CMA-ES)."""
+
+    def tmean(o, k):
+        vals = [np.mean([r[k] for r in by[o][i] if r.get(k) is not None]) for i in ids
+                if any(r.get(k) is not None for r in by[o][i])]
         return float(np.mean(vals)) if vals else None
 
     def paired(o, k):
         d = []
         for i in ids:
-            a = [r[k] for r in by["current"][i] if r.get(k) is not None]
-            b = [r[k] for r in by[o][i] if r.get(k) is not None]
+            if base_by is None:
+                a = [r[k] for r in by["current"][i] if r.get(k) is not None]
+                b = [r[k] for r in by[o][i] if r.get(k) is not None]
+            else:
+                a = [r[k] for r in base_by[o][i] if r["seed"] == 0 and r.get(k) is not None]
+                b = [r[k] for r in by[o][i] if r["seed"] == 0 and r.get(k) is not None]
             if a and b:
                 d.append(np.mean(b) - np.mean(a))
         d = np.array(d)
@@ -96,36 +119,66 @@ def main():
     for o, lab, fam, steers in objs:
         row = {"o": o, "label": lab, "family": fam, "steers": steers.split(), "cells": {}}
         for k, _, hb, _ in MET:
-            v = tmean(o, k)
-            dm, se = paired(o, k) if o != "current" else (0.0, 0.0)
-            row["cells"][k] = {"v": v, "d": dm, "se": se}
+            dm, se = paired(o, k) if (o != "current" or base_by is not None) else (0.0, 0.0)
+            row["cells"][k] = {"v": tmean(o, k), "d": dm, "se": se}
         row["sec"] = float(np.mean([r["seconds"] for i in ids for r in by[o][i]]))
         row["cf"] = float(np.mean([r["collision_free"] for i in ids for r in by[o][i]]))
         table.append(row)
+    return table
 
-    # gallery: every character, seed 0 of every objective
+
+def main():
+    global OUT
+    if len(sys.argv) > 1:  # another study folder, e.g. a smoke run
+        OUT = os.path.abspath(sys.argv[1])
+    by = load_by(OUT)
+    adam = load_by(os.path.join(FS, "objective_study_adam")) if len(sys.argv) <= 1 else None
+    objs = [o for o in OBJ if o[0] in by]
+    ids = sorted({i for o in by for i in by[o] if all(i in by[x[0]] for x in objs)},
+                 key=lambda i: (ORDER.get(i.split("/")[0], 9), i))
+    if adam:
+        ids = [i for i in ids if all(i in adam[o[0]] for o in objs)]
+    marks = latest_marks()
+
+    tables = {"cma": make_table(by, ids, objs)}
+    if adam:
+        tables["adam"] = make_table(adam, ids, objs)
+        tables["diff"] = make_table(adam, ids, objs, base_by=by)
+    table = tables["cma"]
+
+    # gallery: every character, seed 0 of every objective; CMA-ES row above, Adam row below
     seeds_per = [len(by["current"][i]) for i in ids]
     root = os.path.join(BENCH, "optimized", "big-budget-grounded")
+
+    def cells_for(B, folder, i, ink, tk):
+        out = []
+        good = marks.get(tk, {}).get(i.replace("/", "__"), set())
+        for o, *_ in objs:
+            r = min(B[o][i], key=lambda r: r["seed"])
+            S = load_target(os.path.join(folder, r["mask"]), 128) > 0.5
+            sh = np.tile(WALL, S.shape + (1,))
+            sh[S] = ink  # the arms' shadow alone, tinted by optimizer
+            out.append({"uri": png_uri(sh), "iou": r["iou"], "cls": r["cls_top1"], "clip": r["clip_rank"],
+                        "good": o in good})
+        return out
+
     grid = []
     for i in ids:
         sub, stem = i.split("/")
         T = load_target(os.path.join(root, sub, stem, f"{stem}_shown.png"), 128) > 0.5
-        cells = []
-        for o, *_ in objs:
-            r = min(by[o][i], key=lambda r: r["seed"])
-            S = load_target(os.path.join(OUT, r["mask"]), 128) > 0.5
-            sh = np.tile(WALL, S.shape + (1,))
-            sh[S] = INK  # the arms' shadow alone; the target sits in its own column
-            cells.append({"uri": png_uri(sh), "iou": r["iou"], "cls": r["cls_top1"], "clip": r["clip_rank"]})
         tgt = np.tile(WALL, T.shape + (1,))
         tgt[T] = INK
-        grid.append({"id": i, "sub": sub, "label": stem.split("_")[0], "target": png_uri(tgt), "cells": cells})
+        rows = [{"tk": "cma", "cells": cells_for(by, OUT, i, CMA_INK, "cma")}]
+        if adam:
+            rows.append({"tk": "adam", "cells": cells_for(adam, os.path.join(FS, "objective_study_adam"), i, ADAM_INK, "adam")})
+        grid.append({"id": i, "sub": sub, "label": stem.split("_")[0], "target": png_uri(tgt), "rows": rows})
 
     ns = sorted(set(seeds_per))
     seeds_txt = (f"{ns[0]} seed{'s' if ns[0] > 1 else ''} each" if len(ns) == 1 else
                  ", ".join(f"{seeds_per.count(k)} with {k} seed{'s' if k > 1 else ''}" for k in ns[::-1]))
     D = {"n": len(ids), "seeds": seeds_txt, "objs": [{"o": o, "label": l, "family": f} for o, l, f, _ in objs],
-         "met": [{"k": k, "label": l, "hb": hb, "group": g} for k, l, hb, g in MET], "table": table, "grid": grid}
+         "met": [{"k": k, "label": l, "hb": hb, "group": g} for k, l, hb, g in MET], "table": table,
+         "tables": tables, "grid": grid, "has_marks": bool(marks)}
     hp = os.path.join(FS, "human_summary.json")  # scripts/human_summary.py, from the picker page
     D["human"] = json.load(open(hp, encoding="utf-8")) if os.path.exists(hp) else None
     html = TEMPLATE.replace("/*DATA*/", json.dumps(D))
@@ -184,7 +237,7 @@ table.hm td.own{outline:1.5px dashed var(--muted);outline-offset:-3px}
 table.hm td.grp{background:none}
 table.hm tr.base td{background:var(--panel)}
 .grid{display:grid;gap:6px;width:max-content}
-.grow{display:grid;grid-auto-flow:column;grid-auto-columns:72px;grid-template-columns:44px;gap:6px;align-items:start}
+.grow{display:grid;grid-auto-flow:column;grid-auto-columns:72px;grid-template-columns:58px;gap:6px;align-items:start}
 .grow.h{font:500 10px/1.2 var(--f-mono);color:var(--muted);align-items:end;position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);padding-block:4px;z-index:1}
 .grow.h span{text-align:center;overflow-wrap:anywhere}
 .grow .off,.grow.h .off{display:none}
@@ -208,6 +261,17 @@ svg text{fill:var(--muted);font:11px var(--f-mono)}
 svg .lab{fill:var(--fg);font:11px var(--f-body)}
 .foot{color:var(--muted);font-size:13px;max-width:76ch;margin:0}
 #human[hidden]{display:none}
+.seg{display:flex;gap:0;border:1px solid var(--rule);border-radius:8px;overflow:hidden;width:max-content;max-width:100%}
+.seg button{border:0;border-radius:0;padding:6px 14px;font:500 13px var(--f-body);background:var(--panel);color:var(--muted);cursor:pointer}
+.seg button+button{border-left:1px solid var(--rule)}
+.seg button[aria-selected="true"]{background:var(--fg);color:var(--bg)}
+.mtag{font:600 10px/1 var(--f-mono);letter-spacing:.02em;white-space:nowrap;text-transform:uppercase;padding:3px 5px;border-radius:3px;color:#fff;justify-self:start}
+.mtag.cma{background:#0f6e66} .mtag.adam{background:#3a3fb0}
+.glyph{display:grid;gap:4px;align-content:start}
+.grow.second{margin-top:-2px}
+.pair{display:grid;gap:4px;padding-block:6px;border-top:1px solid var(--rule)}
+figure.m.good img{outline:3px solid #2f8a57;outline-offset:-3px}
+figure.m.empty{visibility:hidden}
 #human .charts{align-items:start}
 .card{align-content:start}
 .take{margin:0;padding-left:20px;display:grid;gap:4px;max-width:80ch}
@@ -215,14 +279,15 @@ svg .lab{fill:var(--fg);font:11px var(--f-body)}
 </style>
 <div class="wrap">
   <header class="head">
-    <span class="eyebrow">umbra-bench · letters &amp; digits · fast CMA-ES</span>
+    <span class="eyebrow">umbra-bench · letters &amp; digits · CMA-ES and Adam</span>
     <h1>Which objective makes a better glyph?</h1>
     <p class="sub" id="sub"></p>
   </header>
   <section class="kpis" id="kpis"></section>
   <section>
-    <div class="head"><span class="eyebrow">1 · every objective, every metric</span><h2>Change vs the current objective</h2></div>
-    <div class="legend"><span><i style="background:rgba(var(--up),.55)"></i>better than current</span><span><i style="background:rgba(var(--down),.55)"></i>worse</span><span>small number = Δ ± SE over targets</span><span>dashed = the objective steers with this metric, so a win there is partly circular</span></div>
+    <div class="head"><span class="eyebrow">1 · every objective, every metric</span><h2 id="hm_title">Change vs the current objective</h2></div>
+    <div class="seg" role="tablist" id="hmview"></div>
+    <div class="legend"><span><i style="background:rgba(var(--up),.55)"></i><span id="hm_better">better than current</span></span><span><i style="background:rgba(var(--down),.55)"></i>worse</span><span>small number = Δ ± SE over targets</span><span>dashed = the objective steers with this metric, so a win there is partly circular</span></div>
     <div class="scroll"><table class="hm" id="hm"></table></div>
   </section>
   <section class="charts">
@@ -243,7 +308,7 @@ svg .lab{fill:var(--fg);font:11px var(--f-body)}
     <div class="head"><span class="eyebrow">3 · every character, every objective</span><h2>Shadows</h2></div>
     <div class="tabs" role="tablist" id="tabs"></div>
     <div class="chips" id="chips"></div>
-    <div class="legend"><span>shadow cast by the arms, nothing overlaid · seed 0</span><span>caption: IoU · classifier ✓/✗ · CLIP rank</span></div>
+    <div class="legend" id="glegend"></div>
     <div class="scroll"><div class="grid" id="grid"></div></div>
   </section>
   <p class="foot" id="foot"></p>
@@ -274,24 +339,39 @@ document.getElementById('sub').textContent = `${D.objs.length} objectives on the
   document.getElementById('kpis').innerHTML = out.join('');
 })();
 
-// heatmap
+// heatmap, one view per optimizer plus Adam − CMA-ES
 (function () {
-  const ms = D.met;
-  const maxd = {}; ms.forEach(m => maxd[m.k] = Math.max(1e-9, ...D.table.map(r => Math.abs(r.cells[m.k].d))));
-  let h = '<thead><tr><th></th>' + ms.map(m => `<th>${m.label}<br>${m.hb ? '↑' : '↓'}</th>`).join('') + '</tr></thead><tbody>';
-  D.table.forEach(r => {
-    h += `<tr class="${r.o === 'current' ? 'base' : ''}"><th class="row"><i style="background:${fam[r.family]}"></i>${r.label}</th>`;
-    ms.forEach(m => {
-      const c = r.cells[m.k];
-      if (r.o === 'current') { h += `<td><span class="v">${f3(c.v)}</span><span class="d">baseline</span></td>`; return; }
-      const good = (m.hb ? 1 : -1) * c.d, a = Math.min(1, Math.abs(c.d) / maxd[m.k]) * 0.6;
-      const sig = Math.abs(c.d) > 2 * c.se;
-      const bg = `rgba(var(${good >= 0 ? '--up' : '--down'}),${(sig ? a : a * 0.35).toFixed(3)})`;
-      h += `<td class="${r.steers.includes(m.k) ? 'own' : ''}" style="background:${bg}"><span class="v">${f3(c.v)}</span><span class="d">${sg(c.d)}±${c.se.toFixed(3)}</span></td>`;
+  const VIEWS = [['cma', 'CMA-ES', 'Change vs the current objective (CMA-ES)', 'better than current'],
+                 ['adam', 'Adam', 'Change vs the current objective (Adam)', 'better than current'],
+                 ['diff', 'Adam − CMA-ES', 'Adam minus CMA-ES, same objective, seed 0', 'Adam better']].filter(v => D.tables[v[0]]);
+  function draw(view) {
+    const T = D.tables[view], ms = D.met, isDiff = view === 'diff';
+    const maxd = {}; ms.forEach(m => maxd[m.k] = Math.max(1e-9, ...T.map(r => Math.abs(r.cells[m.k].d))));
+    let h = '<thead><tr><th></th>' + ms.map(m => `<th>${m.label}<br>${m.hb ? '↑' : '↓'}</th>`).join('') + '</tr></thead><tbody>';
+    T.forEach(r => {
+      const isBase = !isDiff && r.o === 'current';
+      h += `<tr class="${isBase ? 'base' : ''}"><th class="row"><i style="background:${fam[r.family]}"></i>${r.label}</th>`;
+      ms.forEach(m => {
+        const c = r.cells[m.k];
+        if (isBase) { h += `<td><span class="v">${f3(c.v)}</span><span class="d">baseline</span></td>`; return; }
+        const good = (m.hb ? 1 : -1) * c.d, a = Math.min(1, Math.abs(c.d) / maxd[m.k]) * 0.6;
+        const sig = Math.abs(c.d) > 2 * c.se;
+        const bg = `rgba(var(${good >= 0 ? '--up' : '--down'}),${(sig ? a : a * 0.35).toFixed(3)})`;
+        h += `<td class="${!isDiff && r.steers.includes(m.k) ? 'own' : ''}" style="background:${bg}"><span class="v">${f3(c.v)}</span><span class="d">${sg(c.d)}±${c.se.toFixed(3)}</span></td>`;
+      });
+      h += '</tr>';
     });
-    h += '</tr>';
-  });
-  document.getElementById('hm').innerHTML = h + '</tbody>';
+    document.getElementById('hm').innerHTML = h + '</tbody>';
+    const v = VIEWS.find(x => x[0] === view);
+    document.getElementById('hm_title').textContent = v[2];
+    document.getElementById('hm_better').textContent = v[3];
+    document.querySelectorAll('#hmview button').forEach(b => b.setAttribute('aria-selected', b.dataset.v === view));
+  }
+  const seg = document.getElementById('hmview');
+  seg.innerHTML = VIEWS.map(v => `<button role="tab" id="hm-${v[0]}" data-v="${v[0]}">${v[1]}</button>`).join('');
+  seg.hidden = VIEWS.length < 2;
+  seg.addEventListener('click', e => { const b = e.target.closest('button'); if (b) draw(b.dataset.v); });
+  draw('cma');
 })();
 
 function svg(w, h, body) { return `<svg viewBox="0 0 ${w} ${h}" width="100%" role="img">${body}</svg>`; }
@@ -323,9 +403,19 @@ function svg(w, h, body) { return `<svg viewBox="0 0 ${w} ${h}" width="100%" rol
 })();
 (function () {
   const SUBS = [['all', 'All'], ['letters_upper', 'Uppercase'], ['letters_lower', 'Lowercase'], ['digits', 'Digits']];
+  const METHOD = {cma: 'CMA-ES', adam: 'Adam'};
   const on = Object.fromEntries(D.objs.map(o => [o.o, true]));
+  const methods = [...new Set(D.grid.flatMap(g => g.rows.map(r => r.tk)))];
+  const mon = Object.fromEntries(methods.map(m => [m, true]));
   let tab = 'all';
   const counts = s => s === 'all' ? D.grid.length : D.grid.filter(g => g.sub === s).length;
+  document.getElementById('glegend').innerHTML =
+    methods.map(m => `<span><span class="mtag ${m}">${METHOD[m]}</span> shadow tinted ${m === 'cma' ? 'teal' : 'indigo'}</span>`).join('') +
+    (D.has_marks ? '<span><i style="background:#2f8a57"></i>green frame = you marked it good</span>' : '') +
+    '<span>nothing overlaid · seed 0 · caption: IoU · classifier ✓/✗ · CLIP rank</span>';
+  function cell(c, k, g) {
+    return `<figure class="m ${on[D.objs[k].o] ? '' : 'off'} ${c.good ? 'good' : ''}"><img src="${c.uri}" alt="${D.objs[k].o} ${g.label}" loading="lazy"><figcaption>${c.iou.toFixed(2)} <span class="${c.cls ? 'ok' : 'no'}">${c.cls ? '✓' : '✗'}</span> #${c.clip}</figcaption></figure>`;
+  }
   function draw() {
     const head = `<div class="grow h"><span></span><span>target</span>${D.objs.map(o => `<span class="${on[o.o] ? '' : 'off'}" style="color:${fam[o.family]}">${o.o}</span>`).join('')}</div>`;
     let h = '';
@@ -335,8 +425,11 @@ function svg(w, h, body) { return `<svg viewBox="0 0 ${w} ${h}" width="100%" rol
       if (!rows.length) return;
       h += `<div class="subhead">${name}</div>` + head;
       rows.forEach(g => {
-        h += `<div class="grow"><div class="glyph"><b>${g.label}</b></div><figure class="m"><img src="${g.target}" alt="target ${g.label}"></figure>` +
-          g.cells.map((c, k) => `<figure class="m ${on[D.objs[k].o] ? '' : 'off'}"><img src="${c.uri}" alt="${D.objs[k].o} ${g.label}" loading="lazy"><figcaption>${c.iou.toFixed(2)} <span class="${c.cls ? 'ok' : 'no'}">${c.cls ? '✓' : '✗'}</span> #${c.clip}</figcaption></figure>`).join('') + '</div>';
+        const shown = g.rows.filter(r => mon[r.tk]);
+        h += '<div class="pair">' + shown.map((r, j) =>
+          `<div class="grow ${j ? 'second' : ''}"><div class="glyph">${j ? '' : `<b>${g.label}</b>`}<span class="mtag ${r.tk}">${METHOD[r.tk]}</span></div>` +
+          (j ? '<figure class="m empty"></figure>' : `<figure class="m"><img src="${g.target}" alt="target ${g.label}"></figure>`) +
+          r.cells.map((c, k) => cell(c, k, g)).join('') + '</div>').join('') + '</div>';
       });
     });
     document.getElementById('grid').innerHTML = h;
@@ -346,9 +439,14 @@ function svg(w, h, body) { return `<svg viewBox="0 0 ${w} ${h}" width="100%" rol
   tabs.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; tab = b.dataset.s;
     tabs.querySelectorAll('button').forEach(x => x.setAttribute('aria-selected', x === b)); draw(); });
   const chips = document.getElementById('chips');
-  chips.innerHTML = D.objs.map(o => `<button id="chip-${o.o}" aria-pressed="true" data-o="${o.o}" style="color:${fam[o.family]}">${o.o}</button>`).join('');
-  chips.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; on[b.dataset.o] = !on[b.dataset.o];
-    b.setAttribute('aria-pressed', on[b.dataset.o]); draw(); });
+  chips.innerHTML = (methods.length > 1 ? methods.map(m => `<button id="mchip-${m}" aria-pressed="true" data-m="${m}"><span class="mtag ${m}">${METHOD[m]}</span></button>`).join('') + '<span style="width:12px"></span>' : '') +
+    D.objs.map(o => `<button id="chip-${o.o}" aria-pressed="true" data-o="${o.o}" style="color:${fam[o.family]}">${o.o}</button>`).join('');
+  chips.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.m) { if (mon[b.dataset.m] && Object.values(mon).filter(Boolean).length === 1) return; mon[b.dataset.m] = !mon[b.dataset.m]; b.setAttribute('aria-pressed', mon[b.dataset.m]); }
+    else { on[b.dataset.o] = !on[b.dataset.o]; b.setAttribute('aria-pressed', on[b.dataset.o]); }
+    draw();
+  });
   draw();
 })();
 (function () {
