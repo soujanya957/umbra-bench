@@ -36,6 +36,8 @@ OBJ = [  # name, label, family, what it steers with
     ("cls", "IoU + glyph classifier", "semantic", "cls_top1"),
     ("clip", "IoU + CLIP (ViT-B-16)", "semantic", "clip_top1 clip_rr_cc"),
     ("shape3_cls", "shape3 + glyph classifier", "semantic", "boundary_iou cldice holes_filled cls_top1"),
+    ("ivy_mix", "Ivy reader + IoU", "learned", "iou cls_top1"),
+    ("ivy", "Ivy reader alone", "learned", "iou tc_iou cls_top1"),
 ]
 MET = [  # key, label, higher is better, group
     ("iou", "IoU", True, "shape"), ("tc_iou", "tc_iou", True, "shape"), ("boundary_iou", "boundary IoU", True, "shape"),
@@ -179,6 +181,8 @@ def main():
     D = {"n": len(ids), "seeds": seeds_txt, "objs": [{"o": o, "label": l, "family": f} for o, l, f, _ in objs],
          "met": [{"k": k, "label": l, "hb": hb, "group": g} for k, l, hb, g in MET], "table": table,
          "tables": tables, "grid": grid, "has_marks": bool(marks)}
+    ip = os.path.join(FS, "ivy_reader", "report.json")  # scripts/train_ivy_reader.py
+    D["ivy"] = json.load(open(ip, encoding="utf-8")) if os.path.exists(ip) else None
     hp = os.path.join(FS, "human_summary.json")  # scripts/human_summary.py, from the picker page
     D["human"] = json.load(open(hp, encoding="utf-8")) if os.path.exists(hp) else None
     html = TEMPLATE.replace("/*DATA*/", json.dumps(D))
@@ -260,7 +264,7 @@ figure.m figcaption .ok{color:rgb(var(--up))} figure.m figcaption .no{color:rgb(
 svg text{fill:var(--muted);font:11px var(--f-mono)}
 svg .lab{fill:var(--fg);font:11px var(--f-body)}
 .foot{color:var(--muted);font-size:13px;max-width:76ch;margin:0}
-#human[hidden]{display:none}
+#human[hidden],#ivysec[hidden]{display:none}
 .seg{display:flex;gap:0;border:1px solid var(--rule);border-radius:8px;overflow:hidden;width:max-content;max-width:100%}
 .seg button{border:0;border-radius:0;padding:6px 14px;font:500 13px var(--f-body);background:var(--panel);color:var(--muted);cursor:pointer}
 .seg button+button{border-left:1px solid var(--rule)}
@@ -305,8 +309,16 @@ figure.m.empty{visibility:hidden}
       <div class="card"><h3>Shadows you marked as good</h3><p class="note">Marking tab, target visible, any number per character. Bars: share of characters where each objective was marked good.</p><div id="h_marks"></div></div>
     </div>
   </section>
+  <section id="ivysec" hidden>
+    <div class="head"><span class="eyebrow">3 · Ivy reader</span><h2>A model of your judgement</h2></div>
+    <ul class="take" id="ivy_take"></ul>
+    <div class="charts">
+      <div class="card"><h3>How well it predicts you, on characters it never saw</h3><p class="note">5-fold cross-validation with whole characters held out. Marks and guesses: AUC; A/B: share of your choices it gets right. Grey: the best single metric for that task.</p><div id="ivy_cv"></div></div>
+      <div class="card"><h3>What it looks at</h3><p class="note">Drop in mark AUC + guess AUC when one feature is shuffled.</p><div id="ivy_imp"></div></div>
+    </div>
+  </section>
   <section>
-    <div class="head"><span class="eyebrow">3 · every character, every objective</span><h2>Shadows</h2></div>
+    <div class="head"><span class="eyebrow">4 · every character, every objective</span><h2>Shadows</h2></div>
     <div class="tabs" role="tablist" id="tabs"></div>
     <div class="chips" id="chips"></div>
     <div class="legend" id="glegend"></div>
@@ -317,7 +329,7 @@ figure.m.empty{visibility:hidden}
 <script>
 const D = /*DATA*/;
 const f3 = v => v == null ? '–' : v.toFixed(3), sg = v => (v >= 0 ? '+' : '') + v.toFixed(3);
-const fam = {baseline: 'var(--base)', shape: 'var(--shape)', semantic: 'var(--sem)'};
+const fam = {baseline: 'var(--base)', shape: 'var(--shape)', semantic: 'var(--sem)', learned: '#c27c0e'};
 const base = D.table.find(r => r.o === 'current');
 document.getElementById('sub').textContent = `${D.objs.length} objectives on the same ${D.n} letters and digits (${D.seeds}). Every shadow is re-rendered with MuJoCo and graded on all ${D.met.length} metrics.`;
 
@@ -522,6 +534,40 @@ function svg(w, h, body) { return `<svg viewBox="0 0 ${w} ${h}" width="100%" rol
     `<b>Most readable:</b> ${top}. The intervals are about ±14 points, so the leaders are not yet separable; <b>${topMark.o}</b> is also the shadow you marked good most often (${pct(topMark.rate)}).`,
     `<b>Steering with a judge games it.</b> ${fool.o}: the classifier reads ${pct(fool.cls)}, you read ${pct(fool.you)}.`,
   ].map(s => `<li>${s}</li>`).join('');
+})();
+
+(function () {
+  const I = D.ivy; if (!I) return;
+  document.getElementById('ivysec').hidden = false;
+  const cv = I.cv[I.chosen], B = I.baselines;
+  const tasks = [['mark_auc', 'marked good (AUC)'], ['guess_auc', 'read correctly (AUC)'], ['ab_acc', 'A/B choice (accuracy)']];
+  const bestBase = k => Object.entries(B).reduce((a, [f, r]) => r[k] > a[1] ? [f, r[k]] : a, ['', -1]);
+  const W = 520, L = 170, R = 90, bh = 15, gap = 4, grp = 14, x0 = 0.5, x1 = 0.9;
+  const x = v => L + (W - L - R) * (Math.max(x0, v) - x0) / (x1 - x0);
+  let b = '', y = 4;
+  tasks.forEach(([k, lab]) => {
+    const [bf, bv] = bestBase(k);
+    b += `<text class="lab" x="${L - 8}" y="${y + bh + 2}" text-anchor="end">${lab}</text>`;
+    b += `<rect x="${x(x0)}" y="${y}" width="${x(cv[k]) - x(x0)}" height="${bh}" fill="#c27c0e"/><text x="${x(cv[k]) + 6}" y="${y + bh - 3}" style="fill:var(--fg)">${cv[k].toFixed(3)} Ivy reader</text>`;
+    y += bh + gap;
+    b += `<rect x="${x(x0)}" y="${y}" width="${x(bv) - x(x0)}" height="${bh}" fill="var(--base)"/><text x="${x(bv) + 6}" y="${y + bh - 3}">${bv.toFixed(3)} ${bf}</text>`;
+    y += bh + grp;
+  });
+  for (let t = x0; t <= x1 + 1e-9; t += 0.1) b += `<line x1="${x(t)}" x2="${x(t)}" y1="0" y2="${y - grp}" stroke="var(--rule)"/><text x="${x(t)}" y="${y + 4}" text-anchor="middle">${t.toFixed(1)}</text>`;
+  document.getElementById('ivy_cv').innerHTML = svg(W, y + 10, b);
+  const imp = Object.entries(I.importance).sort((p, q) => q[1] - p[1]);
+  const mx = Math.max(...imp.map(p => p[1]), 1e-6);
+  let c = ''; imp.forEach(([f, v], i) => { const yy = i * 22;
+    c += `<text class="lab" x="140" y="${yy + 12}" text-anchor="end">${f}</text><rect x="150" y="${yy}" width="${Math.max(1, 300 * Math.max(0, v) / mx)}" height="15" fill="#c27c0e"/><text x="${156 + 300 * Math.max(0, v) / mx}" y="${yy + 12}">${v.toFixed(3)}</text>`; });
+  document.getElementById('ivy_imp').innerHTML = svg(520, imp.length * 22 + 4, c) +
+    '<p class="note">cls_margin: how much more the glyph classifier believes the right character than the runner-up. emb_cos: how close the shadow is to the target in the classifier\'s feature space. Both are "does it read as this character", beyond plain overlap.</p>';
+  const T = D.tables.cma, iv = T.find(r => r.o === 'ivy'), im = T.find(r => r.o === 'ivy_mix'), dt = T.find(r => r.o === 'dt2');
+  const lines = [
+    `<b>It learned your taste better than any single metric.</b> On characters it never saw it ranks your good marks at AUC ${cv.mark_auc.toFixed(2)} (best single metric ${bestBase('mark_auc')[1].toFixed(2)}), predicts which shadows you can read at ${cv.guess_auc.toFixed(2)} (${bestBase('guess_auc')[1].toFixed(2)}), and gets ${Math.round(100 * cv.ab_acc)}% of your A/B choices (${Math.round(100 * bestBase('ab_acc')[1])}%). Trained on ${I.n.marks} marks, ${I.n.guesses} guesses and ${I.n.pairs} decided A/B pairs.`,
+    `<b>You judge reading, not just overlap.</b> The two features it leans on most besides IoU are the classifier's margin for the right character and the shadow's closeness to the target in the classifier's feature space.`,
+  ];
+  if (iv && im && dt) lines.push(`<b>Alone, it gets gamed; with IoU, it is usable.</b> Optimizing the reader alone drives IoU to ${iv.cells.iou.v.toFixed(2)} (CMA-ES): the search finds shadows the reader likes that are not the target. Half reader, half IoU keeps IoU at ${im.cells.iou.v.toFixed(2)} (dt2: ${dt.cells.iou.v.toFixed(2)}) with classifier top-1 ${Math.round(100 * im.cells.cls_top1.v)}% (dt2: ${Math.round(100 * dt.cells.cls_top1.v)}%). Whether you actually prefer it is the blind A/B tab "Ivy reader vs dt2" in the picker.`);
+  document.getElementById('ivy_take').innerHTML = lines.map(s => `<li>${s}</li>`).join('');
 })();
 
 document.getElementById('foot').textContent =

@@ -230,7 +230,7 @@ table.sum i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-r
     </div>
   </section>
   <section id="abview" class="gv" hidden>
-    <div class="bar"><span class="prog" id="abprog"></span><span class="help">Blind: the two sides are the same objective under the two optimizers, side chosen at random, same ink. Nothing is revealed per question.</span></div>
+    <div class="bar"><span class="prog" id="abprog"></span><span class="help" id="abhelp"></span></div>
     <div class="abdesk">
       <figure class="abside"><img id="abL" alt="left shadow"><figcaption>left</figcaption></figure>
       <figure class="abtgt"><span class="gcat" id="abcat"></span><img id="abT" alt="target"><figcaption>target</figcaption></figure>
@@ -243,8 +243,8 @@ table.sum i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-r
       <button id="ab-bad" data-c="bad"><kbd>4</kbd> Neither looks like it</button>
     </div>
     <div class="charts">
-      <div class="card"><h3>Which optimizer you preferred</h3><p class="note">Ties and "neither" left out of the test; p is a two-sided sign test on the decided pairs.</p><div id="ab_all"></div></div>
-      <div class="card"><h3>By objective</h3><p class="note">Bar = share of decided pairs where Adam won (50% = no preference). Number of decided pairs on the right.</p><div id="ab_obj"></div></div>
+      <div class="card"><h3 id="ab_t1">Which one you preferred</h3><p class="note">Ties and "neither" left out of the test; p is a two-sided sign test on the decided pairs.</p><div id="ab_all"></div></div>
+      <div class="card"><h3 id="ab_t2">By group</h3><p class="note">Bar = share of decided pairs the first-named side won (50% = no preference). Number of decided pairs on the right.</p><div id="ab_obj"></div></div>
     </div>
   </section>
   <div id="markview" hidden>
@@ -281,7 +281,7 @@ table.sum i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-r
 <script>
 const D = /*DATA*/;
 const famOf = Object.fromEntries(D.objs.map(o => [o.o, o.family]));
-const fam = {baseline: 'var(--base)', shape: 'var(--shape)', semantic: 'var(--sem)'};
+const fam = {baseline: 'var(--base)', shape: 'var(--shape)', semantic: 'var(--sem)', learned: '#c27c0e'};
 const KEYS = 'abcdefghijklmnopqrstuvwxyz';
 const $ = id => document.getElementById(id);
 let tab = D.tabs[0].key, mode = 'guess';
@@ -301,10 +301,27 @@ function order(gi) {  // fixed shuffle per glyph so a reload shows the same line
   return a;
 }
 
-const HAS_AB = ['cma', 'adam'].every(k => D.tabs.some(t => t.key === k));
+// ── blind A/B sets ──────────────────────────────────────────────────────
+// A record is [glyph key, group, choice: A value | B value | 'tie' | 'bad' | 'identical', side of B: 'L' | 'R', ms].
+// 'ab' (CMA-ES vs Adam) keeps its original meaning: group = objective, B = CMA-ES.
+const tabOf = k => D.tabs.find(t => t.key === k);
+const AB_SETS = [];
+if (tabOf('cma') && tabOf('adam')) AB_SETS.push({
+  key: 'ab', label: 'A/B · CMA-ES vs Adam', A: 'adam', B: 'cma', Aname: 'Adam', Bname: 'CMA-ES', Acol: '#3a3fb0', Bcol: '#0f6e66',
+  groupName: 'objective', items: () => tabOf('cma').objs.flatMap(o => tabOf('cma').glyphs.map(g => {
+    const a = tabOf('adam').glyphs.find(x => x.key === g.key);
+    return a ? {gk: g.key, group: o, g, a: a.cands.find(c => c.o === o), b: g.cands.find(c => c.o === o)} : null; })).filter(x => x && x.a && x.b)});
+const IVY_OPTS = D.tabs.filter(t => t.objs.includes('ivy_mix') && t.objs.includes('dt2'));
+if (IVY_OPTS.length) AB_SETS.push({
+  key: 'ab_ivy', label: 'A/B · Ivy reader vs dt2', A: 'ivy', B: 'dt2', Aname: 'Ivy reader + IoU', Bname: 'dt2', Acol: '#c27c0e', Bcol: 'var(--shape)',
+  groupName: 'optimizer', items: () => IVY_OPTS.flatMap(t => t.glyphs.map(g => ({gk: g.key, group: t.key, g,
+    a: g.cands.find(c => c.o === 'ivy_mix'), b: g.cands.find(c => c.o === 'dt2')}))).filter(x => x.a && x.b)});
+AB_SETS.forEach(S => { S.all = S.items(); if (!store[S.key]) store[S.key] = []; });
+let abKey = AB_SETS.length ? AB_SETS[0].key : null;
+const SET = () => AB_SETS.find(S => S.key === abKey);
 function renderTabs() {
   $('tabs').innerHTML = `<button role="tab" id="tab-guess" aria-selected="${mode === 'guess'}" data-m="guess">Guess the glyph<span class="n">${store.guesses.length}</span></button>` +
-    (HAS_AB ? `<button role="tab" id="tab-ab" aria-selected="${mode === 'ab'}" data-m="ab">A/B · CMA-ES vs Adam<span class="n">${store.ab.length}</span></button>` : '') +
+    AB_SETS.map(S => `<button role="tab" id="tab-${S.key}" aria-selected="${mode === 'ab' && abKey === S.key}" data-m="ab" data-s="${S.key}">${S.label}<span class="n">${store[S.key].length}</span></button>`).join('') +
     D.tabs.map(t => `<button role="tab" id="tab-${t.key}" aria-selected="${mode === 'mark' && t.key === tab}" data-m="mark" data-t="${t.key}">Mark good · ${t.label}<span class="n">${t.glyphs.filter(g => judged(store[t.key][g.key])).length}/${t.glyphs.length}</span></button>`).join('');
 }
 function render() {
@@ -314,37 +331,26 @@ function render() {
   if (mode === 'guess') { renderTabs(); renderGuess(); } else if (mode === 'ab') { renderTabs(); renderAB(); } else renderDesk();
 }
 
-// ── A/B: CMA-ES vs Adam, blind ──────────────────────────────────────────
-// a record is [glyph key, objective, choice: 'cma' | 'adam' | 'tie' | 'bad' | 'identical', side of CMA-ES: 'L' | 'R', ms]
 let ab = null;
-function abPair(gk, o) {
-  const c = D.tabs.find(t => t.key === 'cma').glyphs.find(g => g.key === gk);
-  const a = D.tabs.find(t => t.key === 'adam').glyphs.find(g => g.key === gk);
-  if (!c || !a) return null;
-  const cc = c.cands.find(x => x.o === o), ac = a.cands.find(x => x.o === o);
-  return cc && ac ? {g: c, cma: cc, adam: ac} : null;
-}
 function nextAB() {
-  const cg = D.tabs.find(t => t.key === 'cma'), objs = cg.objs;
-  const done = new Set(store.ab.map(r => r[0] + '|' + r[1]));
-  const count = {}; store.ab.forEach(r => { count[r[1]] = (count[r[1]] || 0) + 1; });
-  const recent = new Set(store.ab.slice(-6).map(r => r[0]));
-  const open = objs.filter(o => cg.glyphs.some(g => !done.has(g.key + '|' + o)));
+  const S = SET(), recs = store[S.key];
+  const done = new Set(recs.map(r => r[0] + '|' + r[1]));
+  const count = {}; recs.forEach(r => { count[r[1]] = (count[r[1]] || 0) + 1; });
+  const recent = new Set(recs.slice(-6).map(r => r[0]));
+  const open = S.all.filter(it => !done.has(it.gk + '|' + it.group));
   if (!open.length) { ab = null; return; }
-  const minN = Math.min(...open.map(o => count[o] || 0));
-  const pool = open.filter(o => (count[o] || 0) === minN);
-  const o = pool[Math.floor(Math.random() * pool.length)];
-  let gs = cg.glyphs.filter(g => !done.has(g.key + '|' + o) && !recent.has(g.key));
-  if (!gs.length) gs = cg.glyphs.filter(g => !done.has(g.key + '|' + o));
-  const g = gs[Math.floor(Math.random() * gs.length)];
-  const p = abPair(g.key, o);
-  if (!p || p.cma.img === p.adam.img) { store.ab.push([g.key, o, 'identical', 'L', 0]); return nextAB(); }  // nothing to judge
-  ab = {...p, o, cmaSide: Math.random() < 0.5 ? 'L' : 'R', t0: performance.now()};
+  const minN = Math.min(...open.map(it => count[it.group] || 0));
+  let pool = open.filter(it => (count[it.group] || 0) === minN && !recent.has(it.gk));
+  if (!pool.length) pool = open.filter(it => (count[it.group] || 0) === minN);
+  const it = pool[Math.floor(Math.random() * pool.length)];
+  if (it.a.img === it.b.img) { recs.push([it.gk, it.group, 'identical', 'L', 0]); return nextAB(); }  // nothing to judge
+  ab = {...it, bSide: Math.random() < 0.5 ? 'L' : 'R', t0: performance.now()};
 }
 function answerAB(c) {
   if (!ab) return;
-  const choice = c === 'tie' || c === 'bad' ? c : (c === ab.cmaSide ? 'cma' : 'adam');
-  store.ab.push([ab.g.key, ab.o, choice, ab.cmaSide, Math.round(performance.now() - ab.t0)]);
+  const S = SET();
+  const choice = c === 'tie' || c === 'bad' ? c : (c === ab.bSide ? S.B : S.A);
+  store[S.key].push([ab.gk, ab.group, choice, ab.bSide, Math.round(performance.now() - ab.t0)]);
   save(); nextAB(); renderAB();
 }
 function signP(a, b) {  // two-sided exact sign test
@@ -354,11 +360,14 @@ function signP(a, b) {  // two-sided exact sign test
   return Math.min(1, 2 * s / Math.pow(2, n));
 }
 function renderAB() {
-  if (!ab) nextAB();
-  const total = D.tabs.find(t => t.key === 'cma').glyphs.length * D.tabs.find(t => t.key === 'cma').objs.length;
-  $('abprog').innerHTML = `<b>${store.ab.length}</b> / ${total} pairs judged`;
+  const S = SET();
+  if (!ab || ab.setKey !== S.key) { ab = null; nextAB(); if (ab) ab.setKey = S.key; }
+  $('abprog').innerHTML = `<b>${store[S.key].length}</b> / ${S.all.length} pairs judged`;
+  $('abhelp').textContent = `Blind: one side is ${S.Aname}, the other ${S.Bname}, same character and ${S.groupName === 'objective' ? 'objective' : 'optimizer'}, side chosen at random, same ink. Nothing is revealed per question.`;
+  $('ab_t1').textContent = `Which one you preferred: ${S.Aname} vs ${S.Bname}`;
+  $('ab_t2').textContent = `By ${S.groupName}`;
   if (ab) {
-    const L = ab.cmaSide === 'L' ? ab.cma : ab.adam, R = ab.cmaSide === 'L' ? ab.adam : ab.cma;
+    const L = ab.bSide === 'L' ? ab.b : ab.a, R = ab.bSide === 'L' ? ab.a : ab.b;
     $('abL').src = L.img; $('abR').src = R.img; $('abT').src = ab.g.target;
     $('abcat').textContent = ab.g.label + ' · ' + {letters_upper: 'uppercase', letters_lower: 'lowercase', digits: 'digit'}[ab.g.sub];
   } else { $('abprog').innerHTML += ' · all done, thank you'; }
@@ -366,18 +375,19 @@ function renderAB() {
   renderTabs(); renderABSummary();
 }
 function renderABSummary() {
-  const R = store.ab.filter(r => r[2] !== 'identical');  // identical images were never shown
+  const S = SET(), R = store[S.key].filter(r => r[2] !== 'identical');  // identical images were never shown
   if (!R.length) { $('ab_all').innerHTML = $('ab_obj').innerHTML = '<p class="empty">Judge a few pairs and the results appear here.</p>'; return; }
   const n = c => R.filter(r => r[2] === c).length;
-  const a = n('adam'), c = n('cma'), t = n('tie'), b = n('bad'), p = signP(a, c);
-  const rows = [{label: 'Adam better', v: a / R.length, color: '#3a3fb0'}, {label: 'CMA-ES better', v: c / R.length, color: '#0f6e66'},
+  const a = n(S.A), c = n(S.B), t = n('tie'), b = n('bad'), p = signP(a, c);
+  const rows = [{label: S.Aname + ' better', v: a / R.length, color: S.Acol}, {label: S.Bname + ' better', v: c / R.length, color: S.Bcol},
     {label: 'about the same', v: t / R.length, color: 'var(--base)'}, {label: 'neither', v: b / R.length, color: 'var(--none)'}];
   $('ab_all').innerHTML = hbars(rows, r => Math.round(100 * r.v) + '%') +
-    `<p class="note">${R.length} pairs. Of the ${a + c} decided, Adam won ${a + c ? Math.round(100 * a / (a + c)) : 0}% (p = ${p < 0.001 ? p.toExponential(1) : p.toFixed(3)}).</p>`;
+    `<p class="note">${R.length} pairs. Of the ${a + c} decided, ${S.Aname} won ${a + c ? Math.round(100 * a / (a + c)) : 0}% (p = ${p < 0.001 ? p.toExponential(1) : p.toFixed(3)}).</p>`;
   const by = {};
-  R.forEach(r => { const x = by[r[1]] = by[r[1]] || {a: 0, c: 0}; if (r[2] === 'adam') x.a++; if (r[2] === 'cma') x.c++; });
-  const orow = Object.entries(by).filter(([, x]) => x.a + x.c > 0).map(([o, x]) => ({label: o, v: x.a / (x.a + x.c), n: x.a + x.c, color: fam[famOf[o]]}))
-    .sort((x, y) => y.v - x.v);
+  R.forEach(r => { const x = by[r[1]] = by[r[1]] || {a: 0, c: 0}; if (r[2] === S.A) x.a++; if (r[2] === S.B) x.c++; });
+  const gname = g => S.groupName === 'optimizer' ? (tabOf(g) ? tabOf(g).label : g) : g;
+  const orow = Object.entries(by).filter(([, x]) => x.a + x.c > 0).map(([g, x]) => ({label: gname(g), v: x.a / (x.a + x.c), n: x.a + x.c,
+    color: S.groupName === 'objective' ? fam[famOf[g]] : S.Acol})).sort((x, y) => y.v - x.v);
   $('ab_obj').innerHTML = orow.length ? hbars(orow, r => `${Math.round(100 * r.v)}% · ${r.n}`) : '<p class="empty">No decided pairs yet.</p>';
 }
 document.querySelector('.abbtns').addEventListener('click', e => { const b = e.target.closest('button'); if (b && !b.disabled) answerAB(b.dataset.c); });
@@ -564,6 +574,7 @@ function renderStats() {
 $('tabs').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   mode = b.dataset.m; if (b.dataset.t) tab = b.dataset.t;
+  if (b.dataset.s && b.dataset.s !== abKey) { abKey = b.dataset.s; ab = null; }
   render();
 });
 $('line').addEventListener('click', e => { const b = e.target.closest('.cand'); if (b) toggle(b.dataset.o); });
@@ -603,7 +614,7 @@ render();
     for (const t of D.tabs) store[t.key] = {...(data[t.key] || {}), ...store[t.key]};
     for (const k of Object.keys(data)) if (!(k in store) && k !== 'picks' && k !== 'updated') store[k] = data[k];  // tabs not built yet (e.g. adam) keep their marks
     store.guesses = [...(Array.isArray(data.guesses) ? data.guesses : []), ...store.guesses];
-    store.ab = [...(Array.isArray(data.ab) ? data.ab : []), ...store.ab];
+    for (const S of AB_SETS) store[S.key] = [...(Array.isArray(data[S.key]) ? data[S.key] : []), ...store[S.key]];
     let migrated = 0;
     if (legacy && !data.cma && store.cma) {  // v1: best/second → good set
       for (const [k, v] of Object.entries(legacy)) {

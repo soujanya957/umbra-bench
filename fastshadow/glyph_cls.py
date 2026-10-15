@@ -90,6 +90,13 @@ class GlyphClassifier:
         return logits.softmax(1)[:, SUBSET_CLASSES[subset].index(label)]
 
     @torch.no_grad()
+    def logits_embed(self, M: torch.Tensor):
+        """All-class logits and the 256-d penultimate embedding of the ink crop."""
+        h = self.net.f(crop_center(M.to(self.dev)))
+        e = self.net.h[3](self.net.h[2](self.net.h[1](self.net.h[0](h))))  # flatten, dropout, linear, relu
+        return self.net.h[4](e), e
+
+    @torch.no_grad()
     def rank(self, M: torch.Tensor, subset: str, label: str):
         logits = self.net(crop_center(M.to(self.dev)))[:, self.idx[subset]]
         t = SUBSET_CLASSES[subset].index(label)

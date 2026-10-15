@@ -190,6 +190,9 @@ OBJECTIVES = {
     "cls": lambda S, t: 1 - iou_t(S, t.T) + SEM_W * (1 - _p_cls(S, t)),
     "clip": lambda S, t: 1 - iou_t(S, t.T) + SEM_W * (1 - _p_clip(S, t)),
     "shape3": _shape3,
+    # learned from Ivy's picks (fastshadow/ivy_reader.py); imported lazily, it imports this module
+    "ivy": lambda S, t: __import__("fastshadow.ivy_reader", fromlist=["ivy_loss"]).ivy_loss(S, t),
+    "ivy_mix": lambda S, t: __import__("fastshadow.ivy_reader", fromlist=["ivy_mix_loss"]).ivy_mix_loss(S, t),
     "shape3_cls": lambda S, t: _shape3(S, t) + SEM_W * (1 - _p_cls(S, t)),
 }
 
