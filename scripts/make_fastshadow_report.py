@@ -331,6 +331,8 @@ table.cmp td.n{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
 table.cmp td.f{color:var(--fast);font-weight:500}
 table.cmp .grp{color:var(--muted);font-size:12px}
 #arr[hidden]{display:none}
+#arr_kpis{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+#arr_kpis .kpi .v{font-size:24px}
 .arrgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
 .arrcard{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:12px;display:grid;gap:6px;align-content:start}
 .arrcard h4{margin:0;font:600 14px var(--f-display)}
@@ -596,7 +598,11 @@ sweep('sweep_sec', 'sec', v => v.toFixed(1), ' s');
   const overall = S.reduce((a, b) => b.best_iou > a.best_iou ? b : a);
   const bc = A.opts.includes('cma') ? bestRow('cma') : null, ba = A.opts.includes('adam') ? bestRow('adam') : null;
   document.getElementById('arr_sub').textContent = `Three SO-101s on sliders. Light, wall and camera stay put; the bases move in the table plane. Each arrangement has two spacings, x and y, optimized together with the 18 joint angles. Objective: ${A.meta.objective} (IoU + two-sided distance), the shape objective people preferred. ${A.n} digits; CMA-ES ${A.meta.args.cma_seeds} seeds, Adam ${A.meta.args.adam_seeds} seeds of ${A.meta.args.adam_restarts} starts. Every result re-rendered and contact-checked by MuJoCo with the optimized base positions.`;
-  const kp = [[f3(overall.best_iou), `best IoU: ${NAME[overall.config]}, ${OPT[overall.opt][0]}`, OPT[overall.opt][1]]];
+  const kp = [[f3(overall.best_iou), `best single arrangement: ${NAME[overall.config]}, ${OPT[overall.opt][0]}`, OPT[overall.opt][1]]];
+  if (A.oracle && A.oracle.any) {
+    const O = A.oracle.any, fx = fixedRow(overall.opt), wins = Object.entries(O.opts).map(([o, n]) => `${OPT[o][0]} ${n}`).join(', ');
+    kp.unshift([f3(O.iou), `each digit in its own best arrangement${fx ? ` (${(O.iou - fx.best_iou >= 0 ? '+' : '') + f3(O.iou - fx.best_iou)} vs fixed column)` : ''}; best per digit: ${wins} of ${A.n}`, 'var(--good)']);
+  }
   A.opts.forEach(o => {
     const f = fixedRow(o), b = S.filter(r => r.opt === o && r.config !== 'fixed').reduce((x, y) => y.best_iou > x.best_iou ? y : x, {best_iou: -1});
     if (f && b.config) kp.push([(b.best_iou - f.best_iou >= 0 ? '+' : '') + f3(b.best_iou - f.best_iou), `${OPT[o][0]}: best movable arrangement (${NAME[b.config].split(' (')[0].toLowerCase()}) minus the fixed column`, OPT[o][1]]);

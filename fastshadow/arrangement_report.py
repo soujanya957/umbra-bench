@@ -45,8 +45,9 @@ def load(bench: str):
     if not ids:
         return None
 
-    def best(rs):  # best of seeds by IoU against the shown target
-        return max(rs, key=lambda r: r["iou"])
+    def best(rs):  # best collision-free seed by IoU against the shown target
+        ok = [r for r in rs if r["collision_free"]] or rs
+        return max(ok, key=lambda r: r["iou"])
 
     summary = []
     for c in configs:
@@ -77,7 +78,7 @@ def load(bench: str):
             pts = []
             for k in range(1, K + 1):
                 pts.append({"k": k, "sec": float(np.mean([sum(r["seconds"] for r in g[:k]) for g in groups])),
-                            "iou": float(np.mean([max(r["iou"] for r in g[:k]) for g in groups]))})
+                            "iou": float(np.mean([best(g[:k])["iou"] for g in groups]))})
             curves[f"{c}|{o}"] = pts
     # per digit gallery
     root = os.path.join(bench, "optimized", "big-budget-grounded")
@@ -96,5 +97,16 @@ def load(bench: str):
                            "sec_all": float(sum(r["seconds"] for r in by[(i, c, o)])), "n": len(by[(i, c, o)])}
             cells.append(cell)
         digits.append({"id": i, "digit": stem.split("_")[0], "target": _uri(T, INK), "cells": cells})
-    return {"meta": {"objective": meta["objective"], "arrangements": meta["arrangements"], "args": meta["args"]},
+    # per digit, the best over everything (any arrangement, either optimizer), and per optimizer
+    oracle = {}
+    for o in opts + ["any"]:
+        ch = []
+        for i in ids:
+            cand = [best(by[(i, c, oo)]) for c in configs for oo in (opts if o == "any" else [o])]
+            b = max(cand, key=lambda r: r["iou"])
+            ch.append(b)
+        oracle[o] = {"iou": float(np.mean([b["iou"] for b in ch])),
+                     "configs": {c: sum(b["config"] == c for b in ch) for c in configs},
+                     "opts": {oo: sum(b["optimizer"] == oo for b in ch) for oo in opts}}
+    return {"oracle": oracle, "meta": {"objective": meta["objective"], "arrangements": meta["arrangements"], "args": meta["args"]},
             "configs": configs, "opts": opts, "n": len(ids), "summary": summary, "curves": curves, "digits": digits}
