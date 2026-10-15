@@ -208,6 +208,9 @@ def main():
         "grad_ms": pset["soft_fwd_bwd_ms_per_pose_b48"], "tri": pset["triangles"], "tri_raw": pset["triangles_raw"],
         "scatter": [{"id": i, "c": float(c_f[k]), "g": float(g[k]), "s": prow[i]["subset"]} for k, i in enumerate(ids)],
     }
+    from fastshadow.arrangement_report import load as load_arrangement
+
+    D["arr"] = load_arrangement(BENCH)  # robot arrangement + spacing study, if run
     html = render_html(D, feat, allc, par, main_m)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
@@ -327,6 +330,26 @@ table.cmp thead th{border-top:0;font:500 12px var(--f-mono);letter-spacing:.04em
 table.cmp td.n{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
 table.cmp td.f{color:var(--fast);font-weight:500}
 table.cmp .grp{color:var(--muted);font-size:12px}
+#arr[hidden]{display:none}
+.arrgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.arrcard{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:12px;display:grid;gap:6px;align-content:start}
+.arrcard h4{margin:0;font:600 14px var(--f-display)}
+.arrcard p{margin:0;font-size:12px;color:var(--muted)}
+.arrcard svg text{font:11px var(--f-mono)}
+table.cmp td.best{color:var(--good);font-weight:600}
+table.cmp .optc{font:600 11px var(--f-mono);padding:2px 6px;border-radius:3px;color:#fff}
+.dgrid{display:grid;gap:10px;width:max-content}
+.drow{display:grid;grid-template-columns:70px repeat(var(--nc),190px);gap:10px;align-items:start;padding-block:8px;border-top:1px solid var(--rule)}
+.drow.h{font:500 11px var(--f-mono);color:var(--muted);text-transform:uppercase;border-top:0;padding-block:0}
+.dlab{display:grid;gap:4px;justify-items:start}
+.dlab b{font:600 28px/1 var(--f-display)}
+.dlab img{width:64px;height:64px;image-rendering:pixelated;background:var(--wall);border-radius:3px}
+.dcell{display:grid;gap:4px;background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:6px}
+.dcell .pair{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.dcell img{width:100%;aspect-ratio:1;image-rendering:pixelated;background:var(--wall);border-radius:3px;display:block}
+.dcell .cap{font:11px/1.3 var(--f-mono);color:var(--muted)}
+.dcell .cap b{font-weight:600}
+.dcell .win{outline:2px solid var(--good);outline-offset:-2px}
 </style>
 <div class="wrap">
   <header class="head">
@@ -383,6 +406,20 @@ table.cmp .grp{color:var(--muted);font-size:12px}
     <div class="tiles"><!--TILES--></div>
   </section>
 
+  <section id="arr" hidden>
+    <div class="head"><span class="eyebrow">4 · robot arrangement · digits 0–9</span><h2>Let the robots move: arrangement and spacing as variables</h2></div>
+    <p class="sub" id="arr_sub"></p>
+    <div class="kpis" id="arr_kpis"></div>
+    <div class="arrgrid" id="arr_ill"></div>
+    <div class="card"><h3>Every arrangement, both optimizers</h3><p class="note" id="arr_tnote"></p><div class="scroll"><table class="cmp" id="arr_table"></table></div></div>
+    <div class="charts">
+      <div class="card"><h3>Best IoU by arrangement</h3><p class="note">Best of the seeds, mean over the 10 digits. Faded bar: mean IoU of a single solve.</p><div id="arr_bars"></div></div>
+      <div class="card"><h3>IoU for the time spent</h3><p class="note">Best-of-k seeds against the seconds those k solves took, mean over digits. Solid: the best arrangement for that optimizer; dashed: the fixed column.</p><div id="arr_budget"></div></div>
+    </div>
+    <div class="head"><h2 style="font-size:18px">Every digit</h2></div>
+    <div class="legend"><span><i style="background:#0f6e66"></i>CMA-ES (best seed)</span><span><i style="background:#3a3fb0"></i>Adam (best seed)</span><span>top-down sketch: optimized base positions of both, light above, wall below</span><span>⚠ = MuJoCo contact</span></div>
+    <div class="scroll"><div class="dgrid" id="arr_digits"></div></div>
+  </section>
   <p class="foot" id="foot"></p>
 </div>
 <script>
@@ -499,6 +536,138 @@ sweep('sweep_sec', 'sec', v => v.toFixed(1), ' s');
     b += `<text class="lab" x="${cx}" y="${H - 10}" text-anchor="middle">${s.name} (${s.n})</text>`; });
   document.getElementById('subsets').innerHTML = svg(W, H, b) +
     `<div class="legend"><span><i style="background:var(--cma)"></i>CMA-ES · MuJoCo</span><span><i style="background:var(--fast)"></i>CMA-ES · nvdiffrast</span><span><i style="background:var(--grad)"></i>Adam</span></div>`;
+})();
+
+// ── 4 · robot arrangement study ────────────────────────────────────────
+(function () {
+  const A = D.arr; if (!A) return;
+  document.getElementById('arr').hidden = false;
+  const OPT = {cma: ['CMA-ES', '#0f6e66'], adam: ['Adam', '#3a3fb0']};
+  const NAME = {fixed: 'Fixed column (0.2 m)', ...Object.fromEntries(Object.entries(A.meta.arrangements).map(([k, v]) => [k, v.label]))};
+  const R2 = Math.SQRT1_2;
+  const POS = {
+    fixed: () => [[0, 0], [0, -0.2], [0, -0.4]],
+    column: (x, y) => [[0, 0], [0, -x], [0, -x - y]],
+    row: (x, y) => [[-x, -0.2], [0, -0.2], [y, -0.2]],
+    triangle: (x, y) => [[0, 0], [-x / 2, -y], [x / 2, -y]],
+    diagonal: (x, y) => [[0, 0], [x * R2, -x * R2], [(x + y) * R2, -(x + y) * R2]],
+  };
+  const lo = 0.12, hi = 0.45;
+  // top-down sketch: x lateral (right), depth y (up toward the light)
+  function sketch(sets, opt = {}) {
+    const W = opt.w || 200, H = opt.h || 190;
+    const X0 = opt.mini ? -0.75 : -0.6, X1 = -X0, Y0 = opt.mini ? 0.2 : 0.15, Y1 = opt.mini ? -1.0 : -0.95;
+    const sx = v => 12 + (W - 24) * (v - X0) / (X1 - X0), sy = v => 22 + (H - 44) * (v - Y0) / (Y1 - Y0);
+    const k = (W - 24) / (X1 - X0);
+    let b = `<rect x="0" y="0" width="${W}" height="${H}" fill="var(--bg)" rx="4"/>`;
+    b += `<text x="${W / 2}" y="13" text-anchor="middle" style="fill:var(--muted)">☀ light</text>`;
+    b += `<line x1="10" x2="${W - 10}" y1="${H - 9}" y2="${H - 9}" stroke="var(--fg)" stroke-width="3"/><text x="${W / 2}" y="${H - 13}" text-anchor="middle" style="fill:var(--muted)">wall</text>`;
+    sets.forEach(({pts, color, dims, labels}) => {
+      (dims || []).forEach(([a, c, lab, dashed]) => {
+        const [x1, y1] = a, [x2, y2] = c;
+        b += `<line x1="${sx(x1)}" y1="${sy(y1)}" x2="${sx(x2)}" y2="${sy(y2)}" stroke="var(--extra)" stroke-width="1.6" ${dashed ? 'stroke-dasharray="3 3"' : ''} marker-start="url(#ar)" marker-end="url(#ar)"/>`;
+        const mx = (sx(x1) + sx(x2)) / 2, my = (sy(y1) + sy(y2)) / 2, vert = Math.abs(x1 - x2) < 1e-6;
+        const left = vert && dashed;  // a side marker (triangle's y) is labelled on its outer side
+        b += `<text x="${mx + (vert ? (left ? -8 : 10) : 0)}" y="${my + (vert ? 4 : -7)}" text-anchor="${vert ? (left ? 'end' : 'start') : 'middle'}" style="fill:var(--extra);font-weight:600">${lab}</text>`;
+      });
+      pts.forEach(([x, y], i) => {
+        const r = Math.max(0.05 * k, opt.mini ? 5 : 7);  // a 10 cm base, but never too small to see
+        b += `<circle cx="${sx(x)}" cy="${sy(y)}" r="${r}" fill="${color}" fill-opacity="${opt.mini ? 0.85 : 1}"/>`;
+        b += `<path d="M${sx(x) - r * 0.5},${sy(y) + r * 0.2} L${sx(x) + r * 0.5},${sy(y) + r * 0.2} L${sx(x)},${sy(y) + r * 1.1} Z" fill="var(--bg)"/>`;
+        if (labels !== false) b += `<text x="${sx(x)}" y="${sy(y) - r - 3}" text-anchor="middle" style="fill:var(--fg)">${i + 1}</text>`;
+      });
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img"><defs><marker id="ar" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--extra)"/></marker></defs>${b}</svg>`;
+  }
+  function dimsFor(c, p) {
+    if (c === 'fixed') return [[p[0], p[1], '0.2'], [p[1], p[2], '0.2']];
+    if (c === 'triangle') { const xo = p[1][0] - 0.12; return [[p[1], p[2], 'x'], [[xo, p[0][1]], [xo, p[1][1]], 'y', true]]; }
+    return [[p[0], p[1], 'x'], [p[1], p[2], 'y']];
+  }
+  document.getElementById('arr_ill').innerHTML = A.configs.map(c => {
+    const p = c === 'fixed' ? POS.fixed() : POS[c](0.28, 0.28);
+    const m = A.meta.arrangements[c];
+    return `<div class="arrcard"><h4>${NAME[c]}</h4>${sketch([{pts: p, color: 'var(--fg)', dims: dimsFor(c, p)}])}<p>${c === 'fixed' ? 'The rig so far: spacing fixed, only the 18 joints move.' : `x: ${m.x}<br>y: ${m.y}<br>both ${lo}–${hi} m, optimized with the joints`}</p></div>`;
+  }).join('');
+
+  const S = A.summary, f3 = v => v.toFixed(3);
+  const bestRow = o => S.filter(r => r.opt === o).reduce((a, b) => b.best_iou > a.best_iou ? b : a);
+  const fixedRow = o => S.find(r => r.opt === o && r.config === 'fixed');
+  const overall = S.reduce((a, b) => b.best_iou > a.best_iou ? b : a);
+  const bc = A.opts.includes('cma') ? bestRow('cma') : null, ba = A.opts.includes('adam') ? bestRow('adam') : null;
+  document.getElementById('arr_sub').textContent = `Three SO-101s on sliders. Light, wall and camera stay put; the bases move in the table plane. Each arrangement has two spacings, x and y, optimized together with the 18 joint angles. Objective: ${A.meta.objective} (IoU + two-sided distance), the shape objective people preferred. ${A.n} digits; CMA-ES ${A.meta.args.cma_seeds} seeds, Adam ${A.meta.args.adam_seeds} seeds of ${A.meta.args.adam_restarts} starts. Every result re-rendered and contact-checked by MuJoCo with the optimized base positions.`;
+  const kp = [[f3(overall.best_iou), `best IoU: ${NAME[overall.config]}, ${OPT[overall.opt][0]}`, OPT[overall.opt][1]]];
+  A.opts.forEach(o => {
+    const f = fixedRow(o), b = S.filter(r => r.opt === o && r.config !== 'fixed').reduce((x, y) => y.best_iou > x.best_iou ? y : x, {best_iou: -1});
+    if (f && b.config) kp.push([(b.best_iou - f.best_iou >= 0 ? '+' : '') + f3(b.best_iou - f.best_iou), `${OPT[o][0]}: best movable arrangement (${NAME[b.config].split(' (')[0].toLowerCase()}) minus the fixed column`, OPT[o][1]]);
+  });
+  if (bc && ba) kp.push([`${bc.sec.toFixed(1)} / ${ba.sec.toFixed(1)} s`, 'per solve, CMA-ES / Adam (best arrangements)', 'var(--fg)']);
+  document.getElementById('arr_kpis').innerHTML = kp.map(([v, l, c]) => `<div class="kpi"><span class="v" style="color:${c}">${v}</span><span class="l">${l}</span></div>`).join('');
+
+  const cols = [['best_iou', 'best IoU', 1], ['mean_iou', 'IoU / solve', 1], ['best_tc', 'tc_iou', 1], ['best_cls', 'classifier', 1], ['cf', 'collision-free', 1], ['sec', 's / solve', 0], ['sec_target', 's / digit', 0]];
+  const best = {}; cols.forEach(([k, , hb]) => { const v = S.map(r => r[k]); best[k] = hb ? Math.max(...v) : Math.min(...v); });
+  document.getElementById('arr_tnote').textContent = 'Best IoU, tc_iou and classifier are the best seed per digit (by IoU), averaged over digits; IoU / solve, collision-free and seconds average every solve. s / digit = all seeds for one digit. x̄, ȳ: mean optimized spacing of the best seeds; "at 0.12 m" = share of best seeds with a spacing on the lower limit.';
+  document.getElementById('arr_table').innerHTML = `<thead><tr><th>arrangement</th><th>optimizer</th>${cols.map(c => `<th>${c[1]}</th>`).join('')}<th>x̄ (m)</th><th>ȳ (m)</th><th>at 0.12 m</th></tr></thead><tbody>` +
+    S.map(r => `<tr><th>${NAME[r.config]}</th><td><span class="optc" style="background:${OPT[r.opt][1]}">${OPT[r.opt][0]}</span></td>` +
+      cols.map(([k, , hb]) => `<td class="n ${Math.abs(r[k] - best[k]) < 1e-9 ? 'best' : ''}">${k === 'cf' || k === 'best_cls' ? Math.round(100 * r[k]) + '%' : k.startsWith('sec') ? r[k].toFixed(1) : f3(r[k])}</td>`).join('') +
+      `<td class="n">${r.config === 'fixed' ? '0.20' : r.gap_x.toFixed(2)}</td><td class="n">${r.config === 'fixed' ? '0.20' : r.gap_y.toFixed(2)}</td><td class="n">${r.at_lo == null ? '–' : Math.round(100 * r.at_lo) + '%'}</td></tr>`).join('') + '</tbody>';
+
+  // grouped bars
+  (function () {
+    const W = 520, L = 150, R = 60, bh = 13, gap = 3, grp = 12;
+    const rows = []; A.configs.forEach(c => A.opts.forEach(o => rows.push(S.find(r => r.config === c && r.opt === o))));
+    const vals = rows.flatMap(r => [r.best_iou, r.mean_iou]);
+    const x0 = Math.floor(Math.min(...vals) * 10) / 10, x1 = Math.min(1, Math.ceil(Math.max(...vals) * 20) / 20);
+    const x = v => L + (W - L - R) * (v - x0) / (x1 - x0);
+    let b = '', y = 4;
+    A.configs.forEach(c => {
+      b += `<text class="lab" x="${L - 8}" y="${y + bh + 4}" text-anchor="end">${NAME[c].split(' (')[0]}</text>`;
+      A.opts.forEach(o => { const r = S.find(q => q.config === c && q.opt === o);
+        b += `<rect x="${x(x0)}" y="${y}" width="${Math.max(1, x(r.mean_iou) - x(x0))}" height="${bh}" fill="${OPT[o][1]}" opacity=".3"/><rect x="${x(x0)}" y="${y}" width="${Math.max(1, x(r.best_iou) - x(x0))}" height="${bh}" fill="${OPT[o][1]}" opacity=".9"><title>${OPT[o][0]} ${NAME[c]}: best ${f3(r.best_iou)}, per solve ${f3(r.mean_iou)}</title></rect><text x="${x(r.best_iou) + 6}" y="${y + bh - 2}">${f3(r.best_iou)}</text>`;
+        y += bh + gap; });
+      y += grp;
+    });
+    for (let t = x0; t <= x1 + 1e-9; t += 0.05) b += `<line x1="${x(t)}" x2="${x(t)}" y1="0" y2="${y - grp}" stroke="var(--rule)"/><text x="${x(t)}" y="${y + 6}" text-anchor="middle">${t.toFixed(2)}</text>`;
+    document.getElementById('arr_bars').innerHTML = svg(W, y + 12, b) + `<div class="legend"><span><i style="background:#0f6e66"></i>CMA-ES</span><span><i style="background:#3a3fb0"></i>Adam</span></div>`;
+  })();
+
+  // budget curves
+  (function () {
+    const lines = [];
+    A.opts.forEach(o => { const b = bestRow(o); lines.push([o, b.config, false]); if (b.config !== 'fixed' && A.curves['fixed|' + o]) lines.push([o, 'fixed', true]); });
+    const pts = lines.flatMap(([o, c]) => A.curves[c + '|' + o]);
+    const W = 520, H = 280, L = 48, R = 20, T = 12, B = 34;
+    const xmax = Math.max(...pts.map(p => p.sec)) * 1.05;
+    let y0 = Math.min(...pts.map(p => p.iou)), y1 = Math.max(...pts.map(p => p.iou)); const pd = (y1 - y0) * 0.1 || 0.01; y0 -= pd; y1 += pd;
+    const x = v => L + (W - L - R) * v / xmax, y = v => T + (H - T - B) * (1 - (v - y0) / (y1 - y0));
+    let b = '';
+    const step = xmax > 100 ? 20 : xmax > 40 ? 10 : 5;
+    for (let t = 0; t <= xmax; t += step) b += `<line x1="${x(t)}" x2="${x(t)}" y1="${T}" y2="${H - B}" stroke="var(--rule)"/><text x="${x(t)}" y="${H - B + 14}" text-anchor="middle">${t}s</text>`;
+    for (let k = 0; k <= 4; k++) { const v = y0 + (y1 - y0) * k / 4; b += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--rule)"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v.toFixed(3)}</text>`; }
+    b += `<text x="${(L + W - R) / 2}" y="${H - 2}" text-anchor="middle">seconds per digit (k solves)</text>`;
+    lines.forEach(([o, c, dashed]) => { const P = A.curves[c + '|' + o];
+      b += `<polyline fill="none" stroke="${OPT[o][1]}" stroke-width="2.4" ${dashed ? 'stroke-dasharray="6 4"' : ''} points="${P.map(p => `${x(p.sec)},${y(p.iou)}`).join(' ')}"/>`;
+      P.forEach(p => { b += `<circle cx="${x(p.sec)}" cy="${y(p.iou)}" r="${dashed ? 2.5 : 3.5}" fill="${OPT[o][1]}"><title>${OPT[o][0]} ${NAME[c]}: best of ${p.k} = ${f3(p.iou)} in ${p.sec.toFixed(1)} s</title></circle>`; });
+      const e = P[P.length - 1]; b += `<text x="${Math.min(x(e.sec), W - R - 4)}" y="${y(e.iou) - 8}" text-anchor="end" style="fill:${OPT[o][1]}">${OPT[o][0]} · ${NAME[c].split(' (')[0].toLowerCase()}</text>`; });
+    document.getElementById('arr_budget').innerHTML = svg(W, H, b);
+  })();
+
+  // digits
+  (function () {
+    const nc = A.configs.length;
+    let h = `<div class="drow h" style="--nc:${nc}"><span>digit</span>${A.configs.map(c => `<span>${NAME[c]}</span>`).join('')}</div>`;
+    A.digits.forEach(d => {
+      const top = Math.max(...d.cells.flatMap(c => A.opts.map(o => c[o].iou)));
+      h += `<div class="drow" style="--nc:${nc}"><div class="dlab"><b>${d.digit}</b><img src="${d.target}" alt="target ${d.digit}"><span class="cap">target</span></div>` +
+        d.cells.map(c => {
+          const sets = A.opts.map(o => ({pts: c[o].bases, color: OPT[o][1], labels: false}));
+          return `<div class="dcell">${sketch(sets, {w: 176, h: 120, mini: true})}<div class="pair">` +
+            A.opts.map(o => `<img src="${c[o].img}" alt="${OPT[o][0]} ${d.digit}" class="${Math.abs(c[o].iou - top) < 1e-9 ? 'win' : ''}" loading="lazy">`).join('') + '</div>' +
+            A.opts.map(o => `<div class="cap" style="color:${OPT[o][1]}"><b>${OPT[o][0]}</b> ${f3(c[o].iou)} · ${c[o].sec.toFixed(1)}s${c.config === 'fixed' ? '' : ` · x ${c[o].gaps[0].toFixed(2)} y ${c[o].gaps[1].toFixed(2)}`}${c[o].cf ? '' : ' ⚠'}</div>`).join('') + '</div>';
+        }).join('') + '</div>';
+    });
+    document.getElementById('arr_digits').innerHTML = h + `<p class="note" style="margin:6px 0 0">Green frame: best shadow for that digit across all arrangements and both optimizers. Times are the best seed's own solve; x, y in metres.</p>`;
+  })();
 })();
 
 document.getElementById('foot').textContent =

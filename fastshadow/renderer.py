@@ -163,6 +163,7 @@ class FastShadowRenderer:
         coverage_threshold: float = 0.5,
         size: int | None = None,
         fk_device: str | None = "cpu",
+        arrangement=None,
     ):
         """fk_device: where forward kinematics runs. FK is ~100 tiny ops on (B, n, 3, 3)
         tensors, so its cost is kernel launches, which the CPU does not pay; the GPU
@@ -345,20 +346,40 @@ class FastShadowRenderer:
         self._glctx = dr.RasterizeCudaContext(device=dev)
         self._topo = None  # antialias topology hash, built on first soft render
 
+        # Optional movable bases (fastshadow.spacing): Q gains two columns, the
+        # arrangement's spacing in [0,1], which set the robot roots' table-plane
+        # position inside FK, so Adam gets a gradient for the spacing too.
+        self.n_joint = self.n_dof
+        self.arrangement = arrangement
+        if arrangement is not None:
+            from fastshadow.spacing import root_ids
+
+            lv0 = self._levels[0]["bodies"].tolist()
+            self._root_idx = torch.tensor([lv0.index(r) for r in root_ids(model)], device=kdev)
+            self.n_dof = self.n_joint + 2
+            self.q_lower = np.concatenate([self.q_lower, [0.0, 0.0]])
+            self.q_upper = np.concatenate([self.q_upper, [1.0, 1.0]])
+            self._qlo = torch.tensor(self.q_lower, dtype=dt, device=dev)
+            self._qhi = torch.tensor(self.q_upper, dtype=dt, device=dev)
+
     # ── Kinematics ─────────────────────────────────────────────────────────
     def fk(self, Q: torch.Tensor):
         """Q (B, n_dof), already clipped → world (R (B,nb,3,3), p (B,nb,3)), body order."""
         if not self._fk_fast:
             return self._fk_loop(Q)
         B = Q.shape[0]
-        Qz = torch.cat([Q, Q.new_zeros(B, 1)], 1)  # column n_dof = "no joint"
+        nj = self.n_joint
+        Qz = torch.cat([Q[:, :nj], Q.new_zeros(B, 1)], 1)  # column n_joint = "no joint"
         Rs = [self._eye.expand(B, 1, 3, 3)]
         ps = [Q.new_zeros(B, 1, 3)]
-        for lv in self._levels:
+        for li, lv in enumerate(self._levels):
             Rp = Rs[-1][:, lv["ppos"]]  # (B,n,3,3)
             pp = ps[-1][:, lv["ppos"]]
             Rb = Rp @ lv["bR"]
             pb = pp + (Rp @ lv["bp"][..., None])[..., 0]
+            if li == 0 and self.arrangement is not None:  # movable bases: roots hang off the world
+                pb = pb.clone()
+                pb[:, self._root_idx, :2] = self.arrangement.positions(Q[:, nj:nj + 2])
             a = Qz[:, lv["cols"]] - lv["q0"]  # (B,n)
             Rj = self._eye + torch.sin(a)[..., None, None] * lv["K"] + (1 - torch.cos(a))[..., None, None] * lv["K2"]
             anchor = pb + (Rb @ lv["jp"][..., None])[..., 0]
