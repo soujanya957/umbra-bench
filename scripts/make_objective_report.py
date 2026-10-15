@@ -301,6 +301,7 @@ figure.m.empty{visibility:hidden}
       <div class="card"><h3>You read the shadow, by objective</h3><p class="note">Guess-the-glyph, shadow shown alone. Bar = you, with 95% interval; ◆ classifier and ● CLIP on the same shadows.</p><div id="h_per"></div></div>
       <div class="card"><h3>Which metric predicts that you read it?</h3><p class="note">AUC over your guesses: how often a shadow you read scores higher than one you didn't. 0.5 = chance.</p><div id="h_pred"></div></div>
       <div class="card"><h3>You vs the machine judges</h3><p class="note">Share of the same shadows each one reads, and how often each agrees with you shadow by shadow.</p><div id="h_judges"></div></div>
+      <div class="card" id="h_abcard" hidden><h3>Blind A/B: CMA-ES vs Adam</h3><p class="note">Same character and objective side by side, random side, same ink. Stacked: Adam better · CMA-ES better · same · neither looks like the target. Sorted by Adam's share of the decided pairs.</p><div id="h_ab"></div></div>
       <div class="card"><h3>Shadows you marked as good</h3><p class="note">Marking tab, target visible, any number per character. Bars: share of characters where each objective was marked good.</p><div id="h_marks"></div></div>
     </div>
   </section>
@@ -495,7 +496,26 @@ function svg(w, h, body) { return `<svg viewBox="0 0 ${w} ${h}" width="100%" rol
   const fp = p => p < 0.001 ? p.toExponential(1) : p.toFixed(3);
   const extra = [];
   if (H.paired && H.by_opt.adam) extra.push(`<b>Adam's shadows are easier to read.</b> On the same character and objective you read ${pct(H.paired.adam)} of Adam's vs ${pct(H.paired.cma)} of CMA-ES's (${H.paired.n} pairs, ${H.paired.adam_only} vs ${H.paired.cma_only} discordant, p = ${fp(H.paired.p)}). The classifier sees the same gap (${pct(H.by_opt.cma.cls)} → ${pct(H.by_opt.adam.cls)}), and your CMA-ES accuracy did not rise with practice, so it is the shadows, not familiarity.`);
-  if (H.ab) extra.push(`<b>Blind A/B so far:</b> Adam preferred ${H.ab.adam}, CMA-ES ${H.ab.cma}, same ${H.ab.tie}, neither ${H.ab.bad} of ${H.ab.n} pairs (p = ${fp(H.ab.p)}) — too few to call yet.`);
+  if (H.ab) {
+    const dec = H.ab.adam + H.ab.cma, share = dec ? H.ab.adam / dec : 0;
+    extra.push(H.ab.p < 0.05
+      ? `<b>Blind A/B agrees:</b> shown both side by side without knowing which is which, you preferred Adam in ${pct(share)} of the ${dec} decided pairs (${H.ab.adam} vs ${H.ab.cma}, p = ${fp(H.ab.p)}); ${pct(H.ab.bad / H.ab.n)} of pairs had neither looking like the target.`
+      : `<b>Blind A/B so far:</b> Adam preferred ${H.ab.adam}, CMA-ES ${H.ab.cma}, same ${H.ab.tie}, neither ${H.ab.bad} of ${H.ab.n} pairs (p = ${fp(H.ab.p)}), not yet conclusive.`);
+    document.getElementById('h_abcard').hidden = false;
+    const segs = [['adam', '#3a3fb0'], ['cma', '#0f6e66'], ['tie', 'var(--base)'], ['bad', 'var(--down-c, #c2473a)']];
+    const rows = [{o: 'all objectives', ...H.ab}, ...[...H.ab.by].sort((x, y) => (y.adam / Math.max(1, y.adam + y.cma)) - (x.adam / Math.max(1, x.adam + x.cma)))];
+    const W = 520, L = 120, R = 70, bh = 15, gap = 7, Hh = rows.length * (bh + gap) + 6;
+    let b = '';
+    rows.forEach((r, i) => {
+      const y = i * (bh + gap) + (i ? 6 : 0), tot = r.adam + r.cma + r.tie + r.bad; let x = L;
+      b += `<text class="lab" x="${L - 8}" y="${y + 12}" text-anchor="end" style="${i ? '' : 'font-weight:600'}">${r.o}</text>`;
+      segs.forEach(([k, col]) => { const w = (W - L - R) * r[k] / tot; if (w > 0) b += `<rect x="${x}" y="${y}" width="${w}" height="${bh}" fill="${col}"><title>${k}: ${r[k]}</title></rect>`; x += w; });
+      const dec = r.adam + r.cma;
+      b += `<text x="${W - R + 6}" y="${y + 12}">${dec ? Math.round(100 * r.adam / dec) : '–'}%${r.p < 0.05 ? ' *' : ''}</text>`;
+    });
+    document.getElementById('h_ab').innerHTML = svg(W, Hh, b) +
+      `<div class="legend"><span><i style="background:#3a3fb0"></i>Adam better</span><span><i style="background:#0f6e66"></i>CMA-ES better</span><span><i style="background:var(--base)"></i>same</span><span><i style="background:#c2473a"></i>neither</span><span>% = Adam share of decided · * p &lt; 0.05</span></div>`;
+  }
   document.getElementById('take').innerHTML = [...extra,
     `<b>Your marks and your guesses agree.</b> Shadows you marked good you read ${pct(H.marked_read)} of the time; the rest ${pct(H.unmarked_read)}.`,
     `<b>The glyph classifier tracks a person; CLIP does not.</b> On the same shadows you read ${pct(H.you)}, the classifier ${pct(H.cls)}, CLIP ${pct(H.clip)}. Classifier probability is the best predictor of a correct read (AUC ${H.pred[0].auc.toFixed(2)}).`,

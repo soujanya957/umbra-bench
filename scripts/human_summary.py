@@ -97,7 +97,12 @@ def main():
     if abr:
         a_, c_ = sum(r[2] == "adam" for r in abr), sum(r[2] == "cma" for r in abr)
         ab = {"n": len(abr), "adam": a_, "cma": c_, "tie": sum(r[2] == "tie" for r in abr),
-              "bad": sum(r[2] == "bad" for r in abr), "p": sign_p(a_, c_)}
+              "bad": sum(r[2] == "bad" for r in abr), "p": sign_p(a_, c_), "by": []}
+        for o in sorted({r[1] for r in abr}):
+            rs = [r for r in abr if r[1] == o]
+            ao, co = sum(r[2] == "adam" for r in rs), sum(r[2] == "cma" for r in rs)
+            ab["by"].append({"o": o, "adam": ao, "cma": co, "tie": sum(r[2] == "tie" for r in rs),
+                             "bad": sum(r[2] == "bad" for r in rs), "p": sign_p(ao, co)})
     out = {
         "by_opt": by_opt, "paired": paired, "ab": ab,
         "n": len(rows), "you": float(np.mean([r["ok"] for r in rows])),
