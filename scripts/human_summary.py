@@ -71,7 +71,35 @@ def main():
     for r in rows:
         if not r["ok"] and r["ans"] != "?":
             conf[(r["g"].split("__")[1].split("_")[0], r["ans"])] += 1
+    from math import comb
+
+    def sign_p(b, c):
+        n, k = b + c, min(b, c)
+        return 1.0 if n == 0 else min(1.0, 2 * sum(comb(n, i) for i in range(k + 1)) / 2**n)
+
+    by_opt = {}
+    for tk in sorted({r["tk"] for r in rows}):
+        rs = [r for r in rows if r["tk"] == tk]
+        by_opt[tk] = {"n": len(rs), "you": float(np.mean([r["ok"] for r in rs])),
+                      "cls": float(np.mean([r["m"]["cls_top1"] for r in rs])),
+                      "clip": float(np.mean([r["m"]["clip_top1"] for r in rs]))}
+    paired = None
+    pc = {(r["g"], r["o"]): r["ok"] for r in rows if r["tk"] == "cma"}
+    pa = {(r["g"], r["o"]): r["ok"] for r in rows if r["tk"] == "adam"}
+    both = [k for k in pc if k in pa]
+    if both:
+        b = sum(1 for k in both if pa[k] and not pc[k])
+        c = sum(1 for k in both if pc[k] and not pa[k])
+        paired = {"n": len(both), "adam_only": b, "cma_only": c, "p": sign_p(b, c),
+                  "cma": float(np.mean([pc[k] for k in both])), "adam": float(np.mean([pa[k] for k in both]))}
+    abr = [r for r in doc.get("ab", []) if r[2] != "identical"]
+    ab = None
+    if abr:
+        a_, c_ = sum(r[2] == "adam" for r in abr), sum(r[2] == "cma" for r in abr)
+        ab = {"n": len(abr), "adam": a_, "cma": c_, "tie": sum(r[2] == "tie" for r in abr),
+              "bad": sum(r[2] == "bad" for r in abr), "p": sign_p(a_, c_)}
     out = {
+        "by_opt": by_opt, "paired": paired, "ab": ab,
         "n": len(rows), "you": float(np.mean([r["ok"] for r in rows])),
         "cls": float(np.mean([r["m"]["cls_top1"] for r in rows])),
         "clip": float(np.mean([r["m"]["clip_top1"] for r in rows])),

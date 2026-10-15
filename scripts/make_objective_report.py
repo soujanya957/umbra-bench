@@ -468,8 +468,21 @@ function svg(w, h, body) { return `<svg viewBox="0 0 ${w} ${h}" width="100%" rol
       b += `<text x="${x(Math.max(r.v, r.hi || 0)) + 8}" y="${cy + 4}" style="fill:var(--fg)">${fmt(r.v)}</text>`; });
     document.getElementById(id).innerHTML = svg(W, Hh, b);
   }
-  bars('h_per', H.per.map(p => ({label: nm(p), v: p.you, lo: p.lo, hi: p.hi, color: fam[(D.objs.find(o => o.o === p.o) || {}).family] || 'var(--base)',
-    marks: [{v: p.cls, shape: 'd'}, {v: p.clip, shape: 'c'}]})), 0, 1, [0, 0.25, 0.5, 0.75, 1], pct);
+  if (multi) {  // grouped: CMA-ES (teal) above Adam (indigo) for each objective, ordered by Adam
+    const OPT = {cma: ['CMA-ES', '#0f6e66'], adam: ['Adam', '#3a3fb0']};
+    const objs = [...new Set(H.per.map(p => p.o))];
+    const get = (tk, o) => H.per.find(p => p.tk === tk && p.o === o);
+    objs.sort((a, b) => ((get('adam', b) || {}).you || 0) - ((get('adam', a) || {}).you || 0));
+    const rows = [];
+    objs.forEach(o => ['cma', 'adam'].forEach((tk, j) => { const p = get(tk, o); if (!p) return;
+      rows.push({label: j ? '' : o, v: p.you, lo: p.lo, hi: p.hi, color: OPT[tk][1], marks: [{v: p.cls, shape: 'd'}, {v: p.clip, shape: 'c'}]}); }));
+    bars('h_per', rows, 0, 1, [0, 0.25, 0.5, 0.75, 1], pct);
+    document.getElementById('h_per').insertAdjacentHTML('beforeend',
+      `<div class="legend"><span><i style="background:#0f6e66"></i>CMA-ES</span><span><i style="background:#3a3fb0"></i>Adam</span><span>bar = you, ◆ classifier, ● CLIP</span></div>`);
+  } else {
+    bars('h_per', H.per.map(p => ({label: nm(p), v: p.you, lo: p.lo, hi: p.hi, color: fam[(D.objs.find(o => o.o === p.o) || {}).family] || 'var(--base)',
+      marks: [{v: p.cls, shape: 'd'}, {v: p.clip, shape: 'c'}]})), 0, 1, [0, 0.25, 0.5, 0.75, 1], pct);
+  }
   bars('h_pred', H.pred.map(p => ({label: p.label, v: p.auc, color: p.k === 'cls_p' || p.k === 'clip_p' ? 'var(--sem)' : 'var(--shape)'})), 0.4, 0.85, [0.4, 0.5, 0.6, 0.7, 0.8], v => v.toFixed(2), 0.5);
   bars('h_judges', [{label: 'you', v: H.you, color: 'var(--fg)'}, {label: 'glyph classifier', v: H.cls, color: 'var(--sem)'}, {label: 'CLIP (ViT-B-32)', v: H.clip, color: 'var(--sem)', op: 0.45}],
     0, 1, [0, 0.25, 0.5, 0.75, 1], pct);
@@ -479,7 +492,11 @@ function svg(w, h, body) { return `<svg viewBox="0 0 ${w} ${h}" width="100%" rol
   const top = H.per.slice(0, 3).map(p => `${nm(p)} ${pct(p.you)}`).join(', ');
   const fool = [...H.per].sort((a, b) => (b.cls - b.you) - (a.cls - a.you))[0];
   const topMark = H.mark_rate[0];
-  document.getElementById('take').innerHTML = [
+  const fp = p => p < 0.001 ? p.toExponential(1) : p.toFixed(3);
+  const extra = [];
+  if (H.paired && H.by_opt.adam) extra.push(`<b>Adam's shadows are easier to read.</b> On the same character and objective you read ${pct(H.paired.adam)} of Adam's vs ${pct(H.paired.cma)} of CMA-ES's (${H.paired.n} pairs, ${H.paired.adam_only} vs ${H.paired.cma_only} discordant, p = ${fp(H.paired.p)}). The classifier sees the same gap (${pct(H.by_opt.cma.cls)} → ${pct(H.by_opt.adam.cls)}), and your CMA-ES accuracy did not rise with practice, so it is the shadows, not familiarity.`);
+  if (H.ab) extra.push(`<b>Blind A/B so far:</b> Adam preferred ${H.ab.adam}, CMA-ES ${H.ab.cma}, same ${H.ab.tie}, neither ${H.ab.bad} of ${H.ab.n} pairs (p = ${fp(H.ab.p)}) — too few to call yet.`);
+  document.getElementById('take').innerHTML = [...extra,
     `<b>Your marks and your guesses agree.</b> Shadows you marked good you read ${pct(H.marked_read)} of the time; the rest ${pct(H.unmarked_read)}.`,
     `<b>The glyph classifier tracks a person; CLIP does not.</b> On the same shadows you read ${pct(H.you)}, the classifier ${pct(H.cls)}, CLIP ${pct(H.clip)}. Classifier probability is the best predictor of a correct read (AUC ${H.pred[0].auc.toFixed(2)}).`,
     `<b>Most readable:</b> ${top}. The intervals are about ±14 points, so the leaders are not yet separable; <b>${topMark.o}</b> is also the shadow you marked good most often (${pct(topMark.rate)}).`,
