@@ -126,6 +126,8 @@ def main():
                  ", ".join(f"{seeds_per.count(k)} with {k} seed{'s' if k > 1 else ''}" for k in ns[::-1]))
     D = {"n": len(ids), "seeds": seeds_txt, "objs": [{"o": o, "label": l, "family": f} for o, l, f, _ in objs],
          "met": [{"k": k, "label": l, "hb": hb, "group": g} for k, l, hb, g in MET], "table": table, "grid": grid}
+    hp = os.path.join(FS, "human_summary.json")  # scripts/human_summary.py, from the picker page
+    D["human"] = json.load(open(hp, encoding="utf-8")) if os.path.exists(hp) else None
     html = TEMPLATE.replace("/*DATA*/", json.dumps(D))
     out = os.path.join(FS, "report", "objective_report.html")
     os.makedirs(os.path.dirname(out), exist_ok=True)
@@ -205,6 +207,11 @@ figure.m figcaption .ok{color:rgb(var(--up))} figure.m figcaption .no{color:rgb(
 svg text{fill:var(--muted);font:11px var(--f-mono)}
 svg .lab{fill:var(--fg);font:11px var(--f-body)}
 .foot{color:var(--muted);font-size:13px;max-width:76ch;margin:0}
+#human[hidden]{display:none}
+#human .charts{align-items:start}
+.card{align-content:start}
+.take{margin:0;padding-left:20px;display:grid;gap:4px;max-width:80ch}
+.take b{font-weight:600}
 </style>
 <div class="wrap">
   <header class="head">
@@ -222,8 +229,18 @@ svg .lab{fill:var(--fg);font:11px var(--f-body)}
     <div class="card"><h3>Shape vs readability</h3><p class="note">One dot per objective. CLIP grader is ViT-B-32, never used for steering.</p><div id="tradeoff"></div></div>
     <div class="card"><h3>Seconds per solve</h3><p class="note">Fast CMA-ES, same budget for every objective.</p><div id="time"></div></div>
   </section>
+  <section id="human" hidden>
+    <div class="head"><span class="eyebrow">2 · human test</span><h2>What a person can read</h2></div>
+    <ul class="take" id="take"></ul>
+    <div class="charts">
+      <div class="card"><h3>You read the shadow, by objective</h3><p class="note">Guess-the-glyph, shadow shown alone. Bar = you, with 95% interval; ◆ classifier and ● CLIP on the same shadows.</p><div id="h_per"></div></div>
+      <div class="card"><h3>Which metric predicts that you read it?</h3><p class="note">AUC over your guesses: how often a shadow you read scores higher than one you didn't. 0.5 = chance.</p><div id="h_pred"></div></div>
+      <div class="card"><h3>You vs the machine judges</h3><p class="note">Share of the same shadows each one reads, and how often each agrees with you shadow by shadow.</p><div id="h_judges"></div></div>
+      <div class="card"><h3>Shadows you marked as good</h3><p class="note">Marking tab, target visible, any number per character. Bars: share of characters where each objective was marked good.</p><div id="h_marks"></div></div>
+    </div>
+  </section>
   <section>
-    <div class="head"><span class="eyebrow">2 · every character, every objective</span><h2>Shadows</h2></div>
+    <div class="head"><span class="eyebrow">3 · every character, every objective</span><h2>Shadows</h2></div>
     <div class="tabs" role="tablist" id="tabs"></div>
     <div class="chips" id="chips"></div>
     <div class="legend"><span>shadow cast by the arms, nothing overlaid · seed 0</span><span>caption: IoU · classifier ✓/✗ · CLIP rank</span></div>
@@ -334,6 +351,44 @@ function svg(w, h, body) { return `<svg viewBox="0 0 ${w} ${h}" width="100%" rol
     b.setAttribute('aria-pressed', on[b.dataset.o]); draw(); });
   draw();
 })();
+(function () {
+  const H = D.human; if (!H) return;
+  document.getElementById('human').hidden = false;
+  const pct = v => Math.round(100 * v) + '%';
+  const multi = H.optimizers.length > 1, nm = p => (multi ? (p.tk === 'cma' ? 'CMA · ' : 'Adam · ') : '') + p.o;
+  function bars(id, rows, x0, x1, ticks, fmt, ref) {
+    const W = 520, L = 150, R = 54, bh = 15, gap = 7, T = 4, Hh = rows.length * (bh + gap) + T + 22;
+    const x = v => L + (W - L - R) * (v - x0) / (x1 - x0);
+    let b = '';
+    ticks.forEach(t => { b += `<line x1="${x(t)}" x2="${x(t)}" y1="${T}" y2="${Hh - 18}" stroke="var(--rule)"/><text x="${x(t)}" y="${Hh - 4}" text-anchor="middle">${fmt(t)}</text>`; });
+    if (ref != null) b += `<line x1="${x(ref)}" x2="${x(ref)}" y1="${T}" y2="${Hh - 18}" stroke="var(--muted)" stroke-dasharray="4 3"/>`;
+    rows.forEach((r, i) => { const y = T + i * (bh + gap), cy = y + bh / 2;
+      b += `<text class="lab" x="${L - 8}" y="${cy + 4}" text-anchor="end">${r.label}</text>`;
+      b += `<rect x="${x(x0)}" y="${y}" width="${Math.max(1, x(r.v) - x(x0))}" height="${bh}" rx="2" fill="${r.color}" opacity="${r.op || 0.85}"><title>${r.label}: ${fmt(r.v)}</title></rect>`;
+      if (r.lo != null) b += `<line x1="${x(r.lo)}" x2="${x(r.hi)}" y1="${cy}" y2="${cy}" stroke="var(--fg)" stroke-width="1.2"/><line x1="${x(r.lo)}" x2="${x(r.lo)}" y1="${cy - 4}" y2="${cy + 4}" stroke="var(--fg)"/><line x1="${x(r.hi)}" x2="${x(r.hi)}" y1="${cy - 4}" y2="${cy + 4}" stroke="var(--fg)"/>`;
+      (r.marks || []).forEach(m => { b += m.shape === 'd' ? `<rect x="${x(m.v) - 4}" y="${cy - 4}" width="8" height="8" transform="rotate(45 ${x(m.v)} ${cy})" fill="var(--panel)" stroke="var(--fg)" stroke-width="1.4"><title>classifier ${fmt(m.v)}</title></rect>` : `<circle cx="${x(m.v)}" cy="${cy}" r="4" fill="var(--panel)" stroke="var(--sem)" stroke-width="1.6"><title>CLIP ${fmt(m.v)}</title></circle>`; });
+      b += `<text x="${x(Math.max(r.v, r.hi || 0)) + 8}" y="${cy + 4}" style="fill:var(--fg)">${fmt(r.v)}</text>`; });
+    document.getElementById(id).innerHTML = svg(W, Hh, b);
+  }
+  bars('h_per', H.per.map(p => ({label: nm(p), v: p.you, lo: p.lo, hi: p.hi, color: fam[(D.objs.find(o => o.o === p.o) || {}).family] || 'var(--base)',
+    marks: [{v: p.cls, shape: 'd'}, {v: p.clip, shape: 'c'}]})), 0, 1, [0, 0.25, 0.5, 0.75, 1], pct);
+  bars('h_pred', H.pred.map(p => ({label: p.label, v: p.auc, color: p.k === 'cls_p' || p.k === 'clip_p' ? 'var(--sem)' : 'var(--shape)'})), 0.4, 0.85, [0.4, 0.5, 0.6, 0.7, 0.8], v => v.toFixed(2), 0.5);
+  bars('h_judges', [{label: 'you', v: H.you, color: 'var(--fg)'}, {label: 'glyph classifier', v: H.cls, color: 'var(--sem)'}, {label: 'CLIP (ViT-B-32)', v: H.clip, color: 'var(--sem)', op: 0.45}],
+    0, 1, [0, 0.25, 0.5, 0.75, 1], pct);
+  document.getElementById('h_judges').insertAdjacentHTML('beforeend', `<p class="note">Agrees with you shadow by shadow: classifier ${pct(H.agree_cls)}, CLIP ${pct(H.agree_clip)}. ${H.n} guesses, ${H.cant} "can't tell". Most confused: ${H.confusions.slice(0, 6).map(c => c.t + '→' + c.a).join(', ')}.</p>`);
+  bars('h_marks', [...H.mark_rate.map(m => ({label: m.o, v: m.rate, color: fam[(D.objs.find(o => o.o === m.o) || {}).family] || 'var(--base)'}))], 0, 0.6, [0, 0.2, 0.4, 0.6], pct);
+  document.getElementById('h_marks').insertAdjacentHTML('beforeend', `<p class="note">${H.n_judged} characters, ${H.good_per_glyph.toFixed(1)} good per character. In the guess test you read <b>${pct(H.marked_read)}</b> of the shadows you had marked good and ${pct(H.unmarked_read)} of the others.</p>`);
+  const top = H.per.slice(0, 3).map(p => `${nm(p)} ${pct(p.you)}`).join(', ');
+  const fool = [...H.per].sort((a, b) => (b.cls - b.you) - (a.cls - a.you))[0];
+  const topMark = H.mark_rate[0];
+  document.getElementById('take').innerHTML = [
+    `<b>Your marks and your guesses agree.</b> Shadows you marked good you read ${pct(H.marked_read)} of the time; the rest ${pct(H.unmarked_read)}.`,
+    `<b>The glyph classifier tracks a person; CLIP does not.</b> On the same shadows you read ${pct(H.you)}, the classifier ${pct(H.cls)}, CLIP ${pct(H.clip)}. Classifier probability is the best predictor of a correct read (AUC ${H.pred[0].auc.toFixed(2)}).`,
+    `<b>Most readable:</b> ${top}. The intervals are about ±14 points, so the leaders are not yet separable; <b>${topMark.o}</b> is also the shadow you marked good most often (${pct(topMark.rate)}).`,
+    `<b>Steering with a judge games it.</b> ${fool.o}: the classifier reads ${pct(fool.cls)}, you read ${pct(fool.you)}.`,
+  ].map(s => `<li>${s}</li>`).join('');
+})();
+
 document.getElementById('foot').textContent =
   `Each objective replaces both the CMA-ES loss and the staged pipeline's accept/keep test (as 1 − loss), so the whole search chases it. ` +
   `Penalties (floor, collisions) are unchanged; collision-free rate ranges ${Math.min(...D.table.map(r => r.cf)).toFixed(2)}–${Math.max(...D.table.map(r => r.cf)).toFixed(2)}. ` +
