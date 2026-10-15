@@ -193,6 +193,8 @@ OBJECTIVES = {
     # learned from Ivy's picks (fastshadow/ivy_reader.py); imported lazily, it imports this module
     "ivy": lambda S, t: __import__("fastshadow.ivy_reader", fromlist=["ivy_loss"]).ivy_loss(S, t),
     "ivy_mix": lambda S, t: __import__("fastshadow.ivy_reader", fromlist=["ivy_mix_loss"]).ivy_mix_loss(S, t),
+    # optimization layer: the shape-only reader (the full one is the evaluation layer)
+    "ivy_opt": lambda S, t: __import__("fastshadow.ivy_reader", fromlist=["ivy_opt_loss"]).ivy_opt_loss(S, t),
     "shape3_cls": lambda S, t: _shape3(S, t) + SEM_W * (1 - _p_cls(S, t)),
 }
 

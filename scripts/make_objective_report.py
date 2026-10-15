@@ -36,8 +36,9 @@ OBJ = [  # name, label, family, what it steers with
     ("cls", "IoU + glyph classifier", "semantic", "cls_top1"),
     ("clip", "IoU + CLIP (ViT-B-16)", "semantic", "clip_top1 clip_rr_cc"),
     ("shape3_cls", "shape3 + glyph classifier", "semantic", "boundary_iou cldice holes_filled cls_top1"),
-    ("ivy_mix", "Ivy reader + IoU", "learned", "iou cls_top1"),
-    ("ivy", "Ivy reader alone", "learned", "iou tc_iou cls_top1"),
+    ("ivy_opt", "Ivy objective (monotone shape reader + IoU)", "learned", "iou tc_iou boundary_iou holes_filled"),
+    ("ivy_mix", "Ivy judge + IoU (judge optimized)", "learned", "iou cls_top1 ivy_judge"),
+    ("ivy", "Ivy judge alone (judge optimized)", "learned", "iou tc_iou cls_top1 ivy_judge"),
 ]
 MET = [  # key, label, higher is better, group
     ("iou", "IoU", True, "shape"), ("tc_iou", "tc_iou", True, "shape"), ("boundary_iou", "boundary IoU", True, "shape"),
@@ -45,6 +46,7 @@ MET = [  # key, label, higher is better, group
     ("betti_error", "Betti error", False, "topology"), ("holes_filled", "holes filled", False, "topology"),
     ("cls_top1", "classifier top-1", True, "semantic"), ("clip_top1", "CLIP top-1", True, "semantic"),
     ("clip_rr_cc", "CLIP MRR (chance-corr.)", True, "semantic"),
+    ("ivy_judge", "Ivy judge", True, "judge"),
 ]
 
 
@@ -181,8 +183,10 @@ def main():
     D = {"n": len(ids), "seeds": seeds_txt, "objs": [{"o": o, "label": l, "family": f} for o, l, f, _ in objs],
          "met": [{"k": k, "label": l, "hb": hb, "group": g} for k, l, hb, g in MET], "table": table,
          "tables": tables, "grid": grid, "has_marks": bool(marks)}
-    ip = os.path.join(FS, "ivy_reader", "report.json")  # scripts/train_ivy_reader.py
+    ip = os.path.join(FS, "ivy_reader", "report.json")  # scripts/train_ivy_reader.py --layer judge
     D["ivy"] = json.load(open(ip, encoding="utf-8")) if os.path.exists(ip) else None
+    ip2 = os.path.join(FS, "ivy_reader", "report_opt.json")  # --layer opt
+    D["ivy_opt"] = json.load(open(ip2, encoding="utf-8")) if os.path.exists(ip2) else None
     hp = os.path.join(FS, "human_summary.json")  # scripts/human_summary.py, from the picker page
     D["human"] = json.load(open(hp, encoding="utf-8")) if os.path.exists(hp) else None
     html = TEMPLATE.replace("/*DATA*/", json.dumps(D))
@@ -224,7 +228,7 @@ section{display:grid;gap:14px}
 .scroll{overflow-x:auto}
 .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--muted)}
 .legend i{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:6px;vertical-align:-1px}
-.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
 @media (max-width:760px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .kpi{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:14px 16px;display:grid;gap:4px;min-width:0}
 .kpi .v{font:600 20px/1.2 var(--f-display)}
@@ -310,10 +314,10 @@ figure.m.empty{visibility:hidden}
     </div>
   </section>
   <section id="ivysec" hidden>
-    <div class="head"><span class="eyebrow">3 · Ivy reader</span><h2>A model of your judgement</h2></div>
+    <div class="head"><span class="eyebrow">3 · Ivy reader</span><h2>A model of your judgement, in two layers</h2></div>
     <ul class="take" id="ivy_take"></ul>
     <div class="charts">
-      <div class="card"><h3>How well it predicts you, on characters it never saw</h3><p class="note">5-fold cross-validation with whole characters held out. Marks and guesses: AUC; A/B: share of your choices it gets right. Grey: the best single metric for that task.</p><div id="ivy_cv"></div></div>
+      <div class="card"><h3>How well it predicts you, on characters it never saw</h3><p class="note">5-fold cross-validation with whole characters held out. Marks and guesses: AUC; A/B: share of your choices it gets right. Solid: the judge (all features). Pale: the objective (shape features only). Grey: the best single metric.</p><div id="ivy_cv"></div></div>
       <div class="card"><h3>What it looks at</h3><p class="note">Drop in mark AUC + guess AUC when one feature is shuffled.</p><div id="ivy_imp"></div></div>
     </div>
   </section>
@@ -335,12 +339,13 @@ document.getElementById('sub').textContent = `${D.objs.length} objectives on the
 
 // KPIs: best objective per metric group, by mean paired Δ over its group's metrics (sign-corrected), excluding own metrics
 (function () {
-  const groups = {shape: 'Best for shape', topology: 'Best for holes / topology', semantic: 'Best for readability'};
+  const groups = {shape: 'Best for shape', topology: 'Best for holes / topology', semantic: 'Best for readability', judge: 'Best by the Ivy judge'};
   const out = [];
   for (const [g, title] of Object.entries(groups)) {
     const ms = D.met.filter(m => m.group === g);
     let best = null;
-    D.table.filter(r => r.o !== 'current').forEach(r => {
+    // an objective that optimizes the judge would win the judge's KPI by construction
+    D.table.filter(r => r.o !== 'current' && !(g === 'judge' && r.steers.includes('ivy_judge'))).forEach(r => {
       const sc = ms.map(m => { const c = r.cells[m.k]; const sd = Math.max(...D.table.map(x => Math.abs(x.cells[m.k].d))) || 1; return (m.hb ? 1 : -1) * c.d / sd; });
       const s = sc.reduce((a, b) => a + b, 0) / sc.length;
       if (!best || s > best.s) best = {r, s};
@@ -545,11 +550,13 @@ function svg(w, h, body) { return `<svg viewBox="0 0 ${w} ${h}" width="100%" rol
   const W = 520, L = 170, R = 90, bh = 15, gap = 4, grp = 14, x0 = 0.5, x1 = 0.9;
   const x = v => L + (W - L - R) * (Math.max(x0, v) - x0) / (x1 - x0);
   let b = '', y = 4;
+  const O = D.ivy_opt, cvo = O ? O.cv[O.chosen] : null;
   tasks.forEach(([k, lab]) => {
     const [bf, bv] = bestBase(k);
     b += `<text class="lab" x="${L - 8}" y="${y + bh + 2}" text-anchor="end">${lab}</text>`;
-    b += `<rect x="${x(x0)}" y="${y}" width="${x(cv[k]) - x(x0)}" height="${bh}" fill="#c27c0e"/><text x="${x(cv[k]) + 6}" y="${y + bh - 3}" style="fill:var(--fg)">${cv[k].toFixed(3)} Ivy reader</text>`;
+    b += `<rect x="${x(x0)}" y="${y}" width="${x(cv[k]) - x(x0)}" height="${bh}" fill="#c27c0e"/><text x="${x(cv[k]) + 6}" y="${y + bh - 3}" style="fill:var(--fg)">${cv[k].toFixed(3)} judge</text>`;
     y += bh + gap;
+    if (cvo) { b += `<rect x="${x(x0)}" y="${y}" width="${x(cvo[k]) - x(x0)}" height="${bh}" fill="#c27c0e" opacity=".45"/><text x="${x(cvo[k]) + 6}" y="${y + bh - 3}">${cvo[k].toFixed(3)} objective</text>`; y += bh + gap; }
     b += `<rect x="${x(x0)}" y="${y}" width="${x(bv) - x(x0)}" height="${bh}" fill="var(--base)"/><text x="${x(bv) + 6}" y="${y + bh - 3}">${bv.toFixed(3)} ${bf}</text>`;
     y += bh + grp;
   });
@@ -561,12 +568,19 @@ function svg(w, h, body) { return `<svg viewBox="0 0 ${w} ${h}" width="100%" rol
     c += `<text class="lab" x="140" y="${yy + 12}" text-anchor="end">${f}</text><rect x="150" y="${yy}" width="${Math.max(1, 300 * Math.max(0, v) / mx)}" height="15" fill="#c27c0e"/><text x="${156 + 300 * Math.max(0, v) / mx}" y="${yy + 12}">${v.toFixed(3)}</text>`; });
   document.getElementById('ivy_imp').innerHTML = svg(520, imp.length * 22 + 4, c) +
     '<p class="note">cls_margin: how much more the glyph classifier believes the right character than the runner-up. emb_cos: how close the shadow is to the target in the classifier\'s feature space. Both are "does it read as this character", beyond plain overlap.</p>';
-  const T = D.tables.cma, iv = T.find(r => r.o === 'ivy'), im = T.find(r => r.o === 'ivy_mix'), dt = T.find(r => r.o === 'dt2');
+  const Tc = D.tables.cma, Ta = D.tables.adam || [], fr = (T, o) => T.find(r => r.o === o);
+  const iv = fr(Tc, 'ivy'), dt = fr(Tc, 'dt2'), io = fr(Tc, 'ivy_opt'), ioa = fr(Ta, 'ivy_opt'), dta = fr(Ta, 'dt2');
+  const jd = r => r && r.cells.ivy_judge && r.cells.ivy_judge.v != null ? r.cells.ivy_judge.v.toFixed(2) : '–';
   const lines = [
-    `<b>It learned your taste better than any single metric.</b> On characters it never saw it ranks your good marks at AUC ${cv.mark_auc.toFixed(2)} (best single metric ${bestBase('mark_auc')[1].toFixed(2)}), predicts which shadows you can read at ${cv.guess_auc.toFixed(2)} (${bestBase('guess_auc')[1].toFixed(2)}), and gets ${Math.round(100 * cv.ab_acc)}% of your A/B choices (${Math.round(100 * bestBase('ab_acc')[1])}%). Trained on ${I.n.marks} marks, ${I.n.guesses} guesses and ${I.n.pairs} decided A/B pairs.`,
-    `<b>You judge reading, not just overlap.</b> The two features it leans on most besides IoU are the classifier's margin for the right character and the shadow's closeness to the target in the classifier's feature space.`,
+    `<b>Two layers, trained on the same judgements.</b> The <b>judge</b> sees every feature and is only used to evaluate and select; the <b>objective</b> sees shape alone and is what the optimizer chases. Every time a classifier-style signal was optimized (the classifier, CLIP, the full reader) the search learned to please it instead of you, and keeping those features out of the objective leaves the judge evidence the optimizer never pushed on.`,
+    `<b>The judge knows your taste better than any single metric.</b> On characters it never saw: good marks AUC ${cv.mark_auc.toFixed(2)} (best single metric ${bestBase('mark_auc')[1].toFixed(2)}), readable ${cv.guess_auc.toFixed(2)} (${bestBase('guess_auc')[1].toFixed(2)}), A/B ${Math.round(100 * cv.ab_acc)}% (${Math.round(100 * bestBase('ab_acc')[1])}%). What carries it beyond IoU is "does it read as this character": the classifier's margin and the embedding closeness.`,
   ];
-  if (iv && im && dt) lines.push(`<b>Alone, it gets gamed; with IoU, it is usable.</b> Optimizing the reader alone drives IoU to ${iv.cells.iou.v.toFixed(2)} (CMA-ES): the search finds shadows the reader likes that are not the target. Half reader, half IoU keeps IoU at ${im.cells.iou.v.toFixed(2)} (dt2: ${dt.cells.iou.v.toFixed(2)}) with classifier top-1 ${Math.round(100 * im.cells.cls_top1.v)}% (dt2: ${Math.round(100 * dt.cells.cls_top1.v)}%). Whether you actually prefer it is the blind A/B tab "Ivy reader vs dt2" in the picker.`);
+  if (cvo) {
+    const w = O.linear_weights || {}, fmt = Object.entries(w).filter(([, v]) => Math.abs(v) > 0.01).sort((p, q) => Math.abs(q[1]) - Math.abs(p[1])).map(([f, v]) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)} ${f}`).join(' ');
+    lines.push(`<b>The objective took three tries.</b> A shape-only neural reader was driven to IoU ≈ 0.3: the search pushed its features past anything in your data. Linear with features clamped to the training range was still pushed (IoU 0.56 on a 5-glyph check), because your marks give spill, gaps and area small positive weights (bold shadows read better) and the optimizer turns that into blobs. What holds is a <b>monotone</b> reader, each weight forced to the side common sense allows, averaged with IoU: ${fmt}. It predicts you about as well as IoU alone (marks ${cvo.mark_auc.toFixed(2)}, readable ${cvo.guess_auc.toFixed(2)}): most of your taste that IoU misses is the part that cannot be optimized safely.`);
+  }
+  if (iv && dt) lines.push(`<b>Optimizing the judge itself is gamed:</b> IoU falls to ${iv.cells.iou.v.toFixed(2)} (CMA-ES). Its judge score is circular, so its cells are dashed.`);
+  if (io && dt) lines.push(`<b>Judge scores (seed 0, mean, CMA-ES / Adam):</b> Ivy objective ${jd(io)} / ${jd(ioa)} vs dt2 ${jd(dt)} / ${jd(dta)}; IoU ${io.cells.iou.v.toFixed(3)} / ${ioa ? ioa.cells.iou.v.toFixed(3) : '–'} vs ${dt.cells.iou.v.toFixed(3)} / ${dta ? dta.cells.iou.v.toFixed(3) : '–'}; tc_iou ${io.cells.tc_iou.v.toFixed(3)} / ${ioa ? ioa.cells.tc_iou.v.toFixed(3) : '–'} vs ${dt.cells.tc_iou.v.toFixed(3)} / ${dta ? dta.cells.tc_iou.v.toFixed(3) : '–'}. The judge never steered these, so this is a fair score. The blind A/B tab "Ivy objective vs dt2" in the picker is the check that leans on no model at all.`);
   document.getElementById('ivy_take').innerHTML = lines.map(s => `<li>${s}</li>`).join('');
 })();
 

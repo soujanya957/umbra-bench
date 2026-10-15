@@ -22,6 +22,9 @@ sys.path.insert(0, os.path.join(BENCH, "scripts"))
 from run_base_optimizer import load_target  # noqa: E402
 
 STUDY = {"cma": "objective_study", "adam": "objective_study_adam"}
+# the 13 objectives the marking tabs showed when the marks were collected (2026-10-14/15)
+MARKED_OBJECTIVES = {"current", "iou", "tversky_fn", "tversky_fp", "dt2", "biou", "cldice", "holes", "tc",
+                     "cls", "clip", "shape3", "shape3_cls"}
 OUT = os.path.join(BENCH, "results", "fastshadow", "ivy_reader")
 
 
@@ -81,7 +84,9 @@ def build(doc):
                 continue
             good = set(v.get("good", []))
             for (tk2, g2, o), i in index.items():
-                if tk2 == tk and g2 == g:
+                # only objectives that were on screen when the marks were made; a
+                # shadow added later was never seen, so it is not a "not good"
+                if tk2 == tk and g2 == g and o in MARKED_OBJECTIVES:
                     marks.append((i, int(o in good)))
     guesses = [(index[(c.split(":")[0], g, c.split(":")[1])], ok) for g, c, ans, ok, ms in doc.get("guesses", [])
                if (c.split(":")[0], g, c.split(":")[1]) in index]
@@ -93,17 +98,20 @@ def build(doc):
     return items, X, marks, guesses, pairs, glyph_of
 
 
-def fit(X, marks, guesses, pairs, hidden, steps=1500, l2=1e-3, seed=0):
+def fit(X, marks, guesses, pairs, hidden, features, steps=1500, l2=1e-3, seed=0, signs=None):
     import torch
 
     from fastshadow.ivy_reader import IvyReader
 
     torch.manual_seed(seed)
-    m = IvyReader(hidden=hidden)
+    m = IvyReader(features=features, hidden=hidden)
     used = sorted({i for i, _ in marks} | {i for i, _ in guesses} | {a for a, _, _ in pairs} | {b for _, b, _ in pairs})
     Xt = torch.tensor(X)
-    m.mu.copy_(Xt[used].mean(0))
-    m.sd.copy_(Xt[used].std(0).clamp_min(1e-4))
+    Xu = Xt[used][:, m.cols]
+    m.mu.copy_(Xu.mean(0))
+    m.sd.copy_(Xu.std(0).clamp_min(1e-4))
+    m.lo.copy_(Xu.min(0).values)
+    m.hi.copy_(Xu.max(0).values)
     opt = torch.optim.Adam(m.parameters(), lr=0.02)
     bce = torch.nn.functional.binary_cross_entropy_with_logits
     mi = torch.tensor([i for i, _ in marks]); my = torch.tensor([y for _, y in marks], dtype=torch.float32)
@@ -123,6 +131,11 @@ def fit(X, marks, guesses, pairs, hidden, steps=1500, l2=1e-3, seed=0):
         opt.zero_grad()
         loss.backward()
         opt.step()
+        if signs is not None and hidden == 0:  # projected step: keep each weight on its allowed side
+            with torch.no_grad():
+                w = m.net.weight[0]
+                sg = torch.tensor([signs[f] for f in features], dtype=w.dtype)
+                w.copy_(torch.where(sg > 0, w.clamp_min(0), torch.where(sg < 0, w.clamp_max(0), torch.zeros_like(w))))
     m.eval()
     return m
 
@@ -138,11 +151,22 @@ def evaluate(score, marks, guesses, pairs):
 
 
 def main():
+    import argparse
+
     import torch
 
-    from fastshadow.ivy_reader import FEATURES, WEIGHTS
+    from fastshadow.ivy_reader import FEATURES, SHAPE_FEATURES, SHAPE_SIGNS, WEIGHTS, WEIGHTS_OPT
 
-    doc = json.load(open(sys.argv[1], encoding="utf-8"))
+    ap = argparse.ArgumentParser()
+    ap.add_argument("picks")
+    ap.add_argument("--layer", choices=["judge", "opt"], default="judge",
+                    help="judge: all features, for evaluation/selection; opt: shape features only, for optimization")
+    a = ap.parse_args()
+    feats = FEATURES if a.layer == "judge" else SHAPE_FEATURES
+    weights = WEIGHTS if a.layer == "judge" else WEIGHTS_OPT
+    signs = SHAPE_SIGNS if a.layer == "opt" else None
+    report = "report.json" if a.layer == "judge" else "report_opt.json"
+    doc = json.load(open(a.picks, encoding="utf-8"))
     doc = doc.get("data", doc)
     os.makedirs(OUT, exist_ok=True)
     items, X, marks, guesses, pairs, glyph_of = build(doc)
@@ -162,7 +186,7 @@ def main():
         sc = np.full(len(items), np.nan)
         for fold in folds:
             trm, trg, trp, *_ = split(fold)
-            m = fit(X, trm, trg, trp, hidden)
+            m = fit(X, trm, trg, trp, hidden, feats, signs=signs)
             with torch.no_grad():
                 s = m.score(torch.tensor(X)).numpy()
             for i in range(len(items)):
@@ -177,16 +201,19 @@ def main():
     for f, r in sorted(base.items(), key=lambda kv: -kv[1]["mark_auc"]):
         print(f"  baseline {f:10s} {r}")
     best = max(results, key=lambda k: results[k]["mark_auc"] + results[k]["guess_auc"] + results[k]["ab_acc"])
+    if a.layer == "opt":
+        best = "linear"  # the objective must not extrapolate: an MLP reader was gamed off its training range
     hidden = 0 if best == "linear" else 16
-    m = fit(X, marks, guesses, pairs, hidden)
-    torch.save({"state": m.state_dict(), "hidden": hidden, "features": FEATURES}, WEIGHTS)
+    m = fit(X, marks, guesses, pairs, hidden, feats, signs=signs)
+    torch.save({"state": m.state_dict(), "hidden": hidden, "features": feats, "layer": a.layer}, weights)
     # importance: drop in training mark AUC when a feature is shuffled
     Xt = torch.tensor(X)
     with torch.no_grad():
         s0 = m.score(Xt).numpy()
     a0 = evaluate(s0, marks, guesses, pairs)
     imp = {}
-    for j, f in enumerate(FEATURES):
+    for f in feats:
+        j = FEATURES.index(f)
         Xp = X.copy()
         Xp[:, j] = rng.permutation(Xp[:, j])
         with torch.no_grad():
@@ -195,12 +222,13 @@ def main():
         imp[f] = float((a0["mark_auc"] - ap["mark_auc"]) + (a0["guess_auc"] - ap["guess_auc"]))
     lin = None
     if hidden == 0:
-        lin = {f: float(w) for f, w in zip(FEATURES, m.net.weight.detach()[0].numpy())}
-    rep = {"n": {"shadows": len(items), "marks": len(marks), "guesses": len(guesses), "pairs": len(pairs), "glyphs": len(glyphs)},
+        lin = {f: float(w) for f, w in zip(feats, m.net.weight.detach()[0].numpy())}
+    rep = {"layer": a.layer, "features": feats,
+           "n": {"shadows": len(items), "marks": len(marks), "guesses": len(guesses), "pairs": len(pairs), "glyphs": len(glyphs)},
            "cv": results, "chosen": best, "baselines": base, "importance": imp, "linear_weights": lin, "train_fit": a0}
-    json.dump(rep, open(os.path.join(OUT, "report.json"), "w"), indent=2)
+    json.dump(rep, open(os.path.join(OUT, report), "w"), indent=2)
     print("chosen", best, "importance", {k: round(v, 3) for k, v in sorted(imp.items(), key=lambda kv: -kv[1])})
-    print("saved", WEIGHTS)
+    print("saved", weights)
 
 
 if __name__ == "__main__":

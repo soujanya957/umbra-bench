@@ -69,6 +69,12 @@ def load(bench: str):
                 "gap_y": float(np.mean([b["gaps_m"][1] for b in bests])),
                 "at_lo": float(np.mean([min(b["gaps_m"]) <= 0.1205 for b in bests])) if c != "fixed" else None,
             })
+            # evaluation layer: the Ivy judge, as a score and as the seed picker
+            if all("ivy_judge" in r for r in allr):
+                jpick = [max([r for r in g if r["collision_free"]] or g, key=lambda r: r["ivy_judge"]) for g in groups]
+                summary[-1].update(judge=float(np.mean([b["ivy_judge"] for b in bests])),
+                                   judge_pick=float(np.mean([b["ivy_judge"] for b in jpick])),
+                                   judge_pick_iou=float(np.mean([b["iou"] for b in jpick])))
     # budget curves: best-of-k (seeds in order) vs cumulative seconds, mean over digits
     curves = {}
     for c in configs:

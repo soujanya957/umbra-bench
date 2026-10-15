@@ -311,11 +311,12 @@ if (tabOf('cma') && tabOf('adam')) AB_SETS.push({
   groupName: 'objective', items: () => tabOf('cma').objs.flatMap(o => tabOf('cma').glyphs.map(g => {
     const a = tabOf('adam').glyphs.find(x => x.key === g.key);
     return a ? {gk: g.key, group: o, g, a: a.cands.find(c => c.o === o), b: g.cands.find(c => c.o === o)} : null; })).filter(x => x && x.a && x.b)});
-const IVY_OPTS = D.tabs.filter(t => t.objs.includes('ivy_mix') && t.objs.includes('dt2'));
+// the optimization layer (shape-only Ivy objective) against dt2, within each optimizer
+const IVY_OPTS = D.tabs.filter(t => t.objs.includes('ivy_opt') && t.objs.includes('dt2'));
 if (IVY_OPTS.length) AB_SETS.push({
-  key: 'ab_ivy', label: 'A/B · Ivy reader vs dt2', A: 'ivy', B: 'dt2', Aname: 'Ivy reader + IoU', Bname: 'dt2', Acol: '#c27c0e', Bcol: 'var(--shape)',
+  key: 'ab_ivyopt', label: 'A/B · Ivy objective vs dt2', A: 'ivy_opt', B: 'dt2', Aname: 'Ivy objective', Bname: 'dt2', Acol: '#c27c0e', Bcol: 'var(--shape)',
   groupName: 'optimizer', items: () => IVY_OPTS.flatMap(t => t.glyphs.map(g => ({gk: g.key, group: t.key, g,
-    a: g.cands.find(c => c.o === 'ivy_mix'), b: g.cands.find(c => c.o === 'dt2')}))).filter(x => x.a && x.b)});
+    a: g.cands.find(c => c.o === 'ivy_opt'), b: g.cands.find(c => c.o === 'dt2')}))).filter(x => x.a && x.b)});
 AB_SETS.forEach(S => { S.all = S.items(); if (!store[S.key]) store[S.key] = []; });
 let abKey = AB_SETS.length ? AB_SETS[0].key : null;
 const SET = () => AB_SETS.find(S => S.key === abKey);
