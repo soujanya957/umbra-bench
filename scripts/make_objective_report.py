@@ -196,6 +196,27 @@ def main():
     D["ivy"] = json.load(open(ip, encoding="utf-8")) if os.path.exists(ip) else None
     ip2 = os.path.join(FS, "ivy_reader", "report_opt.json")  # --layer opt
     D["ivy_opt"] = json.load(open(ip2, encoding="utf-8")) if os.path.exists(ip2) else None
+    tp = os.path.join(FS, "ivy_top", "top.json")  # scripts/ivy_top_pick.py
+    if os.path.exists(tp):
+        T0 = json.load(open(tp, encoding="utf-8"))
+        tiles = []
+        for r in T0["top"]:
+            stem = r["id"].split("/")[1]
+            T = load_target(os.path.join(root, r["sub"], stem, f"{stem}_shown.png"), 128) > 0.5
+            S = load_target(os.path.join(BENCH, r["mask"]), 128) > 0.5
+            tg = np.tile(WALL, T.shape + (1,))
+            tg[T] = INK
+            sh = np.tile(WALL, S.shape + (1,))
+            sh[S] = ADAM_INK if r["optimizer"] == "adam" else CMA_INK
+            tiles.append({"label": r["label"], "sub": r["sub"], "target": png_uri(tg), "shadow": png_uri(sh),
+                          "judge": r["judge"], "iou": r["iou"], "optimizer": r["optimizer"], "objective": r["objective"],
+                          "source": r["source"], "seed": r["seed"], "font": stem.split("_", 1)[1],
+                          "labelled": r["source"].startswith("objective_study") and r["seed"] == 0,
+                          "same_as_iou": r["same_as_iou_pick"], "n": r["n_feasible"]})
+        D["ivy_top"] = {"summary": T0["summary"], "tiles": tiles,
+                        "n_labelled": sum(t["labelled"] for t in tiles)}
+    else:
+        D["ivy_top"] = None
     hp = os.path.join(FS, "human_summary.json")  # scripts/human_summary.py, from the picker page
     D["human"] = json.load(open(hp, encoding="utf-8")) if os.path.exists(hp) else None
     rp = os.path.join(FS, "research", "research.json")  # hand-written overnight research notes + numbers
@@ -296,6 +317,17 @@ figure.m.empty{visibility:hidden}
 .take{margin:0;padding-left:20px;display:grid;gap:4px;max-width:80ch}
 .take b{font-weight:600}
 #research[hidden]{display:none}
+#ivy_topcard[hidden]{display:none}
+dl.plain{margin:0;display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 14px;max-width:86ch}
+dl.plain dt{font:600 11px/1.6 var(--f-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+dl.plain dd{margin:0}
+@media (max-width:640px){dl.plain{grid-template-columns:1fr}}
+.ivysub{font:600 13px var(--f-display);margin:10px 0 4px;grid-column:1/-1}
+.ivygrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.ivytile{display:grid;grid-template-columns:auto auto;gap:4px;align-items:start;justify-content:start}
+.ivytile img{width:68px;height:68px;image-rendering:pixelated;border-radius:3px;background:var(--wall)}
+.ivytile .cap{grid-column:1/-1;font:11px/1.35 var(--f-mono);color:var(--muted)}
+.ivytile .cap b{color:var(--fg);font:600 13px var(--f-display)}
 #research_sub ul{margin:6px 0 0;padding-left:20px;display:grid;gap:3px}
 .rgrid{display:grid;gap:16px}
 .ritem{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:18px;display:grid;gap:12px;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
@@ -341,7 +373,11 @@ figure.m.empty{visibility:hidden}
     </div>
   </section>
   <section id="ivysec" hidden>
-    <div class="head"><span class="eyebrow">3 · Ivy reader</span><h2>A model of your judgement, in two layers</h2></div>
+    <div class="head"><span class="eyebrow">3 · Ivy judge</span><h2>A model of your eye, and its favourite shadow for every character</h2></div>
+    <dl class="plain" id="ivy_plain"></dl>
+    <div class="card" id="ivy_topcard" hidden><h3>The judge's top pick for every letter and digit</h3><p class="note" id="ivy_topnote"></p>
+      <div class="legend" id="ivy_toplegend"></div><div class="ivygrid" id="ivy_top"></div></div>
+    <h3 style="margin:8px 0 0;font:600 16px/1.2 var(--f-display)">Details</h3>
     <ul class="take" id="ivy_take"></ul>
     <div class="charts">
       <div class="card"><h3>How well it predicts you, on characters it never saw</h3><p class="note">5-fold cross-validation with whole characters held out. Marks and guesses: AUC; A/B: share of your choices it gets right. Solid: the judge (all features). Pale: the objective (shape features only). Grey: the best single metric.</p><div id="ivy_cv"></div></div>
@@ -617,6 +653,37 @@ function svg(w, h, body) { return `<svg viewBox="0 0 ${w} ${h}" width="100%" rol
   if (iv && dt) lines.push(`<b>Optimizing the judge itself is gamed:</b> IoU falls to ${iv.cells.iou.v.toFixed(2)} (CMA-ES). Its judge score is circular, so its cells are dashed.`);
   if (io && dt) lines.push(`<b>Judge scores (seed 0, mean, CMA-ES / Adam):</b> Ivy objective ${jd(io)} / ${jd(ioa)} vs dt2 ${jd(dt)} / ${jd(dta)}; IoU ${io.cells.iou.v.toFixed(3)} / ${ioa ? ioa.cells.iou.v.toFixed(3) : '–'} vs ${dt.cells.iou.v.toFixed(3)} / ${dta ? dta.cells.iou.v.toFixed(3) : '–'}; tc_iou ${io.cells.tc_iou.v.toFixed(3)} / ${ioa ? ioa.cells.tc_iou.v.toFixed(3) : '–'} vs ${dt.cells.tc_iou.v.toFixed(3)} / ${dta ? dta.cells.tc_iou.v.toFixed(3) : '–'}. The judge never steered these, so this is a fair score. The blind A/B tab "Ivy objective vs dt2" in the picker is the check that leans on no model at all.`);
   document.getElementById('ivy_take').innerHTML = lines.map(s => `<li>${s}</li>`).join('');
+  const nn = I.n || {}, bm = bestBase('mark_auc'), bg = bestBase('guess_auc'), ba = bestBase('ab_acc');
+  const P = [
+    ['What it is', `A small model that learned your taste from your own labels: ${(nn.marks || 0).toLocaleString()} good / not-good marks, ${nn.guesses || 0} guesses and ${nn.pairs || 0} side-by-side picks, on ${nn.glyphs || 62} characters. It looks at a few measurements of a shadow (overlap, shape, holes, stray shadow, and how confidently a glyph classifier reads it) and outputs the chance that you would mark the shadow good.`],
+    ['Why', 'So we can rank thousands of shadows the way you would, without asking you each time, and compare optimizers and objectives by your standard instead of by overlap alone.'],
+    ['How good', `On characters it never saw while learning, it agrees with your good marks at AUC ${cv.mark_auc.toFixed(2)} (best single measure: ${bm[0]}, ${bm[1].toFixed(2)}), with which shadows you read correctly at ${cv.guess_auc.toFixed(2)} (${bg[0]}, ${bg[1].toFixed(2)}), and with ${Math.round(100 * cv.ab_acc)}% of your side-by-side choices (${ba[0]}, ${Math.round(100 * ba[1])}%). AUC: take one shadow you marked good and one you did not; how often it ranks the good one higher (0.5 = coin flip).`],
+    ['Limits', 'It is fitted to one person, you, so new people are needed before it speaks for anyone else. It must only judge and pick, never be optimized directly: the solver games it (details below). And it reads the glyph classifier, so shadows made by optimizing that classifier score high for the wrong reason.'],
+  ];
+  document.getElementById('ivy_plain').innerHTML = P.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+  const IT = D.ivy_top;
+  if (IT) {
+    const S = IT.summary, pct = v => Math.round(100 * v) + '%';
+    document.getElementById('ivy_topcard').hidden = false;
+    document.getElementById('ivy_topnote').innerHTML =
+      `Every stored letter and digit shadow (${S.n_candidates.toLocaleString()}: the benchmark's own solves, both optimizer studies, the 12-try and fixed-floor runs) was scored by the judge. ` +
+      `Left out: ${S.n_infeasible} physically impossible poses (an arm collision, or a part more than 5 mm into the table), and shadows from objectives that optimized the judge itself or its classifier (ivy, ivy_mix, cls, shape3_cls). ` +
+      `Shown: the highest-scoring shadow per character, next to the target it was solved for. Its picks overlap the target ${S.mean_iou.toFixed(3)} on average, against ${S.mean_iou_of_iou_pick.toFixed(3)} when picking by overlap alone; the two choices agree on ${S.same_as_iou_pick} of ${S.n_chars} characters. ` +
+      `${IT.n_labelled} of the picks are shadows you labelled yourself, which the judge learned from, so it may favour those you marked good.`;
+    document.getElementById('ivy_toplegend').innerHTML = '<span><span class="mtag cma">CMA-ES</span> shadow tinted teal</span><span><span class="mtag adam">Adam</span> shadow tinted indigo</span><span>caption: judge score (chance you would mark it good) · overlap · where it came from</span>';
+    const SRC = {benchmark: 'benchmark run', objective_study: 'objective study', objective_study_adam: 'objective study', seeds_dt2: '12-try run', floorfix_dt2: 'fixed-floor run'};
+    const SUBN = [['letters_upper', 'Uppercase'], ['letters_lower', 'Lowercase'], ['digits', 'Digits']];
+    let h = '';
+    SUBN.forEach(([sub, nm]) => {
+      const ts = IT.tiles.filter(t => t.sub === sub); if (!ts.length) return;
+      h += `<div class="ivysub">${nm}</div>`;
+      ts.forEach(t => {
+        h += `<div class="ivytile"><img src="${t.target}" alt="target ${t.label}"><img src="${t.shadow}" alt="judge pick ${t.label}">` +
+          `<div class="cap"><b>${t.label}</b> &nbsp;${pct(t.judge)} · ${t.iou.toFixed(2)}<br>${SRC[t.source] || t.source}, ${t.objective === 'current' ? 'IoU+DT' : t.objective}, try ${t.seed}${t.labelled ? ' · you labelled it' : ''}</div></div>`;
+      });
+    });
+    document.getElementById('ivy_top').innerHTML = h;
+  }
 })();
 
 (function () {
