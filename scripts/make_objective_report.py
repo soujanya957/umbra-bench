@@ -133,10 +133,17 @@ def make_table(by, ids, objs, base_by=None):
 
 def main():
     global OUT
-    if len(sys.argv) > 1:  # another study folder, e.g. a smoke run
-        OUT = os.path.abspath(sys.argv[1])
+    import argparse
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("study", nargs="?", help="another study folder, e.g. a smoke run (no Adam tab)")
+    ap.add_argument("--viz-subset", choices=sorted(ORDER), help="gallery shows only this subset "
+                    "(tables still use every target); keeps the page small enough to share")
+    a = ap.parse_args()
+    if a.study:
+        OUT = os.path.abspath(a.study)
     by = load_by(OUT)
-    adam = load_by(os.path.join(FS, "objective_study_adam")) if len(sys.argv) <= 1 else None
+    adam = load_by(os.path.join(FS, "objective_study_adam")) if not a.study else None
     objs = [o for o in OBJ if o[0] in by]
     ids = sorted({i for o in by for i in by[o] if all(i in by[x[0]] for x in objs)},
                  key=lambda i: (ORDER.get(i.split("/")[0], 9), i))
@@ -169,6 +176,8 @@ def main():
     grid = []
     for i in ids:
         sub, stem = i.split("/")
+        if a.viz_subset and sub != a.viz_subset:
+            continue
         T = load_target(os.path.join(root, sub, stem, f"{stem}_shown.png"), 128) > 0.5
         tgt = np.tile(WALL, T.shape + (1,))
         tgt[T] = INK
@@ -182,7 +191,7 @@ def main():
                  ", ".join(f"{seeds_per.count(k)} with {k} seed{'s' if k > 1 else ''}" for k in ns[::-1]))
     D = {"n": len(ids), "seeds": seeds_txt, "objs": [{"o": o, "label": l, "family": f} for o, l, f, _ in objs],
          "met": [{"k": k, "label": l, "hb": hb, "group": g} for k, l, hb, g in MET], "table": table,
-         "tables": tables, "grid": grid, "has_marks": bool(marks)}
+         "tables": tables, "grid": grid, "has_marks": bool(marks), "viz_subset": a.viz_subset}
     ip = os.path.join(FS, "ivy_reader", "report.json")  # scripts/train_ivy_reader.py --layer judge
     D["ivy"] = json.load(open(ip, encoding="utf-8")) if os.path.exists(ip) else None
     ip2 = os.path.join(FS, "ivy_reader", "report_opt.json")  # --layer opt
@@ -322,7 +331,7 @@ figure.m.empty{visibility:hidden}
     </div>
   </section>
   <section>
-    <div class="head"><span class="eyebrow">4 · every character, every objective</span><h2>Shadows</h2></div>
+    <div class="head"><span class="eyebrow" id="gal_eyebrow">4 · every character, every objective</span><h2>Shadows</h2></div>
     <div class="tabs" role="tablist" id="tabs"></div>
     <div class="chips" id="chips"></div>
     <div class="legend" id="glegend"></div>
@@ -420,12 +429,15 @@ function svg(w, h, body) { return `<svg viewBox="0 0 ${w} ${h}" width="100%" rol
   document.getElementById('time').innerHTML = svg(W, H, b);
 })();
 (function () {
-  const SUBS = [['all', 'All'], ['letters_upper', 'Uppercase'], ['letters_lower', 'Lowercase'], ['digits', 'Digits']];
+  const ALL_SUBS = [['all', 'All'], ['letters_upper', 'Uppercase'], ['letters_lower', 'Lowercase'], ['digits', 'Digits']];
+  const present = ALL_SUBS.slice(1).filter(([s]) => D.grid.some(g => g.sub === s));
+  const SUBS = present.length > 1 ? [ALL_SUBS[0], ...present] : [['all', 'All'], ...present].slice(present.length);
   const METHOD = {cma: 'CMA-ES', adam: 'Adam'};
   const on = Object.fromEntries(D.objs.map(o => [o.o, true]));
   const methods = [...new Set(D.grid.flatMap(g => g.rows.map(r => r.tk)))];
   const mon = Object.fromEntries(methods.map(m => [m, true]));
-  let tab = 'all';
+  let tab = SUBS[0][0];
+  if (D.viz_subset) document.getElementById('gal_eyebrow').textContent = `4 · ${SUBS[SUBS.length - 1][1].toLowerCase()} only, every objective (numbers above use all ${D.n} targets)`;
   const counts = s => s === 'all' ? D.grid.length : D.grid.filter(g => g.sub === s).length;
   document.getElementById('glegend').innerHTML =
     methods.map(m => `<span><span class="mtag ${m}">${METHOD[m]}</span> shadow tinted ${m === 'cma' ? 'teal' : 'indigo'}</span>`).join('') +
@@ -437,7 +449,7 @@ function svg(w, h, body) { return `<svg viewBox="0 0 ${w} ${h}" width="100%" rol
   function draw() {
     const head = `<div class="grow h"><span></span><span>target</span>${D.objs.map(o => `<span class="${on[o.o] ? '' : 'off'}" style="color:${fam[o.family]}">${o.o}</span>`).join('')}</div>`;
     let h = '';
-    SUBS.slice(1).forEach(([s, name]) => {
+    present.forEach(([s, name]) => {
       if (tab !== 'all' && tab !== s) return;
       const rows = D.grid.filter(g => g.sub === s);
       if (!rows.length) return;
