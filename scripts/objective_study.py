@@ -85,7 +85,8 @@ def run(a):
     rig, ocfg = first["rig"], first["optimizer"]
     model, data, n = build_scene("urdf/SO101/so101_new_calib.urdf", n_robots=rig["n_robots"], arm_gap=rig["arm_gap_m"])
     mj = ShadowRenderer(model, data, size=rig["render_size"], n_robots=n)
-    br = BatchedShadowRenderer(mj, FastShadowRenderer(mj))
+    fast = FastShadowRenderer(mj)
+    br = BatchedShadowRenderer(mj, fast, floor=a.floor)
     os.makedirs(os.path.join(OUT, "masks"), exist_ok=True)
     path = os.path.join(OUT, "solves.jsonl")
     done = set()
@@ -119,6 +120,8 @@ def run(a):
                 rec = {"id": tid, "subset": sub, "label": label, "objective": name, "seed": s,
                        "seconds": round(dt, 3), "n_evals": int(res.n_evals), "mask": mp,
                        "collision_free": bool(cross <= 0 and self_ <= 0),
+                       "lowest_moving_z": round(float(fast.moving_min_z(res.best_q[None])[0]), 5),
+                       "floor": a.floor,
                        "q_rad": [round(float(v), 6) for v in res.best_q]}
                 with open(path, "a", encoding="utf-8") as f:
                     f.write(json.dumps(rec) + "\n")
@@ -276,6 +279,9 @@ if __name__ == "__main__":
     p.add_argument("--all-glyphs", action="store_true",
                    help="one target per character, A-Z a-z 0-9 (62), instead of the --src sample")
     p.add_argument("--out", default=OUT)
+    p.add_argument("--floor", choices=["mujoco", "mesh"], default="mujoco",
+                   help="floor barrier input: MuJoCo's pinned min_z (as in every stored result) or the "
+                        "moving bodies' real lowest vertex")
     a = p.parse_args()
     OUT = os.path.abspath(a.out)
     {"run": run, "run_adam": run_adam, "grade": grade}[a.cmd](a)

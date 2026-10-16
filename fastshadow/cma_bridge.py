@@ -15,9 +15,14 @@ import numpy as np
 
 
 class BatchedShadowRenderer:
-    def __init__(self, mj, fast):
+    def __init__(self, mj, fast, floor: str = "mujoco"):
+        """floor: "mujoco" keeps MuJoCo's min_z (pinned at -1.83 cm by the static base,
+        see FastShadowRenderer.moving_min_z); "mesh" feeds the optimizer's unchanged
+        floor barrier the real lowest vertex of the moving bodies instead."""
         self._mj = mj
         self._fast = fast
+        assert floor in ("mujoco", "mesh")
+        self.floor = floor
         self.n_batched = 0  # poses rendered through eval_q_batch
         self.objective = None  # (fn, TargetCache) from fastshadow.objectives.use_objective
         self._last = None  # GPU masks of the last eval_q_batch
@@ -59,8 +64,24 @@ class BatchedShadowRenderer:
         self._last = self._fast.render(Q)
         masks = self._last.cpu().numpy()
         pen = np.array([self._penalties(q) for q in Q])
+        if self.floor == "mesh":
+            import torch
+
+            with torch.no_grad():
+                pen[:, 0] = self._fast.moving_min_z(Q).cpu().numpy()
         self.n_batched += len(Q)
         return masks, pen[:, 0], pen[:, 1], pen[:, 2]
+
+    def eval_q(self, q):
+        """Single-pose path (Hungarian, ICP, snapshots, FD): MuJoCo's, with the floor
+        value swapped when floor == "mesh"."""
+        mask, min_z, cross, self_ = self._mj.eval_q(q)
+        if self.floor == "mesh":
+            import torch
+
+            with torch.no_grad():
+                min_z = float(self._fast.moving_min_z(np.asarray(q, np.float64)[None])[0])
+        return mask, min_z, cross, self_
 
     def batch_shadow_loss(self, target):
         """Shadow loss of every mask from the last eval_q_batch, on the GPU, or

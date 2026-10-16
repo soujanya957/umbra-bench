@@ -473,3 +473,21 @@ class FastShadowRenderer:
         renderer's geom-centre-minus-capped-radius estimate, so it is not a drop-in
         for its floor penalty; FastEvaluator keeps MuJoCo's for parity."""
         return self.world_verts(self.clip(Q))[..., 2].amin(1)
+
+    def moving_min_z(self, Q) -> torch.Tensor:
+        """Lowest casting vertex of the bodies a joint can move, per pose (B,).
+
+        The MuJoCo renderer's min_z (geom centre z minus bounding radius capped at
+        3.5 cm, over every arm geom) is pinned at -1.83 cm by the static base, so the
+        floor barrier never sees the 1 cm margin or the first 1.8 cm under the table,
+        and the cap under-reports the gripper (bounding radius 8.4 cm). This is the
+        real lowest point of what can move, so the same barrier sits where meant."""
+        if not hasattr(self, "_moving_vert"):
+            moving = [False] * len(self.parent)
+            for b in range(1, len(self.parent)):
+                moving[b] = moving[self.parent[b]] or any(c is not None for c, *_ in self.body_joints[b])
+            m = np.zeros(int(self.verts_local.shape[0]), bool)
+            for b, s0, n in self._body_blocks:
+                m[s0:s0 + n] = moving[b]
+            self._moving_vert = torch.tensor(m, device=self.device)
+        return self.world_verts(self.clip(self.as_q(Q)))[:, self._moving_vert, 2].amin(1)

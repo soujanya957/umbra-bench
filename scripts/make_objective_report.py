@@ -198,6 +198,8 @@ def main():
     D["ivy_opt"] = json.load(open(ip2, encoding="utf-8")) if os.path.exists(ip2) else None
     hp = os.path.join(FS, "human_summary.json")  # scripts/human_summary.py, from the picker page
     D["human"] = json.load(open(hp, encoding="utf-8")) if os.path.exists(hp) else None
+    rp = os.path.join(FS, "research", "research.json")  # hand-written overnight research notes + numbers
+    D["research"] = json.load(open(rp, encoding="utf-8")) if os.path.exists(rp) else None
     html = TEMPLATE.replace("/*DATA*/", json.dumps(D))
     out = os.path.join(FS, "report", "objective_report.html")
     os.makedirs(os.path.dirname(out), exist_ok=True)
@@ -293,6 +295,21 @@ figure.m.empty{visibility:hidden}
 .card{align-content:start}
 .take{margin:0;padding-left:20px;display:grid;gap:4px;max-width:80ch}
 .take b{font-weight:600}
+#research[hidden]{display:none}
+.rgrid{display:grid;gap:16px}
+.ritem{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:18px;display:grid;gap:12px;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+@media (max-width:860px){.ritem{grid-template-columns:1fr}}
+.ritem .rhead{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.ritem h3{font:600 18px/1.2 var(--f-display);margin:0}
+.verdict{font:600 11px/1 var(--f-mono);text-transform:uppercase;letter-spacing:.04em;padding:4px 7px;border-radius:3px;color:#fff}
+.verdict.yes{background:#2f8a57} .verdict.no{background:#b4473a} .verdict.mixed{background:#b07a12} .verdict.plan{background:#3a3fb0} .verdict.pending{background:#7a7e8a}
+.ritem dl{margin:0;display:grid;gap:8px;align-content:start}
+.ritem dt{font:600 11px/1 var(--f-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.ritem dd{margin:0;max-width:62ch}
+.ritem .rchart{display:grid;gap:12px;align-content:start}
+.ritem .rchart h4{font:600 13px/1.2 var(--f-display);margin:0}
+.ritem .rchart .note{font-size:12px;color:var(--muted);margin:0}
+.ritem ol,.ritem ul{margin:4px 0 0;padding-left:20px;display:grid;gap:3px}
 </style>
 <div class="wrap">
   <header class="head">
@@ -330,8 +347,13 @@ figure.m.empty{visibility:hidden}
       <div class="card"><h3>What it looks at</h3><p class="note">Drop in mark AUC + guess AUC when one feature is shuffled.</p><div id="ivy_imp"></div></div>
     </div>
   </section>
+  <section id="research" hidden>
+    <div class="head"><span class="eyebrow">4 · overnight research</span><h2>What we tried next, in plain words</h2>
+    <p class="sub" id="research_sub"></p></div>
+    <div class="rgrid" id="research_items"></div>
+  </section>
   <section>
-    <div class="head"><span class="eyebrow" id="gal_eyebrow">4 · every character, every objective</span><h2>Shadows</h2></div>
+    <div class="head"><span class="eyebrow" id="gal_eyebrow">5 · every character, every objective</span><h2>Shadows</h2></div>
     <div class="tabs" role="tablist" id="tabs"></div>
     <div class="chips" id="chips"></div>
     <div class="legend" id="glegend"></div>
@@ -437,7 +459,7 @@ function svg(w, h, body) { return `<svg viewBox="0 0 ${w} ${h}" width="100%" rol
   const methods = [...new Set(D.grid.flatMap(g => g.rows.map(r => r.tk)))];
   const mon = Object.fromEntries(methods.map(m => [m, true]));
   let tab = SUBS[0][0];
-  if (D.viz_subset) document.getElementById('gal_eyebrow').textContent = `4 · ${SUBS[SUBS.length - 1][1].toLowerCase()} only, every objective (numbers above use all ${D.n} targets)`;
+  if (D.viz_subset) document.getElementById('gal_eyebrow').textContent = `5 · ${SUBS[SUBS.length - 1][1].toLowerCase()} only, every objective (numbers above use all ${D.n} targets)`;
   const counts = s => s === 'all' ? D.grid.length : D.grid.filter(g => g.sub === s).length;
   document.getElementById('glegend').innerHTML =
     methods.map(m => `<span><span class="mtag ${m}">${METHOD[m]}</span> shadow tinted ${m === 'cma' ? 'teal' : 'indigo'}</span>`).join('') +
@@ -594,6 +616,38 @@ function svg(w, h, body) { return `<svg viewBox="0 0 ${w} ${h}" width="100%" rol
   if (iv && dt) lines.push(`<b>Optimizing the judge itself is gamed:</b> IoU falls to ${iv.cells.iou.v.toFixed(2)} (CMA-ES). Its judge score is circular, so its cells are dashed.`);
   if (io && dt) lines.push(`<b>Judge scores (seed 0, mean, CMA-ES / Adam):</b> Ivy objective ${jd(io)} / ${jd(ioa)} vs dt2 ${jd(dt)} / ${jd(dta)}; IoU ${io.cells.iou.v.toFixed(3)} / ${ioa ? ioa.cells.iou.v.toFixed(3) : '–'} vs ${dt.cells.iou.v.toFixed(3)} / ${dta ? dta.cells.iou.v.toFixed(3) : '–'}; tc_iou ${io.cells.tc_iou.v.toFixed(3)} / ${ioa ? ioa.cells.tc_iou.v.toFixed(3) : '–'} vs ${dt.cells.tc_iou.v.toFixed(3)} / ${dta ? dta.cells.tc_iou.v.toFixed(3) : '–'}. The judge never steered these, so this is a fair score. The blind A/B tab "Ivy objective vs dt2" in the picker is the check that leans on no model at all.`);
   document.getElementById('ivy_take').innerHTML = lines.map(s => `<li>${s}</li>`).join('');
+})();
+
+(function () {
+  const R = D.research; if (!R) return;
+  document.getElementById('research').hidden = false;
+  document.getElementById('research_sub').innerHTML = R.intro || '';
+  const COL = {judge: '#c27c0e', sds: '#b04a8f', base: 'var(--base)', good: '#2f8a57', bad: '#b4473a', shape: 'var(--shape)', ink: 'var(--fg)'};
+  const F = {pct: v => Math.round(100 * v) + '%', f2: v => v.toFixed(2), f3: v => v.toFixed(3), f1: v => v.toFixed(1), s: v => v < 1 ? Math.round(1000 * v) + ' ms' : v.toFixed(1) + ' s'};
+  function chart(c) {
+    const fmt = F[c.fmt || 'f2'], W = 520, L = c.label_w || 170, Rm = 60, bh = 14, gap = 6, T = 4;
+    const H = c.rows.length * (bh + gap) + T + 22, x0 = c.min ?? 0, x1 = c.max ?? 1;
+    const x = v => L + (W - L - Rm) * (Math.min(x1, Math.max(x0, v)) - x0) / (x1 - x0);
+    let b = '';
+    (c.ticks || [x0, (x0 + x1) / 2, x1]).forEach(t => { b += `<line x1="${x(t)}" x2="${x(t)}" y1="${T}" y2="${H - 18}" stroke="var(--rule)"/><text x="${x(t)}" y="${H - 4}" text-anchor="middle">${fmt(t)}</text>`; });
+    if (c.ref != null) b += `<line x1="${x(c.ref)}" x2="${x(c.ref)}" y1="${T}" y2="${H - 18}" stroke="var(--muted)" stroke-dasharray="4 3"/><text x="${x(c.ref) + 4}" y="${T + 9}">${c.ref_label || ''}</text>`;
+    c.rows.forEach((r, i) => { const y = T + i * (bh + gap), cy = y + bh / 2;
+      if (r.head) { b += `<text class="lab" x="4" y="${cy + 4}" style="font-weight:600">${r.label}</text>`; return; }
+      b += `<text class="lab" x="${L - 8}" y="${cy + 4}" text-anchor="end">${r.label}</text>`;
+      b += `<rect x="${x(x0)}" y="${y}" width="${Math.max(1, x(r.v) - x(x0))}" height="${bh}" rx="2" fill="${COL[r.color] || r.color || COL.ink}" opacity="${r.op || 0.85}"><title>${r.label}: ${fmt(r.v)}</title></rect>`;
+      if (r.ref != null) b += `<line x1="${x(r.ref)}" x2="${x(r.ref)}" y1="${y - 2}" y2="${y + bh + 2}" stroke="var(--fg)" stroke-width="2"><title>chance ${fmt(r.ref)}</title></line>`;
+      b += `<text x="${x(r.v) + 6}" y="${cy + 4}" style="fill:var(--fg)">${fmt(r.v)}${r.note ? ' ' + r.note : ''}</text>`; });
+    return `<div><h4>${c.title}</h4>${svg(W, H, b)}${c.note ? `<p class="note">${c.note}</p>` : ''}</div>`;
+  }
+  const V = {yes: 'works', no: 'does not work', mixed: 'mixed', plan: 'plan', pending: 'still running'};
+  document.getElementById('research_items').innerHTML = R.items.map(it => {
+    const dl = [['What it is', it.what], ['Why we did it', it.why], ['What we expected', it.expect], ['What happened', it.result], ['Next', it.next]]
+      .filter(([, v]) => v).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+    const charts = (it.charts || []).map(chart).join('') + (it.images || []).map(im =>
+      `<figure style="margin:0;display:grid;gap:4px;justify-items:start"><img src="${im.uri}" alt="${im.caption}" width="${im.w || 180}" style="width:${im.w || 180}px;max-width:100%;height:auto;border-radius:4px;border:1px solid var(--rule)"><figcaption class="note">${im.caption}</figcaption></figure>`).join('');
+    return `<article class="ritem"><div class="rhead"><span class="verdict ${it.verdict}">${it.label || V[it.verdict] || it.verdict}</span><h3>${it.title}</h3></div>` +
+      `<dl>${dl}</dl><div class="rchart">${charts}</div></article>`;
+  }).join('');
 })();
 
 document.getElementById('foot').textContent =

@@ -143,13 +143,16 @@ def mask_paths():
     return out
 
 
-def sanity(sc):
-    """Clean target glyphs: rank of the right character's prompt among the subset's characters."""
+def sanity(sc, fonts=3):
+    """Clean target glyphs: rank of the right character's prompt among the subset's characters.
+    `fonts` caps the target images per character (the benchmark has 3 fonts each)."""
     root = os.path.join(BENCH, "optimized", "big-budget-grounded")
     out = {}
     for sub in KIND:
         rows = [(stem.split("_")[0], load_target(os.path.join(root, sub, stem, f"{stem}_shown.png"), 128) > 0.5)
                 for stem in sorted(os.listdir(os.path.join(root, sub)))]
+        seen = defaultdict(int)
+        rows = [r for r in rows if (seen.__setitem__(r[0], seen[r[0]] + 1) or seen[r[0]]) <= fonts]
         chars = sorted({c for c, _ in rows})
         E = sc.errors(sc.latents([m for _, m in rows]), [glyph_prompt(sub, c) for c in chars])
         ranks = [int((E[i] < E[i, chars.index(c)]).sum()) + 1 for i, (c, _) in enumerate(rows)]
@@ -167,17 +170,21 @@ def main():
     ap.add_argument("--model", choices=sorted(MODELS), default="sd15")
     ap.add_argument("--skip-sanity", action="store_true")
     ap.add_argument("--sanity-only", action="store_true")
+    ap.add_argument("--n-noise", type=int, default=2, help="noise draws per timestep (8 timesteps)")
+    ap.add_argument("--batch", type=int, default=16)
+    ap.add_argument("--fonts", type=int, default=3, help="sanity: target images per character")
     a = ap.parse_args()
     out = os.path.join(OUT, a.model)
     os.makedirs(out, exist_ok=True)
-    sc = SDSScorer(a.model)
+    sc = SDSScorer(a.model, n_noise=a.n_noise, batch=a.batch)
     rp = os.path.join(out, "report.json")
     report = json.load(open(rp)) if os.path.exists(rp) else {}
     report.update({"model": MODELS[a.model], "timesteps": sc.ts.tolist(), "n_noise": len(sc.t_all) // len(sc.ts),
                    "prompt": glyph_prompt("digits", "3"), "neutral": NEUTRAL})
     if not a.skip_sanity:
         print("sanity: clean targets, right prompt vs the subset's other characters", flush=True)
-        report["sanity"] = sanity(sc)
+        report["sanity"] = sanity(sc, a.fonts)
+        report["sanity_settings"] = {"fonts": a.fonts, "n_noise": a.n_noise}
         json.dump(report, open(rp, "w"), indent=2)
     if a.sanity_only:
         return
