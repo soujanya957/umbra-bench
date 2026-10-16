@@ -317,7 +317,14 @@ figure.m.empty{visibility:hidden}
 .take{margin:0;padding-left:20px;display:grid;gap:4px;max-width:80ch}
 .take b{font-weight:600}
 #research[hidden]{display:none}
-#ivy_topcard[hidden]{display:none}
+.ivystrip{display:grid;gap:10px}
+.ivyrow{display:flex;flex-wrap:wrap;gap:6px}
+.ivyrow figure{margin:0;display:grid;justify-items:center;gap:1px}
+.ivyrow img{width:56px;height:56px;image-rendering:pixelated;border-radius:3px;background:var(--wall)}
+.ivyrow figcaption{font:500 11px var(--f-mono);color:var(--muted)}
+details.more{display:grid;gap:12px}
+details.more summary{cursor:pointer;font:600 14px var(--f-display);color:var(--muted)}
+details.more[open]{gap:14px}
 dl.plain{margin:0;display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 14px;max-width:86ch}
 dl.plain dt{font:600 11px/1.6 var(--f-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 dl.plain dd{margin:0}
@@ -373,16 +380,16 @@ dl.plain dd{margin:0}
     </div>
   </section>
   <section id="ivysec" hidden>
-    <div class="head"><span class="eyebrow">3 · Ivy judge</span><h2>A model of your eye, and its favourite shadow for every character</h2></div>
+    <div class="head"><span class="eyebrow">3 · Ivy judge</span><h2>Its top shadow for every character</h2><p class="sub" id="ivy_topnote"></p></div>
+    <div class="ivystrip" id="ivy_top"></div>
+    <details class="more"><summary>How the judge works</summary>
     <dl class="plain" id="ivy_plain"></dl>
-    <div class="card" id="ivy_topcard" hidden><h3>The judge's top pick for every letter and digit</h3><p class="note" id="ivy_topnote"></p>
-      <div class="legend" id="ivy_toplegend"></div><div class="ivygrid" id="ivy_top"></div></div>
-    <h3 style="margin:8px 0 0;font:600 16px/1.2 var(--f-display)">Details</h3>
     <ul class="take" id="ivy_take"></ul>
     <div class="charts">
       <div class="card"><h3>How well it predicts you, on characters it never saw</h3><p class="note">5-fold cross-validation with whole characters held out. Marks and guesses: AUC; A/B: share of your choices it gets right. Solid: the judge (all features). Pale: the objective (shape features only). Grey: the best single metric.</p><div id="ivy_cv"></div></div>
       <div class="card"><h3>What it looks at</h3><p class="note">Drop in mark AUC + guess AUC when one feature is shuffled.</p><div id="ivy_imp"></div></div>
     </div>
+    </details>
   </section>
   <section id="research" hidden>
     <div class="head"><span class="eyebrow">4 · overnight research</span><h2>What we tried next, in plain words</h2>
@@ -664,23 +671,17 @@ function svg(w, h, body) { return `<svg viewBox="0 0 ${w} ${h}" width="100%" rol
   const IT = D.ivy_top;
   if (IT) {
     const S = IT.summary, pct = v => Math.round(100 * v) + '%';
-    document.getElementById('ivy_topcard').hidden = false;
     document.getElementById('ivy_topnote').innerHTML =
-      `Every stored letter and digit shadow (${S.n_candidates.toLocaleString()}: the benchmark's own solves, both optimizer studies, the 12-try and fixed-floor runs) was scored by the judge. ` +
-      `Left out: ${S.n_infeasible} physically impossible poses (an arm collision, or a part more than 5 mm into the table), and shadows from objectives that optimized the judge itself or its classifier (ivy, ivy_mix, cls, shape3_cls). ` +
-      `Shown: the highest-scoring shadow per character, next to the target it was solved for. Its picks overlap the target ${S.mean_iou.toFixed(3)} on average, against ${S.mean_iou_of_iou_pick.toFixed(3)} when picking by overlap alone; the two choices agree on ${S.same_as_iou_pick} of ${S.n_chars} characters. ` +
-      `${IT.n_labelled} of the picks are shadows you labelled yourself, which the judge learned from, so it may favour those you marked good.`;
-    document.getElementById('ivy_toplegend').innerHTML = '<span><span class="mtag cma">CMA-ES</span> shadow tinted teal</span><span><span class="mtag adam">Adam</span> shadow tinted indigo</span><span>caption: judge score (chance you would mark it good) · overlap · where it came from</span>';
+      `The judge's highest-scoring shadow per character, out of ${S.n_candidates.toLocaleString()} stored shadows (impossible poses and shadows steered by the judge or its classifier left out). Teal CMA-ES, indigo Adam; hover for score and source.`;
     const SRC = {benchmark: 'benchmark run', objective_study: 'objective study', objective_study_adam: 'objective study', seeds_dt2: '12-try run', floorfix_dt2: 'fixed-floor run'};
     const SUBN = [['letters_upper', 'Uppercase'], ['letters_lower', 'Lowercase'], ['digits', 'Digits']];
     let h = '';
     SUBN.forEach(([sub, nm]) => {
       const ts = IT.tiles.filter(t => t.sub === sub); if (!ts.length) return;
-      h += `<div class="ivysub">${nm}</div>`;
-      ts.forEach(t => {
-        h += `<div class="ivytile"><img src="${t.target}" alt="target ${t.label}"><img src="${t.shadow}" alt="judge pick ${t.label}">` +
-          `<div class="cap"><b>${t.label}</b> &nbsp;${pct(t.judge)} · ${t.iou.toFixed(2)}<br>${SRC[t.source] || t.source}, ${t.objective === 'current' ? 'IoU+DT' : t.objective}, try ${t.seed}${t.labelled ? ' · you labelled it' : ''}</div></div>`;
-      });
+      h += '<div class="ivyrow">' + ts.map(t => {
+        const tip = `${t.label}: judge ${pct(t.judge)}, overlap ${t.iou.toFixed(2)}, ${SRC[t.source] || t.source}, ${t.objective === 'current' ? 'IoU+DT' : t.objective}, try ${t.seed}${t.labelled ? ', you labelled it' : ''}`;
+        return `<figure title="${tip}"><img src="${t.shadow}" alt="${t.label}"><figcaption>${t.label}</figcaption></figure>`;
+      }).join('') + '</div>';
     });
     document.getElementById('ivy_top').innerHTML = h;
   }
