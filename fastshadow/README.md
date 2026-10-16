@@ -53,6 +53,10 @@ database; export it with ArtifactData into `results/fastshadow/picks_v*/`.
 * Objectives: nothing beats IoU-type objectives on IoU; semantic objectives (classifier, CLIP, the full Ivy reader) get gamed when optimized. `dt2` is the safe default; the monotone Ivy objective ties it under the judge with better tc_iou and fewer filled holes.
 * Arrangements (digits): the column stays best; optimizing its spacing adds about 0.006 IoU, a per-digit choice of arrangement 0.018. CMA-ES beat Adam on all 10 digits and pushes spacing to the 0.12 m floor.
 * The Ivy judge predicts held-out human marks / reads / A/B choices at AUC 0.81 / 0.82 / 76%, above every single metric.
+* Floor: the solver's floor term was pinned by the static base at -1.83 cm, so 10.7% of stored solves put the gripper or jaw more than 5 mm into the table (all flagged collision-free). `BatchedShadowRenderer(floor="mesh")` / `objective_study.py --floor mesh` uses the moving bodies' real lowest point: penetration 10% to 0% on 30 glyphs x 3 seeds, best-of-3 IoU -0.003 (95% -0.015..+0.007), 1.32 to 1.47 s per solve.
+* More seeds beat more objectives: best of 12 dt2 seeds 0.754 IoU vs best of the 13-objective menu 0.740 (+0.015, 95% +0.005..+0.025), tc_iou 0.687 vs 0.652.
+* Joint error: 1 degree costs 0.013 IoU on average, 2 degrees 0.035; the best solve is almost always also the most robust, so robustness need not be a selection term (`scripts/robustness_check.py`).
+* SDS does not work here: SD 1.5 and SDXL cannot tell clean letters apart (top-1 at chance) and SD 1.5's score agrees with human marks at AUC 0.47 (`scripts/sds_score.py`).
 
 Adam tuning (8 glyphs, 1 seed, mean IoU vs CMA-ES 0.744): 32 starts x 200 steps 0.727 (2.8 s); 64 x 300 0.744 (5.2 s); 128 x 300 0.760 (7.9 s); lr 0.1 0.717; 64 x 300 with re-seeding 0.777 (5.4 s, chosen); 128 x 200 0.748; 128 x 200 re-seeded 0.769.
 
