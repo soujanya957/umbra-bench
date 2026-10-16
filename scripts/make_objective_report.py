@@ -213,7 +213,17 @@ def main():
                           "source": r["source"], "seed": r["seed"], "font": stem.split("_", 1)[1],
                           "labelled": r["source"].startswith("objective_study") and r["seed"] == 0,
                           "same_as_iou": r["same_as_iou_pick"], "n": r["n_feasible"]})
-        D["ivy_top"] = {"summary": T0["summary"], "tiles": tiles,
+        cmp = {}
+        for rule in ("IoU", "classifier embedding"):
+            row = []
+            for r in T0.get("picks_by_rule", {}).get(rule, []):
+                S = load_target(os.path.join(BENCH, r["mask"]), 128) > 0.5
+                sh = np.tile(WALL, S.shape + (1,))
+                sh[S] = ADAM_INK if r["optimizer"] == "adam" else CMA_INK
+                row.append({"label": r["label"], "sub": r["sub"], "shadow": png_uri(sh), "judge": r["judge"], "iou": r["iou"],
+                            "source": r["source"], "objective": r["objective"], "seed": r["seed"]})
+            cmp[rule] = row
+        D["ivy_top"] = {"summary": T0["summary"], "tiles": tiles, "cmp": cmp,
                         "n_labelled": sum(t["labelled"] for t in tiles)}
     else:
         D["ivy_top"] = None
@@ -318,6 +328,8 @@ figure.m.empty{visibility:hidden}
 .take b{font-weight:600}
 #research[hidden]{display:none}
 .ivystrip{display:grid;gap:10px}
+.ivypair{display:grid;grid-template-columns:96px minmax(0,1fr);gap:4px 8px;align-items:center}
+.ivypair .who{font:500 12px var(--f-body);color:var(--muted);text-align:right}
 .ivyrow{display:flex;flex-wrap:wrap;gap:6px}
 .ivyrow figure{margin:0;display:grid;justify-items:center;gap:1px}
 .ivyrow img{width:56px;height:56px;image-rendering:pixelated;border-radius:3px;background:var(--wall)}
@@ -382,6 +394,9 @@ dl.plain dd{margin:0}
   <section id="ivysec" hidden>
     <div class="head"><span class="eyebrow">3 · Ivy judge</span><h2>Its top shadow for every character</h2><p class="sub" id="ivy_topnote"></p></div>
     <div class="ivystrip" id="ivy_top"></div>
+    <div class="charts" id="ivy_rulecharts"></div>
+    <div class="card"><h3>Side by side: the judge's pick vs the best other metric's pick</h3>
+      <div class="seg" role="tablist" id="ivy_cmptabs"></div><p class="note" id="ivy_cmpnote"></p><div class="ivystrip" id="ivy_cmp"></div></div>
     <details class="more"><summary>How the judge works</summary>
     <dl class="plain" id="ivy_plain"></dl>
     <ul class="take" id="ivy_take"></ul>
@@ -684,6 +699,39 @@ function svg(w, h, body) { return `<svg viewBox="0 0 ${w} ${h}" width="100%" rol
       }).join('') + '</div>';
     });
     document.getElementById('ivy_top').innerHTML = h;
+    const R = S.by_rule || {};
+    const names = Object.keys(R).sort((a, b) => R[b].mean_judge - R[a].mean_judge);
+    function rbars(title, key, ref, note, x0, x1, fmt) {
+      const W = 520, L = 150, Rm = 54, bh = 15, gap = 6, T = 18, Hh = names.length * (bh + gap) + T + 22;
+      const x = v => L + (W - L - Rm) * (v - x0) / (x1 - x0);
+      let b = '';
+      for (let t = x0; t <= x1 + 1e-9; t += (x1 - x0) / 4) b += `<line x1="${x(t)}" x2="${x(t)}" y1="${T}" y2="${Hh - 18}" stroke="var(--rule)"/><text x="${x(t)}" y="${Hh - 4}" text-anchor="middle">${fmt(t)}</text>`;
+      b += `<line x1="${x(ref)}" x2="${x(ref)}" y1="${T}" y2="${Hh - 18}" stroke="var(--muted)" stroke-dasharray="4 3"/><text x="${x(ref)}" y="11" text-anchor="middle">all shadows</text>`;
+      names.forEach((n, i) => { const y = T + i * (bh + gap), v = R[n][key];
+        b += `<text class="lab" x="${L - 8}" y="${y + bh - 3}" text-anchor="end">pick by ${n}</text><rect x="${x(x0)}" y="${y}" width="${Math.max(1, x(v) - x(x0))}" height="${bh}" rx="2" fill="${n === 'Ivy judge' ? '#c27c0e' : 'var(--base)'}"/><text x="${x(v) + 6}" y="${y + bh - 3}" style="fill:var(--fg)">${fmt(v)}</text>`; });
+      return `<div class="card"><h3>${title}</h3><p class="note">${note}</p>${svg(W, Hh, b)}</div>`;
+    }
+    document.getElementById('ivy_rulecharts').innerHTML =
+      rbars('Average Ivy score of the 62 picks', 'mean_judge', S.mean_judge_all, 'One shadow per character, picked by the highest value of each metric. The judge row is highest by construction.', 0, 0.8, v => v.toFixed(2)) +
+      rbars('Average overlap (IoU) of the same picks', 'mean_iou', S.mean_iou_all, 'Same picks, scored by overlap with their target.', 0.6, 0.8, v => v.toFixed(2));
+    const C = IT.cmp || {}, rules = Object.keys(C).filter(k => C[k].length);
+    let cur = rules[0];
+    const tabs = document.getElementById('ivy_cmptabs');
+    function drawCmp() {
+      tabs.innerHTML = rules.map(r => `<button role="tab" aria-selected="${r === cur}" data-r="${r}">${r}</button>`).join('');
+      const same = IT.tiles.filter((t, i) => C[cur][i] && C[cur][i].judge === t.judge).length;
+      document.getElementById('ivy_cmpnote').innerHTML = `Top row: the judge's pick (as above). Bottom row: the shadow with the highest ${cur} for the same character. Same shadow on ${same} of ${IT.tiles.length} characters. Averages: Ivy score ${R['Ivy judge'].mean_judge.toFixed(2)} vs ${R[cur].mean_judge.toFixed(2)}, overlap ${R['Ivy judge'].mean_iou.toFixed(3)} vs ${R[cur].mean_iou.toFixed(3)}.`;
+      let g = '';
+      SUBN.forEach(([sub]) => {
+        const a = IT.tiles.filter(t => t.sub === sub), b = C[cur].filter(t => t.sub === sub); if (!a.length) return;
+        const fig = (t) => `<figure title="${t.label}: judge ${pct(t.judge)}, overlap ${t.iou.toFixed(2)}"><img src="${t.shadow}" alt="${t.label}"><figcaption>${t.label} ${pct(t.judge)}</figcaption></figure>`;
+        g += `<div class="ivypair"><span class="who">Ivy judge</span><div class="ivyrow">${a.map(fig).join('')}</div>` +
+             `<span class="who">${cur}</span><div class="ivyrow">${b.map(fig).join('')}</div></div>`;
+      });
+      document.getElementById('ivy_cmp').innerHTML = g;
+    }
+    tabs.addEventListener('click', e => { const bt = e.target.closest('button'); if (!bt) return; cur = bt.dataset.r; drawCmp(); });
+    if (rules.length) drawCmp();
   }
 })();
 

@@ -71,10 +71,11 @@ def main():
     import torch
     from renderer import ShadowRenderer, build_scene
 
-    from fastshadow.ivy_reader import judge
+    from fastshadow.ivy_reader import FEATURES, FeatureMaker, judge
     from fastshadow.objectives import Target
     from fastshadow.renderer import FastShadowRenderer
 
+    fm = FeatureMaker()
     C = candidates()
     print(len(C), "candidate shadows", Counter(c["source"] for c in C))
     model, data, n = build_scene("urdf/SO101/so101_new_calib.urdf", n_robots=3, arm_gap=0.2)
@@ -100,11 +101,28 @@ def main():
             S = torch.tensor(np.stack([load_target(c["mask"], 128) for c in chunk]), device="cuda")
             with torch.no_grad():
                 p = judge(S, t).cpu().numpy()
-            for c, v in zip(chunk, p):
+                F = fm(S, t).cpu().numpy()
+            for c, v, f in zip(chunk, p, F):
                 c["judge"] = float(v)
+                c["feat"] = dict(zip(FEATURES, map(float, f)))
     by_char = defaultdict(list)
     for c in C:
         by_char[(c["sub"], c["label"])].append(c)
+    # pick one shadow per character by each rule (higher is better for all of these), then
+    # average the judge score and the overlap of the 62 picks
+    RULES = {"Ivy judge": lambda c: c["judge"], "IoU": lambda c: c["feat"]["iou"], "tc_iou": lambda c: c["feat"]["tc_iou"],
+             "boundary IoU": lambda c: c["feat"]["biou"], "clDice": lambda c: c["feat"]["cldice"],
+             "classifier p": lambda c: c["feat"]["cls_p"], "classifier embedding": lambda c: c["feat"]["emb_cos"]}
+    by_rule, picks_by_rule = {}, {}
+    order = sorted(by_char, key=lambda k: (SUBS.index(k[0]), k[1]))
+    for name, key in RULES.items():
+        picks = [max([c for c in by_char[k] if c["collision_free"] and c["lowest_mm"] >= TABLE_MM], key=key) for k in order]
+        by_rule[name] = {"mean_judge": float(np.mean([c["judge"] for c in picks])),
+                         "mean_iou": float(np.mean([c["feat"]["iou"] for c in picks]))}
+        picks_by_rule[name] = [{"sub": k[0], "label": k[1], "id": c["id"], "mask": os.path.relpath(c["mask"], BENCH),
+                                "optimizer": c["optimizer"], "objective": c["objective"], "source": c["source"],
+                                "seed": c["seed"], "judge": c["judge"], "iou": c["feat"]["iou"]}
+                               for k, c in zip(order, picks)]
     top, n_infeasible = [], 0
     for (sub, ch), cs in sorted(by_char.items(), key=lambda kv: (SUBS.index(kv[0][0]), kv[0][1])):
         ok = [c for c in cs if c["collision_free"] and c["lowest_mm"] >= TABLE_MM]
@@ -126,9 +144,11 @@ def main():
             "same_as_iou_pick": sum(r["same_as_iou_pick"] for r in top), "n_chars": len(top),
             "mean_judge": float(np.mean([r["judge"] for r in top])), "mean_iou": float(np.mean([r["iou"] for r in top])),
             "mean_iou_of_iou_pick": float(np.mean([r["iou_pick_iou"] for r in top])),
-            "mean_judge_of_iou_pick": float(np.mean([r["iou_pick_judge"] for r in top]))}
+            "mean_judge_of_iou_pick": float(np.mean([r["iou_pick_judge"] for r in top])),
+            "by_rule": by_rule, "mean_judge_all": float(np.mean([c["judge"] for c in C])),
+            "mean_iou_all": float(np.mean([c["feat"]["iou"] for c in C]))}
     os.makedirs(OUT, exist_ok=True)
-    json.dump({"summary": summ, "top": top}, open(os.path.join(OUT, "top.json"), "w"), indent=1)
+    json.dump({"summary": summ, "top": top, "picks_by_rule": picks_by_rule}, open(os.path.join(OUT, "top.json"), "w"), indent=1)
     print(json.dumps(summ, indent=1))
 
 
