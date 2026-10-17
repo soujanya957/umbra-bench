@@ -65,7 +65,6 @@ def plan_item():
     g36 = [float(c) for c in bk["glyph36_full_k1_to_k5"].split("@")[0].split("/")]
     g36_long = float(bk["glyph36_full_long_k1_to_k3"].split("/")[0])
     kc = s["k_curve"]
-    io, dt = x["ivy_opt"], x["dt2"]
     p0_ci = json.loads(ab["P0_wald_ci"])
     ns_ci = json.loads(ab["nonsemantic_P0_glyphboot_ci"])
     n_adam = round(ab["adam_raw_share"] * ab["decided_pairs"])
@@ -94,12 +93,8 @@ def plan_item():
                       "way to spend it: they run in parallel and give several poses to choose a safe one from. Longer solves "
                       "vs more tries is still to test.</li>"
                       "<li><b>No learned score may steer the search or choose the result.</b> The classifier, CLIP, the Ivy judge "
-                      "and SDS only report. Each one we optimized on its own got gamed (the classifier was then right 93% of "
-                      "the time, you 43%). The one safe version, an Ivy score that can only reward better shape, mixed with "
-                      f"overlap, did not beat dt2: overlap {io['iou']:.3f} vs {dt['iou']:.3f} on {x['ivy_opt_vs_dt2_n_glyphs']} "
-                      f"glyphs, though better shape ({io['tc_iou']:.3f} vs {dt['tc_iou']:.3f} tc_iou, which it partly optimizes). "
-                      "It is fitted to your marks only, so it stays out until new people confirm it. Choose the final shadow "
-                      "by: physically possible first, then overlap.</li>"
+                      "and SDS only report. Each one we optimized got gamed (the classifier was then right 93% of the time, "
+                      "you 43%). Choose the final shadow by: physically possible first, then overlap.</li>"
                       "<li><b>Fix the safety bugs first</b> (next card).</li>"
                       "<li><b>Animations:</b> keep a few good poses per frame and choose the smoothest path through all frames, "
                       "instead of fixing each frame before the next. Not tested yet; today's frame-after-frame method stays as "

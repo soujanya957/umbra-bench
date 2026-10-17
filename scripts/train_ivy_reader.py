@@ -98,7 +98,7 @@ def build(doc):
     return items, X, marks, guesses, pairs, glyph_of
 
 
-def fit(X, marks, guesses, pairs, hidden, features, steps=1500, l2=1e-3, seed=0, signs=None):
+def fit(X, marks, guesses, pairs, hidden, features, steps=1500, l2=1e-3, seed=0):
     import torch
 
     from fastshadow.ivy_reader import IvyReader
@@ -131,11 +131,6 @@ def fit(X, marks, guesses, pairs, hidden, features, steps=1500, l2=1e-3, seed=0,
         opt.zero_grad()
         loss.backward()
         opt.step()
-        if signs is not None and hidden == 0:  # projected step: keep each weight on its allowed side
-            with torch.no_grad():
-                w = m.net.weight[0]
-                sg = torch.tensor([signs[f] for f in features], dtype=w.dtype)
-                w.copy_(torch.where(sg > 0, w.clamp_min(0), torch.where(sg < 0, w.clamp_max(0), torch.zeros_like(w))))
     m.eval()
     return m
 
@@ -155,17 +150,12 @@ def main():
 
     import torch
 
-    from fastshadow.ivy_reader import FEATURES, SHAPE_FEATURES, SHAPE_SIGNS, WEIGHTS, WEIGHTS_OPT
+    from fastshadow.ivy_reader import FEATURES, WEIGHTS
 
     ap = argparse.ArgumentParser()
     ap.add_argument("picks")
-    ap.add_argument("--layer", choices=["judge", "opt"], default="judge",
-                    help="judge: all features, for evaluation/selection; opt: shape features only, for optimization")
     a = ap.parse_args()
-    feats = FEATURES if a.layer == "judge" else SHAPE_FEATURES
-    weights = WEIGHTS if a.layer == "judge" else WEIGHTS_OPT
-    signs = SHAPE_SIGNS if a.layer == "opt" else None
-    report = "report.json" if a.layer == "judge" else "report_opt.json"
+    feats, weights, report = FEATURES, WEIGHTS, "report.json"
     doc = json.load(open(a.picks, encoding="utf-8"))
     doc = doc.get("data", doc)
     os.makedirs(OUT, exist_ok=True)
@@ -186,7 +176,7 @@ def main():
         sc = np.full(len(items), np.nan)
         for fold in folds:
             trm, trg, trp, *_ = split(fold)
-            m = fit(X, trm, trg, trp, hidden, feats, signs=signs)
+            m = fit(X, trm, trg, trp, hidden, feats)
             with torch.no_grad():
                 s = m.score(torch.tensor(X)).numpy()
             for i in range(len(items)):
@@ -201,11 +191,9 @@ def main():
     for f, r in sorted(base.items(), key=lambda kv: -kv[1]["mark_auc"]):
         print(f"  baseline {f:10s} {r}")
     best = max(results, key=lambda k: results[k]["mark_auc"] + results[k]["guess_auc"] + results[k]["ab_acc"])
-    if a.layer == "opt":
-        best = "linear"  # the objective must not extrapolate: an MLP reader was gamed off its training range
     hidden = 0 if best == "linear" else 16
-    m = fit(X, marks, guesses, pairs, hidden, feats, signs=signs)
-    torch.save({"state": m.state_dict(), "hidden": hidden, "features": feats, "layer": a.layer}, weights)
+    m = fit(X, marks, guesses, pairs, hidden, feats)
+    torch.save({"state": m.state_dict(), "hidden": hidden, "features": feats, "layer": "judge"}, weights)
     # importance: drop in training mark AUC when a feature is shuffled
     Xt = torch.tensor(X)
     with torch.no_grad():
@@ -223,7 +211,7 @@ def main():
     lin = None
     if hidden == 0:
         lin = {f: float(w) for f, w in zip(feats, m.net.weight.detach()[0].numpy())}
-    rep = {"layer": a.layer, "features": feats,
+    rep = {"layer": "judge", "features": feats,
            "n": {"shadows": len(items), "marks": len(marks), "guesses": len(guesses), "pairs": len(pairs), "glyphs": len(glyphs)},
            "cv": results, "chosen": best, "baselines": base, "importance": imp, "linear_weights": lin, "train_fit": a0}
     json.dump(rep, open(os.path.join(OUT, report), "w"), indent=2)

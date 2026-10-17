@@ -18,7 +18,7 @@ for contact checks and as the reference renderer every reported number is measur
 | `objectives.py` | Shadow objectives batched on the GPU (IoU, Tversky, two-sided DT `dt2`, boundary IoU, clDice, holes, placement-free IoU, classifier, CLIP, combinations, Ivy reader), and `use_objective` to swap one into the whole CMA-ES pipeline. |
 | `spacing.py` | Robot arrangements (column, row, triangle, diagonal) with two spacings optimized alongside the joints (the LeSlider study); `SpacedMJ` keeps MuJoCo's contact check on the moved bases. |
 | `glyph_cls.py` + `.pt` | Small A-Z / a-z / 0-9 classifier trained on system fonts only (never the DejaVu targets); 100% on the benchmark targets. |
-| `ivy_reader.py` + `.pt` | A model of Ivy's judgement, in two layers: the **judge** (`ivy_reader.pt`, all features, evaluation and seed selection only) and the **objective** (`ivy_reader_opt.pt`, shape features only, linear, clamped to the training range, sign-constrained, averaged with IoU). |
+| `ivy_reader.py` + `.pt` | The Ivy judge: a logistic regression on 11 shadow measurements (8 shape, 3 from the glyph classifier, so letters and digits only), fitted to Ivy's marks, reads and A/B picks. For evaluation and selection only; optimizing it is gamed. `ivy_mix` (half judge, half IoU) is the one judge-based objective kept in the study. |
 | `arrangement_report.py` | Aggregation for the arrangement section of the report. |
 
 ## Scripts (in `scripts/`)
@@ -30,7 +30,7 @@ for contact checks and as the reference renderer every reported number is measur
 | `compare_fast_cma.py` | CMA-ES on MuJoCo vs on nvdiffrast, and Adam's start-point sweep |
 | `objective_study.py` | `run` (CMA-ES), `run_adam`, `grade`: every objective on every glyph, MuJoCo-graded on 11 metrics |
 | `arrangement_study.py` | arrangements x optimizers on digits, spacing optimized with the joints |
-| `train_ivy_reader.py` | trains the judge (`--layer judge`) or the objective (`--layer opt`) from a picker export, cross-validated by held-out characters |
+| `train_ivy_reader.py` | trains the judge from a picker export, cross-validated by held-out characters |
 | `ivy_judge.py` | adds the judge's score to every graded result |
 | `analyze_guesses.py`, `analyze_ab.py`, `compare_marks.py`, `human_summary.py` | human-test analyses |
 | `make_fastshadow_report.py`, `make_objective_report.py`, `make_pick_page.py` | the three report / picker pages |
@@ -50,7 +50,7 @@ database; export it with ArtifactData into `results/fastshadow/picks_v*/`.
 
 * Renderer: same shadow as MuJoCo (IoU 0.995), 0.10 vs 0.74 ms per pose batched; CMA-ES 1.2 vs 3.3 s per solve at the same IoU.
 * Adam improves with start points (0.68 at 8 to 0.73 at 256) but at equal time best-of-k fast CMA-ES is ahead on IoU. People, blind, preferred Adam's shadows (A/B 61%, p = 0.011; read 55% vs 45%, p = 0.044).
-* Objectives: nothing beats IoU-type objectives on IoU; semantic objectives (classifier, CLIP, the full Ivy reader) get gamed when optimized. `dt2` is the safe default; the monotone Ivy objective ties it under the judge with better tc_iou and fewer filled holes.
+* Objectives: nothing beats IoU-type objectives on IoU; semantic objectives (classifier, CLIP, the Ivy judge) get gamed when optimized. `dt2` is the safe default.
 * Arrangements (digits): the column stays best; optimizing its spacing adds about 0.006 IoU, a per-digit choice of arrangement 0.018. CMA-ES beat Adam on all 10 digits and pushes spacing to the 0.12 m floor.
 * The Ivy judge predicts held-out human marks / reads / A/B choices at AUC 0.81 / 0.82 / 76%, above every single metric.
 * Floor: the solver's floor term was pinned by the static base at -1.83 cm, so 10.7% of stored solves put the gripper or jaw more than 5 mm into the table (all flagged collision-free). `BatchedShadowRenderer(floor="mesh")` / `objective_study.py --floor mesh` uses the moving bodies' real lowest point: penetration 10% to 0% on 30 glyphs x 3 seeds, best-of-3 IoU -0.003 (95% -0.015..+0.007), 1.32 to 1.47 s per solve.

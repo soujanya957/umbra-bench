@@ -7,11 +7,12 @@ Trained on everything Ivy did in the picker page:
   A/B       CMA-ES vs Adam shadow of the same objective,
             "which looks more like it"                         -> P(A preferred over B)
 
-One shared score s(shadow, target) = MLP(standardized features); each task has its
+One shared score s(shadow, target) = weighted sum of standardized features (logistic
+regression; the optional hidden layer did worse on held-out characters); each task has its
 own calibration (marks: σ(a·s + b), guesses: σ(c·s + d), A/B: σ(s_A − s_B)).
 
 Features are computed on the GPU from hard or soft masks by the same code that
-serves the objective, so the reader can drive CMA-ES or Adam directly:
+serves the objectives (GPU, batched):
   iou, tc_iou, boundary iou, clDice, holes filled, spill (DT outside), gaps (DT
   inside, uncovered), log area ratio, classifier p(target) within the subset,
   classifier margin, cosine of classifier embeddings (shadow vs target)
@@ -29,19 +30,12 @@ import torch.nn as nn
 from fastshadow.objectives import _biou, _cldice, _holes, _tc_iou, iou_t
 
 FEATURES = ["iou", "tc_iou", "biou", "cldice", "holes", "spill", "gaps", "log_area", "cls_p", "cls_margin", "emb_cos"]
-# Two layers. The judge sees everything and is for evaluation and selection only.
-# The objective sees shape alone: every time a classifier-style signal was optimized
-# (classifier, CLIP, the full reader) the search learned to please it instead of the
-# person, and keeping those features out of the objective leaves the judge a part
-# of the evidence the optimizer never pushed on.
-SHAPE_FEATURES = ["iou", "tc_iou", "biou", "cldice", "holes", "spill", "gaps", "log_area"]
-# Allowed sign of each objective-layer weight (+1 may only help, -1 may only hurt,
-# 0 = no weight). Unconstrained, the data gives spill, gaps and area positive weights
-# (bold shadows read better), and the optimizer turns that into blobs.
-SHAPE_SIGNS = {"iou": 1, "tc_iou": 1, "biou": 1, "cldice": 1, "holes": -1, "spill": -1, "gaps": -1, "log_area": 0}
+# The judge is for evaluation and selection only: every time a classifier-style signal
+# was optimized directly (classifier, CLIP, this reader) the search learned to please it
+# instead of the person. cls_p, cls_margin and emb_cos come from the glyph classifier,
+# so the judge only applies to letters and digits.
 HERE = os.path.dirname(os.path.abspath(__file__))
-WEIGHTS = os.path.join(HERE, "ivy_reader.pt")  # judge (all features)
-WEIGHTS_OPT = os.path.join(HERE, "ivy_reader_opt.pt")  # objective (shape features)
+WEIGHTS = os.path.join(HERE, "ivy_reader.pt")
 
 
 class FeatureMaker:
@@ -135,30 +129,11 @@ def _reader(path):
     return _CACHE["fm"], _CACHE[path]
 
 
-def ivy_loss(S, t):
-    """1 - P(good) under the full reader (the judge). Kept for the record: as an
-    objective it is gamed, see the report."""
-    fm, m = _reader(WEIGHTS)
-    return 1 - m.p_good(fm(S, t))
-
-
 def ivy_mix_loss(S, t):
-    """Half full reader, half plain IoU."""
-    return 0.5 * ivy_loss(S, t) + 0.5 * (1 - iou_t(S, t.T))
-
-
-def ivy_opt_reader_loss(S, t):
-    """1 - P(good) under the shape-only reader (linear, features clamped to the
-    training range)."""
-    fm, m = _reader(WEIGHTS_OPT)
-    return 1 - m.p_good(fm(S, t, classifier=False))
-
-
-def ivy_opt_loss(S, t):
-    """The optimization layer: half the shape-only reader, half plain IoU. A shape-
-    only MLP reader on its own was driven to IoU 0.26-0.33: the search found inputs
-    outside its training range. Linear + clamped features + an IoU anchor."""
-    return 0.5 * ivy_opt_reader_loss(S, t) + 0.5 * (1 - iou_t(S, t.T))
+    """Half (1 - judge), half plain (1 - IoU). The judge alone as an objective was
+    gamed (IoU 0.35); this mix keeps the shadow anchored to the target."""
+    fm, m = _reader(WEIGHTS)
+    return 0.5 * (1 - m.p_good(fm(S, t))) + 0.5 * (1 - iou_t(S, t.T))
 
 
 @torch.no_grad()

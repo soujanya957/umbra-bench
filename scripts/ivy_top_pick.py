@@ -37,6 +37,7 @@ ROOT = os.path.join(BENCH, "optimized", "big-budget-grounded")
 OUT = os.path.join(FS, "ivy_top")
 SUBS = ("letters_upper", "letters_lower", "digits")
 CIRCULAR = {"ivy", "ivy_mix", "cls", "shape3_cls"}  # steered by the judge, or by the classifier the judge reads
+REMOVED = {"ivy_opt"}  # retired objective (shape-only Ivy reader), no longer part of the study
 TABLE_MM = -5.0
 
 
@@ -45,7 +46,7 @@ def candidates():
     for d, tk in (("objective_study", "cma"), ("objective_study_adam", "adam"), ("seeds_dt2", "cma"), ("floorfix_dt2", "cma")):
         q = {(r["id"], r["objective"], r["seed"]): r for r in map(json.loads, open(os.path.join(FS, d, "solves.jsonl"), encoding="utf-8"))}
         for r in map(json.loads, open(os.path.join(FS, d, "graded.jsonl"), encoding="utf-8")):
-            if r["objective"] in CIRCULAR:
+            if r["objective"] in CIRCULAR or r["objective"] in REMOVED:
                 continue
             s = q.get((r["id"], r["objective"], r["seed"]))
             if s is None:
