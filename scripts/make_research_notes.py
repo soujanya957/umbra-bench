@@ -266,6 +266,69 @@ def sds_item():
             "charts": charts, "images": imgs}
 
 
+def sds_lora_item():
+    r = load("sds", "lora_v2", "report.json")
+    if not r:
+        return None
+    ev, g = r["eval"], r["gates"]
+    q, io, jd = ev["SDS quality"], ev["IoU"], ev["Ivy judge (same folds)"]
+    rd = ev["SDS reading margin"]["reads_auc"]
+    cl = r["clean_top1"]
+    c0 = r["folds"][0]["clean"]
+    n_l = c0["letters_upper"]["n"] + c0["letters_lower"]["n"]
+    ch_l = (c0["letters_upper"]["chance"] + c0["letters_lower"]["chance"]) / n_l
+    ch_d = c0["digits"]["chance"] / c0["digits"]["n"]
+    passed = sum(g.values())
+    rows_auc = [{"label": "SDS fine-tuned", "v": q["marks_within"][0], "color": "sds"},
+                {"label": "plain overlap (IoU)", "v": io["marks_within"][0], "color": "base"},
+                {"label": "Ivy judge, same split", "v": jd["marks_within"][0], "color": "judge"}]
+    rows_read = [{"label": "SDS fine-tuned", "v": rd, "color": "sds"},
+                 {"label": "plain overlap (IoU)", "v": io["reads_auc"], "color": "base"},
+                 {"label": "Ivy judge, same split", "v": jd["reads_auc"], "color": "judge"}]
+    rows_clean = [{"label": "letters (156 images)", "v": cl["letters"], "ref": ch_l, "color": "sds"},
+                  {"label": "digits (30 images)", "v": cl["digits"], "ref": ch_d, "color": "sds"}]
+    return {"title": "SDS, done properly: fine-tuned on your shadows", "verdict": "yes" if r["go"] else "no",
+            "label": "go" if r["go"] else f"stop ({passed} of {len(g)} checks passed)",
+            "what": "The plan from the first SDS card, carried out. We taught Stable Diffusion two things with a small "
+                    "add-on (LoRA): which character is which, from clean letters in 30 fonts, each character with its own "
+                    "new word; and what a clear vs an unreadable robot-arm shadow looks like, from every shadow you marked. "
+                    "Then we asked it, on characters whose shadows it never saw: is this shadow clear or unreadable, and "
+                    "which character is it?",
+            "why": "SDS can only steer the arms well if it can first judge shadows the way you do. A test on characters "
+                   "it has not seen is the honest one: new targets will be new to it too.",
+            "expect": "Some improvement over the untrained model (which was at chance); probably not enough to beat plain "
+                      "overlap. Before running it, two reviewer agents tightened the test: hold out whole characters, as "
+                      "for the Ivy judge; refit the judge on the same split; and fix five pass/fail checks in advance.",
+            "result": (("It learned a little, not enough. " if cl["letters"] > 1.5 * ch_l and not r["go"] else "")
+                       + f"Clean letters: right {100 * cl['letters']:.0f}% of the time (guessing: "
+                      f"{100 * ch_l:.0f}%), digits {100 * cl['digits']:.0f}% (guessing {100 * ch_d:.0f}%); the untrained model "
+                      f"was at chance. Judging your shadows, on characters it never trained on, it is "
+                      + ("no better than a coin flip" if q["marks_within"][0] < 0.55 else
+                         "better than chance but below plain overlap" if q["marks_within"][0] < io["marks_within"][0] else
+                         "at least as good as plain overlap")
+                      + f": comparing shadows of the same character, it agrees with your good marks at AUC "
+                      f"{q['marks_within'][0]:.2f}, against {io['marks_within'][0]:.2f} for plain overlap and "
+                      f"{jd['marks_within'][0]:.2f} for the Ivy judge on exactly the same split. For which shadows you "
+                      f"read correctly: {rd:.2f}, against {io['reads_auc']:.2f} and {jd['reads_auc']:.2f}. Its own score is "
+                      f"also unsteady: two halves of its noise draws agree at {r['reliability']:.2f} (needed 0.8). "
+                      f"{passed} of the {len(g)} checks fixed in advance passed"
+                      + (", so step 3, letting SDS steer the arms, was not run." if not r["go"] else ".")),
+            "next": ("Leave SDS out. What it would have added (does this read as the right character?) the glyph classifier "
+                     "inside the Ivy judge already does, cheaply and much better. Still open, if wanted: whether it helps on "
+                     "characters it has seen (the 62 glyphs are always known in advance), where it would have to beat a "
+                     "simple 'closest known-good shadow' baseline (about 0.70) to count.") if not r["go"] else
+                    ("Step 3: let SDS steer the arms through the GPU renderer, mixed with overlap, on held-out characters, "
+                     "with an overlap-only control and a blind check by you for gaming."),
+            "charts": [{"title": "Agrees with your good marks (same character)", "fmt": "f2", "min": 0.3, "max": 0.9,
+                        "ticks": [0.3, 0.5, 0.7, 0.9], "ref": 0.5, "ref_label": "coin flip", "rows": rows_auc,
+                        "note": "Within-character AUC on characters held out from training (5 folds by character)."},
+                       {"title": "Predicts which shadows you read", "fmt": "f2", "min": 0.3, "max": 0.9,
+                        "ticks": [0.3, 0.5, 0.7, 0.9], "ref": 0.5, "ref_label": "coin flip", "rows": rows_read,
+                        "note": "AUC over your guess-the-glyph answers, same held-out characters."},
+                       {"title": "Clean letters read correctly", "fmt": "pct", "min": 0, "max": 1, "ticks": [0, 0.5, 1],
+                        "rows": rows_clean, "note": "DejaVu target fonts, never used in training. Black tick = guessing."}]}
+
+
 def robustness_item():
     r = load("robustness", "objective_study_dt2.json")
     if not r:
@@ -399,7 +462,7 @@ def soft_renderer_item():
 
 
 def main():
-    items = [x for x in (plan_item(), floor_item(), sds_item(), robustness_item(), seeds_item(), soft_renderer_item()) if x]
+    items = [x for x in (plan_item(), floor_item(), sds_item(), sds_lora_item(), robustness_item(), seeds_item(), soft_renderer_item()) if x]
     doc = {"intro": "Each card: what it is, why we did it, what we expected, what happened. Numbers come straight from the "
                     "result files. Words used below:<ul>" + "".join(f"<li><b>{k}</b>: {v}</li>" for k, v in GLOSSARY) + "</ul>",
            "items": items}
