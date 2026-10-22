@@ -75,11 +75,18 @@ def gaussian_blur(x: torch.Tensor, sigma: float) -> torch.Tensor:
 class Penalties:
     """Floor + collision terms, batched and differentiable."""
 
-    def __init__(self, fr, solved_q: np.ndarray | None = None, spheres_per_body: int = 6, seed: int = 0):
+    def __init__(self, fr, solved_q: np.ndarray | None = None, spheres_per_body: int = 6, seed: int = 0,
+                 floor: str = "mujoco"):
+        """floor: "mujoco" is ShadowRenderer.eval_q's min_z (pinned at -1.83 cm by the
+        static base, so the barrier is a constant); "mesh" is the lowest vertex of the
+        moving bodies, as BatchedShadowRenderer(floor="mesh") does for CMA-ES."""
         import mujoco
 
+        assert floor in ("mujoco", "mesh")
         ref, model, dev = fr.ref, fr.model, fr.device
-        self.fr = fr
+        self.fr, self.floor = fr, floor
+        if floor == "mesh":
+            fr.moving_min_z(np.zeros((1, fr.n_dof)))  # builds fr._moving_vert
         # ── floor: exactly ShadowRenderer.eval_q's min_z ────────────────────
         g = ref.all_arm_geom_ids
         self.g_body = torch.tensor(model.geom_bodyid[g], device=dev)
@@ -164,6 +171,8 @@ class Penalties:
         return torch.einsum("bkij,kj->bki", Rb, self.s_center) + pb
 
     def min_z(self, Rp) -> torch.Tensor:
+        if self.floor == "mesh":
+            return self.fr.world_verts(None, Rp=Rp)[:, self.fr._moving_vert, 2].amin(1)
         R, p = Rp
         c = torch.einsum("bkij,kj->bki", R[:, self.g_body], self.g_pos) + p[:, self.g_body]
         return (c[..., 2] - self.g_zext).amin(1)
