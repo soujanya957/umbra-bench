@@ -41,10 +41,10 @@ database; export it with ArtifactData into `results/fastshadow/picks_v*/`.
 ## Setup
 
 * Env: `fh_l1` (torch cu128). nvdiffrast is built from source: `tools/build_nvdiffrast_windows.bat`.
-* fleet-shadow-art: CMA-ES on nvdiffrast and the objective swap need two optimizer hooks
-  (`eval_q_batch`, `batch_shadow_loss`). They are in `patches/` until they land upstream:
-  `git am fastshadow/patches/*.patch` on a fleet-shadow-art checkout, then point
-  `FLEET_SHADOW_ART` at it. A plain `ShadowRenderer` takes the old per-pose path.
+* fleet-shadow-art: CMA-ES on nvdiffrast and the objective swap need the optimizer hooks
+  `eval_q_batch` and `batch_shadow_loss`, which are in fleet-shadow-art `main` (since 2026-10-15,
+  along with this renderer as `motion-aware-shadow/diffrender/`). Point `FLEET_SHADOW_ART` at a
+  `main` checkout. A plain `ShadowRenderer` takes the old per-pose path.
 
 ## Findings (letters and digits, details in the reports)
 
