@@ -13,7 +13,7 @@ A candidate must be physically possible: no arm collision (MuJoCo contacts) and 
 more than 5 mm into the table (FastShadowRenderer.moving_min_z). Among those, the highest judge
 score wins per character, whatever the font of its target.
 
-    set FLEET_SHADOW_ART=...\\fleet-shadow-art-batched
+    set FLEET_SHADOW_ART=...\\fleet-shadow-art   (main; the default when unset)
     python scripts/ivy_top_pick.py
 """
 

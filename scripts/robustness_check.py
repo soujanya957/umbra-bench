@@ -6,7 +6,7 @@ draws, one nvdiffrast batch) and scored against its target: mean and 10th-percen
 Within a glyph, if seeds differ in robustness by more than they differ in nominal IoU, picking
 the most robust solve (same geometric loss, nothing learned) is worth testing on the real rig.
 
-    set FLEET_SHADOW_ART=...\\fleet-shadow-art-batched
+    set FLEET_SHADOW_ART=...\\fleet-shadow-art   (main; the default when unset)
     python scripts/robustness_check.py [--study objective_study] [--objective dt2]
 """
 

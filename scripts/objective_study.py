@@ -12,7 +12,7 @@ objective can't win just by being the metric it optimises:
 The `cls` objectives are graded by the same classifier they steer with; CLIP is
 steered with ViT-B-16 and graded with ViT-B-32.
 
-    set FLEET_SHADOW_ART=...\\fleet-shadow-art-batched
+    set FLEET_SHADOW_ART=...\\fleet-shadow-art   (main; the default when unset)
     python scripts/objective_study.py run --seeds 3
     python scripts/objective_study.py grade
 """
@@ -70,7 +70,7 @@ def run(a):
     from renderer import ShadowRenderer, build_scene
 
     assert "batch_shadow_loss" in open(opt.__file__, encoding="utf-8").read(), \
-        f"{ms} lacks the batched-render hooks; set FLEET_SHADOW_ART"
+        f"{ms} lacks the batched hooks (fleet-shadow-art main); set FLEET_SHADOW_ART"
     from fastshadow.cma_bridge import BatchedShadowRenderer
     from fastshadow.objectives import TargetCache, use_objective
     from fastshadow.renderer import FastShadowRenderer

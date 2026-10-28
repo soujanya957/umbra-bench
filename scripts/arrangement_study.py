@@ -3,7 +3,7 @@
 For each digit, each arrangement in fastshadow.spacing (plus the fixed 0.2 m column
 the benchmark has used so far), and each optimizer:
 
-  cma   staged CMA-ES (fleet-shadow-art batched-render branch), populations on
+  cma   staged CMA-ES (fleet-shadow-art main, batched hooks), populations on
         nvdiffrast, MuJoCo kinematics + contacts. The two spacing variables are
         extra dimensions of q: the per-arm phases hold them, the joint stage moves
         them with all 18 joints. Seed 0 starts at the default 0.2 m spacing, other
@@ -16,7 +16,7 @@ Objective dt2 (1 - IoU + 0.5 two-sided DT), the shape objective people preferred
 Every result is re-rendered and contact-checked by MuJoCo with the optimized base
 positions. Light, wall and camera never move.
 
-    set FLEET_SHADOW_ART=...\\fleet-shadow-art-batched
+    set FLEET_SHADOW_ART=...\\fleet-shadow-art   (main; the default when unset)
     python scripts/arrangement_study.py run
 """
 
@@ -68,7 +68,7 @@ def main():
     from renderer import ShadowRenderer, build_scene
 
     assert "batch_shadow_loss" in open(opt.__file__, encoding="utf-8").read(), \
-        f"{ms} lacks the batched-render hooks; set FLEET_SHADOW_ART"
+        f"{ms} lacks the batched hooks (fleet-shadow-art main); set FLEET_SHADOW_ART"
     from fastshadow.cma_bridge import BatchedShadowRenderer
     from fastshadow.glyph_cls import GlyphClassifier
     from fastshadow.grad_opt import FnObjective, GradConfig, Penalties, solve

@@ -1,6 +1,6 @@
 """Let the existing CMA-ES optimizer render whole populations on nvdiffrast.
 
-optimizer.optimize() (fleet-shadow-art branch `batched-render`) calls
+optimizer.optimize() (fleet-shadow-art main, since 2026-10-15) calls
 `renderer.eval_q_batch(Q)` when the renderer has it, and scores every row with the
 unchanged loss. This wrapper is that renderer: shadows come from FastShadowRenderer
 in one GPU call; min_z and contact penetration still come from MuJoCo

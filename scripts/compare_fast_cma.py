@@ -1,8 +1,8 @@
 """CMA-ES on MuJoCo vs CMA-ES on nvdiffrast, and Adam's start-point sweep.
 
 Same targets as compare_grad.py --tag <src> (its per_target.jsonl). Needs the
-fleet-shadow-art `batched-render` branch (optimizer.optimize uses
-renderer.eval_q_batch when present); point FLEET_SHADOW_ART at that checkout.
+fleet-shadow-art main (optimizer.optimize uses
+renderer.eval_q_batch when present); the default lookup finds it, or set FLEET_SHADOW_ART.
 
   cma        CMA-ES, MuJoCo renders everything (unchanged path)
   cma_fast   the same CMA-ES, populations rendered by nvdiffrast, MuJoCo still
@@ -11,7 +11,7 @@ renderer.eval_q_batch when present); point FLEET_SHADOW_ART at that checkout.
 
 Every number is MuJoCo-measured (grad_opt.verify).
 
-    set FLEET_SHADOW_ART=...\\fleet-shadow-art-batched
+    set FLEET_SHADOW_ART=...\\fleet-shadow-art   (main; the default when unset)
     python scripts/compare_fast_cma.py --src letters_digits --seeds 3 --restarts 8 16 32 64 128 256
 """
 
@@ -56,7 +56,7 @@ def main():
     from renderer import ShadowRenderer, build_scene
 
     assert "eval_many" in open(_opt.__file__, encoding="utf-8").read(), \
-        f"{ms} is not the batched-render branch; set FLEET_SHADOW_ART"
+        f"{ms} lacks the batched hooks (fleet-shadow-art main); set FLEET_SHADOW_ART"
     from fastshadow.cma_bridge import BatchedShadowRenderer
     from fastshadow.grad_opt import GradConfig, Penalties, pick_by_mujoco, solve, verify
     from fastshadow.renderer import FastShadowRenderer
