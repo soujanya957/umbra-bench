@@ -10,6 +10,12 @@ the benchmark's own target, both shown as plain shadows (same ink, no target, no
      "can't tell". Characters where both versions are the same shadow are left out here and
      shown once in the reading part.
 Answers go to the artifact's db, one document per rater (tests/<id>), readable by the owner.
+Publish with capabilities {"user": {}, "db": {"rules": [{"path": "tests", "read": "admin", "write": "owner"},
+{"path": "tests/{self}", "read": "interact", "write": "interact"}]}}: without "user" every rater gets
+"Sign in needed" (no id); without the rules every rater can read and overwrite every other rater's answers.
+Raters need Contributor access, which only people in the owner's organization (Team/Enterprise plan)
+can hold; outside raters can only be email-invited Editors (no public link), and Editors pass the
+"admin" read rule, so they could read other raters' answers.
 
     python scripts/make_target_test_page.py
 """
@@ -135,8 +141,9 @@ kbd{font:500 12px var(--f-num);border:1px solid var(--rule);border-radius:4px;pa
 <script>
 const D = /*DATA*/;
 const KIND = {letters_upper: 'Capital letter', letters_lower: 'Lowercase letter', digits: 'Digit'};
-let db = null, ref = null, state = {reads: {}, ab: {}}, plan = null, saving = Promise.resolve();
+let db = null, ref = null, state = {reads: {}, ab: {}}, plan = null, saving = Promise.resolve(), exists = false, blocked = false, lastOk = true;
 const $ = id => document.getElementById(id);
+const FOOT = $('foot').textContent;
 
 function hash(s) { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
 function rng(seed) { let s = seed || 1; return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return ((s >>> 0) % 1e6) / 1e6; }; }
@@ -160,24 +167,32 @@ function makePlan(uid) {
   }
   const reads = [...shuffle(b1, r), ...shuffle(b2, r)];
   const ab = [];
-  for (const it of items) if (!it.same) for (const rep of [0, 1]) {
-    const chosenLeft = (r() < 0.5) !== (rep === 1);
-    ab.push({key: `${it.k}:r${rep}`, it, rep, chosenLeft});
+  for (const it of items) if (!it.same) {
+    const left = r() < 0.5;  // one draw per character, so the second showing really has the sides swapped
+    for (const rep of [0, 1]) ab.push({key: `${it.k}:r${rep}`, it, rep, chosenLeft: left !== (rep === 1)});
   }
   return {reads, ab: shuffle(ab, r)};
 }
 
-async function save(path, value) {
-  // one write at a time to this rater's document
+const NO_ACCESS = 'Your answers cannot be saved with your current access to this page. Ask the owner for Contributor access.';
+function stop(phase, msg) { blocked = true; $('phase').textContent = phase; $('main').innerHTML = `<p>${msg}</p>`; }
+
+async function save() {
+  // one write at a time to this rater's document; each write carries every answer so far, so an
+  // answer whose write failed goes out again with the next one (update merges nested objects)
   saving = saving.then(async () => {
-    try {
-      const snap = await ref.get();
-      if (!snap.exists) await ref.set({version: D.version, reads: {}, ab: {}});
-      await ref.update({[path[0]]: {[path[1]]: value}});
-    } catch (e) {
-      $('foot').textContent = e && e.code === 'invalid_argument'
-        ? 'Your answers cannot be saved with your current access to this page. Ask the owner for Contributor access.'
-        : 'An answer did not save. Check your connection; the next answer will try again.';
+    for (let t = 0; t < 2 && !blocked; t++) {
+      try {
+        if (!exists) { if (!(await ref.get()).exists) await ref.set({version: D.version, reads: {}, ab: {}}); exists = true; }
+        await ref.update({reads: state.reads, ab: state.ab});
+        $('foot').textContent = FOOT;
+        lastOk = true;
+        return;
+      } catch (e) {
+        if (e && e.code === 'invalid_argument') return stop('Cannot save', NO_ACCESS);
+        if (t === 0) await new Promise(res => setTimeout(res, 500 + 1000 * Math.random()));
+        else { lastOk = false; $('foot').textContent = 'An answer did not save. Check your connection; the next answer will try again.'; }
+      }
     }
   });
   return saving;
@@ -192,13 +207,16 @@ function progress() {
 }
 
 function next() {
+  if (blocked) return;
   const p = progress();
   const r = plan.reads.find(x => !state.reads[x.key]);
   if (r) return showRead(r, p);
   const a = plan.ab.find(x => !state.ab[x.key]);
   if (a) return showAB(a, p);
   $('phase').textContent = 'Finished';
-  $('main').innerHTML = '<p class="done">All done. Thank you!</p><p class="muted">Your answers are saved. You can close this page.</p>';
+  $('main').innerHTML = '<p class="done">All done. Thank you!</p><p class="muted" id="fin">Saving your last answers…</p>';
+  saving.then(() => { if (!blocked && $('fin')) $('fin').textContent = lastOk ? 'Your answers are saved. You can close this page.'
+    : 'Your last answers did not save. Keep this page open, check your connection and reload to try again.'; });
 }
 
 function showRead(x, p) {
@@ -208,14 +226,15 @@ function showRead(x, p) {
   $('main').innerHTML = `<span class="chip">${KIND[x.it.sub]}</span>
     <img class="shadow" src="${x.arm === 'bench' ? x.it.bench : x.it.chosen}" alt="A shadow to read">
     <form id="f" autocomplete="off"><label for="ans" class="ask">Which character is this?</label>
-      <input id="ans" type="text" maxlength="1" aria-label="Your answer, one character" required>
+      <input id="ans" type="text" maxlength="1" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Your answer, one character" required>
       <button type="submit">Next</button>
       <button type="button" class="ghost" id="skip">Can't tell</button></form>`;
   const go = async ans => {
     const rec = {answer: ans, arm: x.arm, ch: x.it.ch, sub: x.it.sub, block: x.block, ms: Math.round(performance.now() - t0), n: p.dR + p.dA};
     state.reads[x.key] = rec;
+    const s = save();
     next();
-    await save(['reads', x.key], rec);
+    await s;
   };
   $('f').addEventListener('submit', e => { e.preventDefault(); const v = $('ans').value.trim(); if (v) go(v); });
   $('skip').addEventListener('click', () => go(''));
@@ -235,10 +254,11 @@ function showAB(x, p) {
     const rec = {side, pick, ch: x.it.ch, sub: x.it.sub, rep: x.rep, chosenLeft: x.chosenLeft, ms: Math.round(performance.now() - t0), n: p.dR + p.dA};
     state.ab[x.key] = rec;
     document.removeEventListener('keydown', onKey);
+    const s = save();
     next();
-    await save(['ab', x.key], rec);
+    await s;
   };
-  const onKey = e => { if (e.key === 'ArrowLeft') go('left'); else if (e.key === 'ArrowRight') go('right'); else if (e.key === 'ArrowDown') go('tie'); };
+  const onKey = e => { if (e.repeat) return; if (e.key === 'ArrowLeft') go('left'); else if (e.key === 'ArrowRight') go('right'); else if (e.key === 'ArrowDown') go('tie'); };
   document.addEventListener('keydown', onKey);
   $('bl').addEventListener('click', () => go('left'));
   $('br').addEventListener('click', () => go('right'));
@@ -254,12 +274,18 @@ function showAB(x, p) {
     $('main').innerHTML = '<p>This test saves each person\'s answers, so it needs you to be signed in to claude.ai with access to this page.</p>';
     return;
   }
+  if ((await user.can?.('data.write')) === false) return stop('Cannot save', NO_ACCESS);
   ref = db.collection('tests').doc(uid);
   plan = makePlan(uid);
-  try {
-    const snap = await ref.get();
-    if (snap.exists) { const d = snap.data(); state = {reads: {...(d.reads || {})}, ab: {...(d.ab || {})}}; }
-  } catch (e) { /* first visit or transient: start fresh */ }
+  let snap = null;
+  for (let t = 0; t < 2 && !snap; t++) {
+    try { snap = await ref.get(); } catch (e) { if (t === 0) await new Promise(res => setTimeout(res, 500 + 1000 * Math.random())); }
+  }
+  // a missing document is not an error, so a failed read is a real failure: starting fresh would ask
+  // the same items again and overwrite the earlier answers
+  if (!snap) return stop('Could not load', 'Your earlier answers could not be loaded. Reload the page to try again.');
+  exists = snap.exists;
+  if (snap.exists) { const d = snap.data(); state = {reads: {...(d.reads || {})}, ab: {...(d.ab || {})}}; }
   const {dR, dA} = progress();
   if (dR + dA === 0) {
     $('phase').textContent = 'Before you start';
