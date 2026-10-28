@@ -106,22 +106,25 @@ class GlyphClassifier:
 
 
 # ── training data ─────────────────────────────────────────────────────────
-def _fonts():
+def _fonts(exclude=()):
+    """Windows text fonts; `exclude` lists font file stems (lower case) to leave out, e.g. fonts
+    held out for an evaluation the classifier must not have seen."""
     out = []
+    ex = {e.lower() for e in exclude}
     for f in sorted(glob.glob(r"C:\Windows\Fonts\*.ttf") + glob.glob(r"C:\Windows\Fonts\*.otf")):
         n = os.path.basename(f).lower()
-        if any(s in n for s in _SKIP):
+        if any(s in n for s in _SKIP) or os.path.splitext(n)[0] in ex:
             continue
         out.append(f)
     return out
 
 
-def render_bank(px=96):
+def render_bank(px=96, exclude=()):
     """One binary bitmap per (font, class) that renders as a real, distinct glyph."""
     from PIL import Image, ImageDraw, ImageFont
 
     bank, labels = [], []
-    for f in _fonts():
+    for f in _fonts(exclude):
         try:
             font = ImageFont.truetype(f, int(px * 0.7))
         except Exception:
@@ -191,10 +194,10 @@ def augment(x: torch.Tensor, g: torch.Generator) -> torch.Tensor:
     return out
 
 
-def train(epochs=12, bs=512, seed=0):
+def train(epochs=12, bs=512, seed=0, exclude=(), weights=WEIGHTS):
     torch.manual_seed(seed)
     dev = torch.device("cuda")
-    X, y = render_bank()
+    X, y = render_bank(exclude=exclude)
     print(f"bank: {len(X) // len(CLASSES)} fonts × {len(CLASSES)} classes", flush=True)
     X = torch.tensor(X, dtype=torch.float32)[:, None]
     y = torch.tensor(y)
@@ -221,8 +224,8 @@ def train(epochs=12, bs=512, seed=0):
             tot += bs
             corr += int((logits.argmax(1).cpu() == y[i]).sum())
         print(f"epoch {ep + 1}: train acc (augmented, 62-way) {corr / tot:.3f}", flush=True)
-    torch.save(net.state_dict(), WEIGHTS)
-    print("saved", WEIGHTS)
+    torch.save(net.state_dict(), weights)
+    print("saved", weights)
 
 
 def check():
