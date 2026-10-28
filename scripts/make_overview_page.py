@@ -44,57 +44,50 @@ def png(path, color):
 
 
 def designer():
-    """Target-designer examples and numbers; final (fresh seeds 3-5) when the confirm round is in."""
-    p = os.path.join(TD, "solves.jsonl")
-    if not os.path.exists(p):
+    """Target-designer result on fresh seeds 3-5 (report.json, incl. the audit's secondary checks), with the
+    characters the held-out classifier reads most better (first 3) and most worse (last 3) with the chosen font."""
+    rep = load("target_designer", "report.json")
+    if not rep or "secondary" not in rep["summary"]:
         return None
-    rows = [json.loads(l) for l in open(p, encoding="utf-8")]
+    rows = [json.loads(l) for l in open(os.path.join(TD, "solves.jsonl"), encoding="utf-8")]
     picks = json.load(open(os.path.join(TD, "picks.json"), encoding="utf-8"))
     cands = {c["id"]: c for c in json.load(open(os.path.join(TD, "candidates.json"), encoding="utf-8"))}
     by = defaultdict(list)
     for r in rows:
         by[r["id"]].append(r)
-    rep = load("target_designer", "report.json")
-    final = rep is not None
-    seeds = (3, 4, 5) if final else (0, 1, 2)
 
     def best(cid):
-        rr = [r for r in by[cid] if r["seed"] in seeds]
-        return max(rr, key=lambda r: r["iou"]) if rr else None
+        rr = [r for r in by[cid] if r["seed"] in (3, 4, 5)]
+        ok = [r for r in rr if r["collision_free"] and r["lowest_mm"] >= -5] or rr
+        return max(ok, key=lambda r: r["iou"])
 
+    per = sorted(rep["per_char"], key=lambda x: x["cls_p_chosen"] - x["cls_p_bench"])
     ex = []
-    for ch in ("W", "M", "7", "o", "e", "Q"):
-        if ch not in picks:
-            continue
+    for x in per[::-1][:3] + per[:3]:
+        ch = x["ch"]
         bid = next(r["id"] for r in rows if r["ch"] == ch and "BENCH:" in r["id"])
         b, c = best(bid), best(picks[ch]["chosen"])
-        if not (b and c):
-            continue
         ex.append({"ch": ch, "font": cands[picks[ch]["chosen"]]["label"].replace(" Regular", ""),
-                   "bt": png(b["target"], TGT), "bs": png(b["mask"], INK), "bi": b["iou"],
-                   "ct": png(c["target"], TGT), "cs": png(c["mask"], INK), "ci": c["iou"]})
-    out = {"final": final, "examples": ex, "n_candidates": len({r["id"] for r in rows if r["stage"] == "A"})}
-    if final:
-        s = rep["summary"]
-        out.update({"mean": s["mean_iou"], "share": s["share_ge_075"], "diff_ci": s["paired_diff_ci"],
-                    "vs12": s["vs_bench12_mean"], "endpoints": s["endpoints"], "cls": s["cls_top1"]})
-    else:
-        A = [r for r in rows if r["seed"] == 0]
-        bench0 = [r["iou"] for r in A if "BENCH:" in r["id"]]
-        out.update({"bench_seed0": float(np.mean(bench0)) if bench0 else None,
-                    "chosen_mean3": float(np.mean([v["mean3"] for v in picks.values()]))})
-    return out
+                   "bt": png(b["target"], TGT), "bs": png(b["mask"], INK), "bi": b["iou"], "bp": x["cls_p_bench"],
+                   "ct": png(c["target"], TGT), "cs": png(c["mask"], INK), "ci": c["iou"], "cp": x["cls_p_chosen"]})
+    s_, x_ = rep["summary"], rep["summary"]["secondary"]
+    top = x_["top_font"]
+    return {"examples": ex, "n_candidates": sum(1 for c in cands.values() if not c.get("gate_fail")),
+            "n_fonts": len({c["font"] for c in cands.values()}),
+            "mean": s_["mean_iou"], "share": s_["share_ge_075"], "vs12": s_["vs_bench12_mean"], "cls": s_["cls_top1"],
+            "blob": x_["blob_floor_iou"], "above": x_["shadow_above_floor"], "cls_fresh": x_["cls_top1_fresh"],
+            "small_holes": x_["small_counter_chars"], "n_holed": len(x_["holed_chars"]),
+            "top_font": [next((c["label"] for c in cands.values() if c["font"] == top[0]), top[0]).replace(" Regular", ""), top[1]]}
 
 
 def main():
-    research = load("research", "research.json")
     ivy = load("ivy_reader", "report.json")
     D = {"designer": designer(), "judge": ivy["cv"]["linear"] if ivy else None,
          "judge_base": ivy["baselines"]["iou"] if ivy else None}
     html = TEMPLATE.replace("/*DATA*/", json.dumps(D))
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     open(OUT, "w", encoding="utf-8").write(html)
-    print("wrote", OUT, f"{len(html) / 1e3:.0f} KB", "final" if D["designer"] and D["designer"]["final"] else "interim")
+    print("wrote", OUT, f"{len(html) / 1e3:.0f} KB")
 
 
 TEMPLATE = r"""<title>Umbra Shadow Roadmap</title>
@@ -183,14 +176,14 @@ svg text{font-family:var(--f-body)}
   </section>
 
   <section>
-    <div><span class="eyebrow">Running now</span><h2>Let the font be free</h2>
+    <div><span class="eyebrow">Latest experiment</span><h2>Let the font be free</h2>
       <p class="lede" id="td_lede"></p></div>
     <div class="ex" id="examples"></div>
     <p class="cap" id="td_cap"></p>
   </section>
 
   <section>
-    <div><span class="eyebrow">How we test</span><h2>Five checks behind every claim</h2></div>
+    <div><span class="eyebrow">How we test</span><h2>Six checks behind every claim</h2></div>
     <div class="tests">
       <div class="test"><h3>Overlap, and why 0.75</h3><svg viewBox="0 0 340 190" id="t_iou"></svg>
         <p class="cap">Overlap (IoU) is the shared area divided by the combined area. Ivy's 775 blind guesses show where it starts to matter: below 0.75 about half are read; above it, nearly all.</p></div>
@@ -200,6 +193,8 @@ svg text{font-family:var(--f-body)}
         <p class="cap">Anything trained on Ivy's labels (the Ivy judge, the fine-tuned SDS) is scored only on characters held out of its training, five rounds so each is held out once.</p></div>
       <div class="test"><h3>Re-test the winner</h3><svg viewBox="0 0 340 190" id="t_curse"></svg>
         <p class="cap">One solve is a noisy draw. Picking the best of many inflates it, so every winner is solved again with fresh random starts, and compared with simply running the old way more times.</p></div>
+      <div class="test"><h3>Compare with a blob</h3><svg viewBox="0 0 340 190" id="t_blob"></svg>
+        <p class="cap">Overlap only means something above what a featureless blob would score. A heavy letter is almost its own outline, so a blob already reaches 0.79 on the chosen fonts, against 0.67 on today's.</p></div>
       <div class="test"><h3>Check for gaming</h3><svg viewBox="0 0 340 190" id="t_game"></svg>
         <p class="cap">A score that the search optimizes is graded by something it never saw: a separate reader and, in the end, people. Optimizing the glyph classifier made it right 93% of the time while Ivy read 43%.</p></div>
     </div>
@@ -216,6 +211,7 @@ svg text{font-family:var(--f-body)}
       <a href="https://claude.ai/artifact/ChM2otn7JGKKN1sy2yJsY8">Glyph Objective Study <span>· objectives, Ivy judge, overnight research</span></a>
       <a href="https://claude.ai/artifact/HU5HFUjpvTf9BTnkTveK7i">Solver bench <span>· GPU renderer, CMA-ES vs Adam, arm layouts</span></a>
       <a href="https://claude.ai/artifact/DTjJuNUhPWfJN5hRrTWmSX">Shadow picker <span>· where Ivy's labels come from</span></a>
+      <a href="https://claude.ai/artifact/YRfwV5BKayNk9H4aS9e3wu">Shadow reading test <span>· blind test of the font experiment</span></a>
     </div>
     <p class="foot">Letters and digits only so far: 62 characters, three SO-101 arms, shadows rendered at 128 px and checked in MuJoCo.</p>
   </section>
@@ -230,8 +226,9 @@ const T = D.designer;
 
 const STAGES = [
   {k: 'target', name: 'Target', q: 'What shape should the shadow aim for?', st: 'run',
-   facts: T ? (T.final ? [[pc(T.share.chosen), 'of characters reach 0.75 with a chosen font, vs ' + pc(T.share.bench) + ' today'], ['next', 'a blind reading test decides']]
-                       : [['first look', 'W, M, 7 clearly better; o, e, Q worse'], ['next', 'fresh-seed check, then a blind reading test']]) : [['–', 'not started']]},
+   facts: T ? [[f3(T.mean.bench) + ' → ' + f3(T.mean.chosen), 'overlap when each character picks its font'],
+               ['but', 'heavy fonts are just easier to reach; a blob scores ' + f2(T.blob.chosen)],
+               ['next', 'Ivy\u2019s blind reading test decides']] : [['–', 'not started']]},
   {k: 'search', name: 'Search', q: 'How do we find joint angles?', st: 'done',
    facts: [['CMA-ES', 'on the GPU renderer, 1.2 s per solve (MuJoCo: 3.3 s)'], ['0.705 → 0.754', 'overlap from 1 try to the best of 12'], ['Adam', 'behind at equal time']]},
   {k: 'score', name: 'Score', q: 'What does the search maximize?', st: 'done',
@@ -239,7 +236,7 @@ const STAGES = [
   {k: 'pick', name: 'Pick', q: 'Which of the tries do we keep?', st: 'done',
    facts: [[D.judge ? f2(D.judge.mark_auc) : '0.81', 'Ivy judge agrees with Ivy’s marks (plain overlap ' + (D.judge_base ? f2(D.judge_base.mark_auc) : '0.76') + ')'], ['rule', 'physically possible first, then overlap; the judge only reports'], ['limit', 'glyphs only: it reads a letter classifier']]},
   {k: 'check', name: 'Check', q: 'Is it readable and safe?', st: 'done',
-   facts: [['≥ 0.75', 'overlap → Ivy reads 84–100%'], ['10.7% → 0%', 'solves with the gripper in the table, after the floor fix'], ['1°', 'joint error costs 0.013 overlap; 2° costs 0.035']]},
+   facts: [['≥ 0.75', 'overlap → Ivy reads 84–100% (DejaVu targets)'], ['10.7% → 0%', 'solves with the gripper in the table, after the floor fix'], ['1°', 'joint error costs 0.013 overlap; 2° costs 0.035']]},
   {k: 'rig', name: 'Real arms & motion', q: 'Does it hold on hardware and in animations?', st: 'open',
    facts: [['rail', 'arms only in a column, ≥ 0.18 m apart (layout adds +0.006)'], ['animation', 'plan all frames together: designed, not tested'], ['photos', 'real-rig shadows vs simulation: not done']]},
 ];
@@ -281,15 +278,13 @@ document.getElementById('stages').innerHTML = STAGES.map(st => `<article class="
 
 // font-free examples
 if (T) {
-  document.getElementById('td_lede').textContent = T.final
-    ? `The target used to be one fixed font. Now every character picks from ${T.n_candidates.toLocaleString()} legible candidate targets the one the arms can match best, confirmed on fresh solves: overlap ${f3(T.mean.bench)} → ${f3(T.mean.chosen)}.`
-    : `The target used to be one fixed font per character. Now each character picks, from ${T.n_candidates.toLocaleString()} legible candidate targets, the one the arms can match best. Fresh-solve confirmation is running.`;
+  document.getElementById('td_lede').textContent = `Each character picked, from ${T.n_candidates.toLocaleString()} legible targets in ${T.n_fonts} heavy fonts, the one the arms match best. Overlap rose from ${f3(T.mean.bench)} to ${f3(T.mean.chosen)}, but mostly because heavy, solid letters are easy to reach: ${T.top_font[0]} won ${T.top_font[1]} of 62. The glyph classifier reads the new shadows no better (${pc(T.cls_fresh.chosen)} vs ${pc(T.cls_fresh.bench)}).`;
   document.getElementById('examples').innerHTML = T.examples.map(e => `<div class="excard"><div class="lab head"><b>${e.ch}</b><span class="fn">${e.font}</span></div>
     <div class="row"><img src="${e.bt}" alt="benchmark target ${e.ch}"><img src="${e.bs}" alt="shadow for the benchmark target ${e.ch}"></div>
-    <div class="lab"><span>today</span><span>${f2(e.bi)}</span></div>
+    <div class="lab"><span>today</span><span>${f2(e.bi)} · ${pc(e.bp)}</span></div>
     <div class="row"><img src="${e.ct}" alt="chosen target ${e.ch}"><img src="${e.cs}" alt="shadow for the chosen target ${e.ch}"></div>
-    <div class="lab"><span>chosen font</span><span>${f2(e.ci)}</span></div></div>`).join('');
-  document.getElementById('td_cap').textContent = 'Grey: target. Dark: shadow. Numbers are overlap with its own target. W, M and 7 read better; o, e and Q gain overlap by filling in tiny holes, which is why people, not overlap, decide this one.';
+    <div class="lab"><span>chosen</span><span>${f2(e.ci)} · ${pc(e.cp)}</span></div></div>`).join('');
+  document.getElementById('td_cap').textContent = `Grey: target. Dark: best fresh shadow. Numbers: overlap with its own target · how sure the glyph classifier is. First three: the classifier reads the new shadow better; last three: worse. ${T.small_holes.length} of the ${T.n_holed} characters with holes got holes too small for a shadow to keep.`;
 }
 
 // test diagrams
@@ -361,9 +356,22 @@ if (T) {
   el('text', {x: 248, y: 172, 'font-size': 13, fill: done}, s, 'Ivy 43%');
 })();
 
+(function blob() {
+  const s = document.getElementById('t_blob'), ink = css('--ink'), muted = css('--muted'), no = css('--no'), open = css('--open');
+  const bl = T ? T.blob : {bench: 0.667, chosen: 0.789};
+  const glyph = (x, w, label, v, c) => {
+    el('rect', {x: x - 6, y: 18, width: 100, height: 112, rx: 50, fill: c, opacity: .22}, s);
+    el('text', {x: x + 44, y: 112, 'text-anchor': 'middle', 'font-size': 112, 'font-weight': w, fill: open, 'font-family': 'Arial, sans-serif'}, s, 'o');
+    el('text', {x: x + 44, y: 150, 'text-anchor': 'middle', 'font-size': 13, fill: ink}, s, label);
+    el('text', {x: x + 44, y: 170, 'text-anchor': 'middle', 'font-size': 13, fill: c, 'font-family': 'monospace'}, s, 'blob ' + v.toFixed(2)); };
+  glyph(40, 400, "today's target", bl.bench, open);
+  glyph(206, 900, 'chosen font', bl.chosen, no);
+  el('text', {x: 170, y: 186, 'text-anchor': 'middle', 'font-size': 11, fill: muted}, s, 'shaded: the blob, its overlap with the letter');
+})();
+
 document.getElementById('next').innerHTML = [
-  ['A blind reading test of the new targets', 'Decides whether choosing fonts makes shadows easier to read, not only to match. Ivy plus one or two people new to the project, so it counts beyond one pair of eyes.'],
-  ['A rule for holes', 'Reject targets whose holes are too small to survive in a shadow, so o, e and Q stop turning into blobs.'],
+  ['A blind reading test of the new targets', 'Ready (link below). Decides whether choosing fonts makes shadows easier to read, not only to match. Ivy plus one or two people new to the project, so it counts beyond one pair of eyes.'],
+  ['Choose fonts by reading, not reach', 'Holes at least 14 px across after fitting (changes 11 picks), stroke weight near DejaVu\'s, or a score that does not depend on the target, so the search stops rewarding blobs.'],
   ['Any shape, not only letters', 'The same path with targets drawn from text by an image model, and a reader for animals and objects. Needs a few hundred labelled shadows.'],
   ['Animation as one plan', 'Keep a few good poses per frame and choose the smoothest path through all frames, with the arms\' real speed limits.'],
   ['Photos of the real wall', 'Check that a shadow that reads in simulation reads on the wall, with real light and calibration.'],

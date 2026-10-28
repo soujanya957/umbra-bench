@@ -417,6 +417,69 @@ def seeds_item():
                                 "averages over random choices of which k."}]}
 
 
+def target_designer_item():
+    rep = load("target_designer", "report.json")
+    if not rep or "secondary" not in rep["summary"]:
+        return None
+    s, x = rep["summary"], rep["summary"]["secondary"]
+    cands = load("target_designer", "candidates.json") or []
+    n_cand, n_fonts = len(cands), len({c["font"] for c in cands})
+    n_gated = sum(1 for c in cands if not c.get("gate_fail"))
+    d, lo, hi = s["paired_diff_mean"], *s["paired_diff_ci"]
+    ct = x["cls_top1_fresh_diff_ci"]
+    font, n_font = x["top_font"]
+    font = next((c["label"] for c in cands if c["font"] == font), font).replace(" Regular", "")
+    sheet = os.path.join(FS, "target_designer", "page", "final_sheet.png")
+    return {"title": "Let each character pick its font", "verdict": "mixed", "label": "reach yes, reading unknown",
+            "what": f"The target used to be one fixed font per character. We drew every character in {n_fonts} bold and heavy "
+                    f"fonts ({n_cand:,} candidate targets), kept the {n_gated:,} that pass the legibility and shape checks, solved "
+                    "each once, solved the best 5 per "
+                    "character twice more and picked the best. Then the winner and today's target were each solved again from 3 "
+                    "fresh random starts, and the checks fixed in advance were scored on those.",
+            "why": "The font does not matter to a reader; whether the arms can draw it does. If each character takes the version "
+                   "the arms can match best, overlap goes up, and you read a shadow well once its overlap passes about 0.75.",
+            "expect": "Higher overlap, and so better reading, if overlap means the same thing for every font.",
+            "result": f"Overlap rose a lot: {s['mean_iou']['bench']:.3f} → {s['mean_iou']['chosen']:.3f} (gain {d:+.3f}, 95% range "
+                      f"{lo:+.3f} to {hi:+.3f}), characters at 0.75 or more {100 * s['share_ge_075']['bench']:.0f}% → "
+                      f"{100 * s['share_ge_075']['chosen']:.0f}%, and it beats today's target solved 12 times "
+                      f"({s['vs_bench12_mean']:+.3f}). An audit then showed this is mostly reach, not reading. Picking by overlap "
+                      f"chose heavy, solid fonts ({font} for {n_font} of 62) with small holes, which the arms' thick shadows match "
+                      f"easily. A plain blob covering the letter already scores {x['blob_floor_iou']['chosen']:.2f} overlap with the "
+                      f"new targets ({x['blob_floor_iou']['bench']:.2f} with today's), so the 0.75 rule, measured on DejaVu letters, "
+                      f"does not carry over. Above that blob, today's shadows gain more ({x['shadow_above_floor']['bench']:+.3f} vs "
+                      f"{x['shadow_above_floor']['chosen']:+.3f}). The glyph classifier, which never sees the target, reads the new "
+                      f"shadows no better: {100 * s['cls_top1']['chosen']:.0f}% vs {100 * s['cls_top1']['bench']:.0f}% right (the "
+                      f"third check fixed in advance failed), {100 * x['cls_top1_fresh']['chosen']:.0f}% vs "
+                      f"{100 * x['cls_top1_fresh']['bench']:.0f}% over all fresh tries. "
+                      f"{len(x['small_counter_chars'])} of the {len(x['holed_chars'])} characters with holes got holes too small "
+                      f"for a shadow to keep ({', '.join(x['small_counter_chars'])}; today: {', '.join(x['small_counter_chars_bench'])}).",
+            "next": "Your blind reading test decides (separate page: the new and today's shadow of every character, read alone, then "
+                    "side by side). If it agrees with the classifier, choose the font differently: holes at least 7 px in radius "
+                    "after fitting (changes 11 picks, about 0.045 overlap on those), stroke weight and solidity near DejaVu's, or "
+                    "a score that does not depend on the target. Results of the audit: <code>scripts/target_designer.py report</code> "
+                    "(the secondary block, not fixed in advance).",
+            "charts": [{"title": "Overlap with its own target", "fmt": "f3", "min": 0.6, "max": 0.85,
+                        "ticks": [0.6, 0.65, 0.7, 0.75, 0.8, 0.85], "label_w": 170,
+                        "rows": [{"label": "today's target", "v": s["mean_iou"]["bench"], "color": "base"},
+                                 {"label": "today's, best of 12", "v": s["mean_iou"]["bench12"], "color": "base", "op": 0.6},
+                                 {"label": "chosen font", "v": s["mean_iou"]["chosen"], "color": "shape"}],
+                        "note": "Best of 3 fresh tries per character, 62 characters."},
+                       {"title": "What a featureless blob scores", "fmt": "f3", "min": 0.6, "max": 0.85,
+                        "ticks": [0.6, 0.65, 0.7, 0.75, 0.8, 0.85], "label_w": 170, "ref": 0.75, "ref_label": "0.75",
+                        "rows": [{"label": "blob vs today's target", "v": x["blob_floor_iou"]["bench"], "color": "base"},
+                                 {"label": "blob vs chosen target", "v": x["blob_floor_iou"]["chosen"], "color": "bad"}],
+                        "note": "Overlap of each target with its own convex hull: a filled outline with no letter features."},
+                       {"title": "Classifier reads the shadow (no target)", "fmt": "pct", "min": 0, "max": 1, "ticks": [0, 0.5, 1],
+                        "label_w": 170,
+                        "rows": [{"label": "today's target", "v": x["cls_top1_fresh"]["bench"], "color": "base"},
+                                 {"label": "chosen font", "v": x["cls_top1_fresh"]["chosen"], "color": "shape"}],
+                        "note": f"Held-out glyph classifier, top-1 over all 3 fresh tries per character (difference "
+                                f"{100 * ct[0]:+.0f} points, 95% range {100 * ct[1]:+.0f} to {100 * ct[2]:+.0f})."}],
+            "images": ([{"uri": png_uri(sheet, 360), "w": 360, "alt": "today vs chosen font targets and shadows",
+                         "caption": "Grey: target. Dark: best fresh shadow. Top three: the classifier reads the new shadow better; bottom "
+                                    "three: worse. The classifier is only a stand-in (it likes the Q blob); your reading decides."}] if os.path.exists(sheet) else [])}
+
+
 def soft_renderer_item():
     r = load("soft_shadow_check", "report.json")
     if not r:
@@ -444,8 +507,8 @@ def soft_renderer_item():
                   "We replaced it in fleet-shadow-art with our renderer (<code>--renderer nvdiffrast</code>): a step along its "
                   f"gradient improved MuJoCo's overlap in {round(8 * nv['step_improves_real_iou'])} of 8 tests in this check, and "
                   "8 of 8 in fleet-shadow-art's own test.",
-        "next": "Push the fleet-shadow-art branch <code>distort_target</code> and open a PR (needs your GitHub access). Even "
-                "with this renderer, Adam still trails CMA-ES at equal time (first card), so CMA-ES stays the default.",
+        "next": "Done: merged into fleet-shadow-art <code>main</code> (with the floor fix). Even with this renderer, Adam still "
+                "trails CMA-ES at equal time (first card), so CMA-ES stays the default.",
         "charts": [
             {"title": "Soft value on empty wall (should be 0)", "fmt": "f2", "min": 0, "max": 1, "ticks": [0, 0.5, 1],
              "rows": [{"label": "soft_shadow", "v": full["soft_outside"], "color": "bad"},
@@ -462,7 +525,8 @@ def soft_renderer_item():
 
 
 def main():
-    items = [x for x in (plan_item(), floor_item(), sds_item(), sds_lora_item(), robustness_item(), seeds_item(), soft_renderer_item()) if x]
+    items = [x for x in (target_designer_item(), plan_item(), floor_item(), sds_item(), sds_lora_item(), robustness_item(), seeds_item(),
+                         soft_renderer_item()) if x]
     doc = {"intro": "Each card: what it is, why we did it, what we expected, what happened. Numbers come straight from the "
                     "result files. Words used below:<ul>" + "".join(f"<li><b>{k}</b>: {v}</li>" for k, v in GLOSSARY) + "</ul>",
            "items": items}
