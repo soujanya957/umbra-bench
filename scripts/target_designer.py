@@ -3,7 +3,15 @@ protocol_review.json): text -> a target that reads as the character AND that the
 so shadows can be verified geometrically against it.
 
 Why: Ivy's reads track overlap with a legible (fitted) target: IoU 0.70-0.75 -> 56% read,
-0.75-0.80 -> 84%, 0.80+ -> 90-100% (775 guesses). The font itself does not matter.
+0.75-0.80 -> 84%, 0.80+ -> 90-100% (775 guesses, all on DejaVu targets).
+
+Result (2026-10-28, report + independent audit): own-target IoU 0.737 -> 0.819 on fresh seeds, but
+choosing the font by that IoU picks heavy, solid faces with small counters (Gill Sans Ultra Bold
+Condensed for 19 of 62) that the arms' thick shadows reach easily. A convex-hull blob already scores
+0.79 against those targets (0.67 against the benchmark's), the held-out classifier reads the new
+shadows no better, and 11 of 20 holed characters get counters too small to survive. So this is
+reach, not readability; the blind read test (make_target_test_page.py) decides. report() writes the
+audit's checks as summary.secondary (not pre-registered).
 
 Stages (resumable; outputs in results/fastshadow/target_designer/):
   build       candidate targets: every bold/black/heavy/demi/condensed upright Windows text face,
@@ -22,13 +30,15 @@ Stages (resumable; outputs in results/fastshadow/target_designer/):
               the top 5 per character + baselines, pick by the 3-seed mean; C fresh seeds 3-5 for
               the chosen target and both baselines, plus seeds 3-14 for the benchmark baseline
               ("just more seeds" control).
-  report      pre-registered geometry endpoints; the deciding endpoint is the blind human read test.
+  report      pre-registered geometry endpoints, plus secondary target-independent checks; the
+              deciding endpoint is the blind human read test.
+  sheet       page/final_sheet.png: examples where the classifier reads the chosen shadow better/worse.
 
 Baselines: "bench" = the benchmark's own target per character (objective_study's list: 43 sans,
 11 serif, 8 mono); "sans" = DejaVu Sans Bold everywhere.
 
-    set FLEET_SHADOW_ART=...\\fleet-shadow-art-dt
-    python scripts/target_designer.py build|classifier|gate|fit|solve|report
+    set FLEET_SHADOW_ART=...\\fleet-shadow-art   (main, >= 5cbb9d7: target_fit fields + batched hooks)
+    python scripts/target_designer.py build|classifier|gate|fit|solve|report|sheet
 """
 
 import argparse
@@ -405,7 +415,8 @@ def solve(a):
             return done[(c["id"], seed)]
         tp = c.get("shown") or fitted(c)
         mask, r = S(tp, c["sub"], c["ch"], seed)
-        mp = P("masks", f"{c['id'].replace('/', '__')}__s{seed}.png")
+        # no ':' in file names: on NTFS "a:b.png" silently becomes a hidden stream of a 0-byte file "a"
+        mp = P("masks", f"{c['id'].replace('/', '__').replace(':', '-')}__s{seed}.png")
         os.makedirs(os.path.dirname(mp), exist_ok=True)
         save_mask(mask, mp)
         r.update({"id": c["id"], "ch": c["ch"], "sub": c["sub"], "font": c["font"], "seed": seed, "stage": stage,
@@ -527,16 +538,179 @@ def report(a):
                                                                        and out["paired_diff_median"] > 0 and share["chosen"] > share["bench"]),
         "(b) beats the benchmark target at best-of-12": bool(out["vs_bench12_ci"][0] > 0),
         "(c) held-out classifier reads chosen no worse": bool(out["cls_top1"]["chosen"] >= out["cls_top1"]["bench"])}
+    out["secondary"] = secondary(per, picks, rows, by, reads)
     jsave({"summary": out, "per_char": per}, "report.json")
     print(json.dumps(out, indent=1))
 
 
+def _hull(m):
+    from skimage.morphology import convex_hull_image
+
+    return convex_hull_image(m) if m.any() else m
+
+
+def _counters(m, min_px=4):
+    """Enclosed background regions (4-connected) of at least min_px pixels, with their inscribed radius."""
+    from scipy import ndimage
+
+    lab, nb = ndimage.label(~m)
+    border = set(np.unique(np.r_[lab[0], lab[-1], lab[:, 0], lab[:, -1]]))
+    out = []
+    for k in range(1, nb + 1):
+        if k in border:
+            continue
+        h = lab == k
+        if h.sum() >= min_px:
+            out.append((h, float(ndimage.distance_transform_edt(h).max())))
+    return out
+
+
+def secondary(per, picks, rows, by, reads):
+    """Checks added after the run (audit 2026-10-28), NOT pre-registered. Endpoints (a)/(b) score each arm
+    against its own target, and selecting fonts by that IoU favours heavy, solid glyphs with small counters
+    that the arms' thick shadows match easily. These numbers do not depend on which target is easier:
+      blob floor   IoU of the target with its own convex hull (a featureless blob covering the letter);
+                   shadow IoU minus that floor = how far the shadow is above "any blob";
+      solidity     ink / convex-hull area of the shadow (for the target it equals the blob floor);
+      counters     target counters >= 4 px and their inscribed radius; kept = an enclosed shadow hole >= 4 px
+                   overlaps it; over every fresh seed 3-5 of each arm;
+      classifier   held-out classifier over every fresh seed 3-5 (not only the best of 3)."""
+    g = np.random.default_rng(0)
+
+    def ci(d):
+        d = np.asarray(d, float)
+        b = [d[g.integers(0, len(d), len(d))].mean() for _ in range(4000)]
+        return [float(np.mean(d)), float(np.percentile(b, 2.5)), float(np.percentile(b, 97.5))]
+
+    def tm(r):
+        return load_target(os.path.join(BENCH, r["target"]), 128) > 0.5, load_target(os.path.join(BENCH, r["mask"]), 128) > 0.5
+
+    def iou(a, b):
+        return float((a & b).sum() / max((a | b).sum(), 1))
+
+    arms = {}
+    for x in per:
+        ch = x["ch"]
+        bench_id = next(r["id"] for r in rows if r["ch"] == ch and "BENCH:" in r["id"])
+        arms[ch] = {"chosen": picks[ch]["chosen"], "bench": bench_id}
+    res = defaultdict(dict)
+    for ch, ids in arms.items():
+        for arm, cid in ids.items():
+            fresh = [by[cid][s] for s in (3, 4, 5)]
+            t, _ = tm(fresh[0])
+            hull_t = iou(t, _hull(t))
+            cnt = _counters(t)
+            kept, open_px, top1, pc, sol_s, above = [], [], [], [], [], []
+            for r in fresh:
+                _, m = tm(r)
+                sh = [h for h, _ in _counters(m)]
+                for h, _r in cnt:
+                    kept.append(any((h & s).any() for s in sh))
+                    open_px.append(float((h & ~m).sum()))
+                k1, p = reads(r)
+                top1.append(k1)
+                pc.append(p)
+                sol_s.append(float(m.sum() / max(_hull(m).sum(), 1)))
+                above.append(r["iou"] - hull_t)
+            res[ch][arm] = {"hull_iou": hull_t, "solidity_target": float(t.sum() / max(_hull(t).sum(), 1)),
+                            "stroke_target": stroke_width(t), "solidity_shadow": float(np.mean(sol_s)),
+                            "above_floor": float(np.mean(above)), "n_counters": len(cnt),
+                            "min_counter_r": min((r_ for _, r_ in cnt), default=None),
+                            "counters_kept": float(np.mean(kept)) if kept else None,
+                            "open_counter_px": float(np.mean(open_px)) if open_px else None,
+                            "cls_top1_fresh": float(np.mean(top1)), "cls_p_fresh": float(np.mean(pc))}
+    chars = sorted(res)
+    holed = [ch for ch in chars if res[ch]["bench"]["n_counters"]]
+
+    def pair(key, cs=chars):
+        return ci([res[ch]["chosen"][key] - res[ch]["bench"][key] for ch in cs])
+
+    def mean(arm, key, cs=chars):
+        return float(np.mean([res[ch][arm][key] for ch in cs]))
+
+    return {
+        "note": "added after the run, not pre-registered; see secondary() docstring",
+        "blob_floor_iou": {a: mean(a, "hull_iou") for a in ("chosen", "bench")},
+        "blob_floor_share_ge_075": {a: float(np.mean([res[ch][a]["hull_iou"] >= 0.75 for ch in chars])) for a in ("chosen", "bench")},
+        "shadow_above_floor": {a: mean(a, "above_floor") for a in ("chosen", "bench")},
+        "shadow_above_floor_diff_ci": pair("above_floor"),
+        "solidity_shadow": {a: mean(a, "solidity_shadow") for a in ("chosen", "bench")},
+        "stroke_target_px": {a: mean(a, "stroke_target") for a in ("chosen", "bench")},
+        "cls_p_fresh": {a: mean(a, "cls_p_fresh") for a in ("chosen", "bench")},
+        "cls_p_fresh_diff_ci": pair("cls_p_fresh"),
+        "cls_top1_fresh": {a: mean(a, "cls_top1_fresh") for a in ("chosen", "bench")},
+        "cls_top1_fresh_diff_ci": pair("cls_top1_fresh"),
+        "holed_chars": "".join(holed),
+        "small_counter_chars": "".join(ch for ch in holed if (res[ch]["chosen"]["min_counter_r"] or 0) < 7),
+        "small_counter_chars_bench": "".join(ch for ch in holed if (res[ch]["bench"]["min_counter_r"] or 0) < 7),
+        "counters_kept": {a: float(np.mean([res[ch][a]["counters_kept"] for ch in holed if res[ch][a]["counters_kept"] is not None]))
+                          for a in ("chosen", "bench")},
+        "open_counter_px": {a: float(np.mean([res[ch][a]["open_counter_px"] for ch in holed if res[ch][a]["open_counter_px"] is not None]))
+                            for a in ("chosen", "bench")},
+        "sans_is_bench_chars": int(sum(x["sans"] == x["bench"] for x in per)),
+        "top_font": Counter(x["chosen_font"] for x in per).most_common(1)[0],
+        "per_char": res}
+
+
+def sheet(a, n=3):
+    """page/final_sheet.png: today's vs the chosen target and best fresh shadow (seeds 3-5), for the n characters
+    the held-out classifier reads most better and the n it reads most worse with the chosen font."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    rep = jload("report.json")
+    rows = [json.loads(l) for l in open(P("solves.jsonl"), encoding="utf-8")]
+    picks = jload("picks.json")
+    by = defaultdict(dict)
+    for r in rows:
+        by[r["id"]][r["seed"]] = r
+
+    def best(cid):
+        rr = [by[cid][s] for s in (3, 4, 5)]
+        ok = [r for r in rr if r["collision_free"] and r["lowest_mm"] >= -5] or rr
+        return max(ok, key=lambda r: r["iou"])
+
+    per = sorted(rep["per_char"], key=lambda x: x["cls_p_chosen"] - x["cls_p_bench"])
+    chars = [x["ch"] for x in per[::-1][:n]] + [x["ch"] for x in per[:n]]
+    wall, ink, tgt = (234, 233, 228), (30, 31, 36), (150, 160, 178)
+    cell, pad, lab = 96, 6, 22
+    W = 4 * cell + 5 * pad + 40
+    H = len(chars) * (cell + lab + pad) + 28
+    im = Image.new("RGB", (W, H), (255, 255, 255))
+    d = ImageDraw.Draw(im)
+    try:
+        f, fb = ImageFont.truetype("arial.ttf", 13), ImageFont.truetype("arialbd.ttf", 22)
+    except OSError:
+        f = fb = ImageFont.load_default()
+    for k, t in enumerate(("today: target", "shadow", "chosen: target", "shadow")):
+        d.text((40 + pad + k * (cell + pad), 6), t, fill=(90, 95, 105), font=f)
+    pmap = {x["ch"]: x for x in rep["per_char"]}
+    for i, ch in enumerate(chars):
+        y = 28 + i * (cell + lab + pad)
+        if i == n:
+            d.line([(4, y - pad // 2), (W - 4, y - pad // 2)], fill=(200, 200, 205), width=1)
+        d.text((8, y + cell // 2 - 12), ch, fill=(0, 0, 0), font=fb)
+        bench_id = next(r["id"] for r in rows if r["ch"] == ch and "BENCH:" in r["id"])
+        for j, (r, col) in enumerate(((best(bench_id), "bench"), (best(picks[ch]["chosen"]), "chosen"))):
+            for q, (path, color) in enumerate(((r["target"], tgt), (r["mask"], ink))):
+                m = load_target(os.path.join(BENCH, path), 128) > 0.5
+                a_ = np.tile(np.array(wall, np.uint8), m.shape + (1,))
+                a_[m] = color
+                x = 40 + pad + (2 * j + q) * (cell + pad)
+                im.paste(Image.fromarray(a_).resize((cell, cell), Image.NEAREST), (x, y))
+            x = 40 + pad + 2 * j * (cell + pad)
+            d.text((x, y + cell + 3), f"overlap {r['iou']:.2f} · classifier {100 * pmap[ch]['cls_p_' + col]:.0f}%",
+                   fill=(60, 64, 72), font=f)
+    os.makedirs(P("page"), exist_ok=True)
+    im.save(P("page", "final_sheet.png"), optimize=True)
+    print("wrote", P("page", "final_sheet.png"), "chars", "".join(chars))
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("stage", choices=["build", "classifier", "gate", "fit", "solve", "report"])
+    ap.add_argument("stage", choices=["build", "classifier", "gate", "fit", "solve", "report", "sheet"])
     ap.add_argument("--workers", type=int, default=8)
     a = ap.parse_args()
-    {"build": build, "classifier": classifier, "gate": gate, "fit": fit, "solve": solve, "report": report}[a.stage](a)
+    {"build": build, "classifier": classifier, "gate": gate, "fit": fit, "solve": solve, "report": report, "sheet": sheet}[a.stage](a)
 
 
 if __name__ == "__main__":
