@@ -167,7 +167,7 @@ svg text{font-family:var(--f-body)}
     <div class="path" role="img" aria-label="The path from a word to a readable shadow: text, target shape, search for joint angles with a score, pick one, check it, run it on the real arms.">
       <svg viewBox="0 0 1060 210" id="pathsvg"></svg>
     </div>
-    <div class="legend"><span><i class="dot" style="background:var(--done)"></i>settled</span><span><i class="dot" style="background:var(--run)"></i>running now</span><span><i class="dot" style="background:var(--no)"></i>tried, ruled out</span><span><i class="dot" style="background:var(--open)"></i>open</span></div>
+    <div class="legend"><span><i class="dot" style="background:var(--done)"></i>settled</span><span><i class="dot" style="background:var(--open)"></i>open</span></div>
   </header>
 
   <section>
@@ -225,7 +225,7 @@ const f2 = v => v == null ? '–' : v.toFixed(2), f3 = v => v == null ? '–' : 
 const T = D.designer;
 
 const STAGES = [
-  {k: 'target', name: 'Target', q: 'What shape should the shadow aim for?', st: 'run',
+  {k: 'target', name: 'Target', q: 'What shape should the shadow aim for?', st: 'open',
    facts: T ? [[f3(T.mean.bench) + ' → ' + f3(T.mean.chosen), 'overlap when each character picks its font'],
                ['but', 'heavy fonts are just easier to reach; a blob scores ' + f2(T.blob.chosen)],
                ['next', 'Ivy\u2019s blind reading test decides']] : [['–', 'not started']]},
