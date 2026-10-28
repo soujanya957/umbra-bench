@@ -430,7 +430,32 @@ def target_designer_item():
     font, n_font = x["top_font"]
     font = next((c["label"] for c in cands if c["font"] == font), font).replace(" Regular", "")
     sheet = os.path.join(FS, "target_designer", "page", "final_sheet.png")
-    return {"title": "Let each character pick its font", "verdict": "mixed", "label": "reach yes, reading unknown",
+    hs = load("target_designer", "human", "summary.json") or {}
+    h = next(iter(hs.values()), None)  # one rater so far (Ivy)
+    if h:
+        c1, c2 = h["preregistered"]["check1_paired"], h["preregistered"]["check2_chosen_iou_ge_075"]
+        sv = h["sensitivity"]
+        ps = [c1["mcnemar_p"]] + [sv[k]["mcnemar_p"] for k in ("strict_case", "lookalike_lenient", "without_preseen")]
+        human = (f" <b>Your blind test</b> (the deciding check, two checks fixed before the run): (1) paired by character, you read "
+                 f"{c1['chosen_read']} of {c1['n_chars']} chosen-font shadows and {c1['bench_read']} of today's ({c1['chosen_only']} "
+                 f"characters only as the chosen font, {c1['bench_only']} only as today's; p {c1['mcnemar_p']:.2f}). (2) Chosen-font "
+                 f"shadows at overlap 0.75 or more needed to read about 75% of the time; you read {c2['read'][0]} of {c2['read'][1]} "
+                 f"({100 * c2['rate']:.0f}%, 95% range {100 * c2['wilson95'][0]:.0f}-{100 * c2['wilson95'][1]:.0f}%): "
+                 f"{'passed' if c2['pass'] else 'failed'}. Today's shadows at 0.75 or more: {c2['bench_same_rule'][0]} of "
+                 f"{c2['bench_same_rule'][1]}, as before. So for you the new fonts read no better: the paired difference is "
+                 f"{100 * c1['diff_ci'][0]:+.0f} points (95% range {100 * c1['diff_ci'][1]:+.0f} to {100 * c1['diff_ci'][2]:+.0f}), "
+                 f"so a real gain beyond that upper end is unlikely, and 'worse' is not certain either (p {min(ps):.2f}-{max(ps):.2f} "
+                 f"under strict, case-insensitive and look-alike scoring, and without the 6 characters shown on these pages "
+                 f"before the test). The gap is in lowercase "
+                 f"letters ({sv['discordant_by_subset']['letters_lower']['chosen_only']} vs "
+                 f"{sv['discordant_by_subset']['letters_lower']['bench_only']}) and in 'can't tell'; capitals tie "
+                 f"({sv['discordant_by_subset']['letters_upper']['chosen_only']} vs "
+                 f"{sv['discordant_by_subset']['letters_upper']['bench_only']}). In the side-by-side part you preferred today's "
+                 f"shadow for {h['ab_chars']['both_bench']} characters and the new one for {h['ab_chars']['both_chosen']}.")
+    else:
+        human = ""
+    return {"title": "Let each character pick its font", "verdict": "no" if h else "mixed",
+            "label": "you read it no better" if h else "reach yes, reading unknown",
             "what": f"The target used to be one fixed font per character. We drew every character in {n_fonts} bold and heavy "
                     f"fonts ({n_cand:,} candidate targets), kept the {n_gated:,} that pass the legibility and shape checks, solved "
                     "each once, solved the best 5 per "
@@ -449,16 +474,29 @@ def target_designer_item():
                       f"does not carry over. Above that blob, today's shadows gain more ({x['shadow_above_floor']['bench']:+.3f} vs "
                       f"{x['shadow_above_floor']['chosen']:+.3f}). The glyph classifier, which never sees the target, reads the new "
                       f"shadows no better: {100 * s['cls_top1']['chosen']:.0f}% vs {100 * s['cls_top1']['bench']:.0f}% right (the "
-                      f"third check fixed in advance failed), {100 * x['cls_top1_fresh']['chosen']:.0f}% vs "
+                      f"classifier check fixed in advance failed), {100 * x['cls_top1_fresh']['chosen']:.0f}% vs "
                       f"{100 * x['cls_top1_fresh']['bench']:.0f}% over all fresh tries. "
                       f"{len(x['small_counter_chars'])} of the {len(x['holed_chars'])} characters with holes got holes too small "
-                      f"for a shadow to keep ({', '.join(x['small_counter_chars'])}; today: {', '.join(x['small_counter_chars_bench'])}).",
-            "next": "Your blind reading test decides (separate page: the new and today's shadow of every character, read alone, then "
-                    "side by side). If it agrees with the classifier, choose the font differently: holes at least 7 px in radius "
-                    "after fitting (changes 11 picks, about 0.045 overlap on those), stroke weight and solidity near DejaVu's, or "
-                    "a score that does not depend on the target. Results of the audit: <code>scripts/target_designer.py report</code> "
-                    "(the secondary block, not fixed in advance).",
-            "charts": [{"title": "Overlap with its own target", "fmt": "f3", "min": 0.6, "max": 0.85,
+                      f"for a shadow to keep ({', '.join(x['small_counter_chars'])}; today: {', '.join(x['small_counter_chars_bench'])})." + human,
+            "next": ("Keep today's targets. Choosing the font by its own overlap is out: it makes shadows easier to match, not to "
+                     "read. One rater who knew the idea is not enough to rule out font choice in general: one or two new people on "
+                     "the same page would settle it. If font choice comes back, pick by something that tracks reading (overlap above "
+                     "the blob and the classifier both predicted your reads better than overlap did), but only inside a shortlist the "
+                     "arms can reach, with holes at least 7 px in radius; maximising 'above the blob' alone picks thin serif fonts the "
+                     "arms cannot follow. Numbers: <code>scripts/analyze_target_test.py</code>, "
+                     "<code>scripts/target_designer.py report</code>.") if h else
+                    ("Your blind reading test decides (separate page: the new and today's shadow of every character, read alone, "
+                     "then side by side)."),
+            "charts": ([{"title": "You read it (blind, 62 characters)", "fmt": "pct", "min": 0, "max": 1, "ticks": [0, 0.5, 1],
+                         "label_w": 170, "ref": 0.75, "ref_label": "75%",
+                         "rows": [{"label": "today's target", "v": c1["bench_read"] / c1["n_chars"], "color": "base"},
+                                  {"label": "chosen font", "v": c1["chosen_read"] / c1["n_chars"], "color": "shape"},
+                                  {"label": "today's, overlap >= 0.75", "v": c2["bench_same_rule"][0] / c2["bench_same_rule"][1],
+                                   "color": "base", "op": 0.6},
+                                  {"label": "chosen, overlap >= 0.75", "v": c2["rate"], "color": "bad"}],
+                         "note": "Both blocks, case-insensitive; 'can't tell' counts as wrong. The bottom two are the pre-registered "
+                                 "check (2): the chosen fonts needed about 75%."}] if h else []) +
+                      [{"title": "Overlap with its own target", "fmt": "f3", "min": 0.6, "max": 0.85,
                         "ticks": [0.6, 0.65, 0.7, 0.75, 0.8, 0.85], "label_w": 170,
                         "rows": [{"label": "today's target", "v": s["mean_iou"]["bench"], "color": "base"},
                                  {"label": "today's, best of 12", "v": s["mean_iou"]["bench12"], "color": "base", "op": 0.6},

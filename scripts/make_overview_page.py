@@ -77,7 +77,20 @@ def designer():
             "mean": s_["mean_iou"], "share": s_["share_ge_075"], "vs12": s_["vs_bench12_mean"], "cls": s_["cls_top1"],
             "blob": x_["blob_floor_iou"], "above": x_["shadow_above_floor"], "cls_fresh": x_["cls_top1_fresh"],
             "small_holes": x_["small_counter_chars"], "n_holed": len(x_["holed_chars"]),
-            "top_font": [next((c["label"] for c in cands.values() if c["font"] == top[0]), top[0]).replace(" Regular", ""), top[1]]}
+            "top_font": [next((c["label"] for c in cands.values() if c["font"] == top[0]), top[0]).replace(" Regular", ""), top[1]],
+            "human": human()}
+
+
+def human():
+    """The first complete rater of the blind reading test (scripts/analyze_target_test.py)."""
+    hs = load("target_designer", "human", "summary.json")
+    h = next(iter(hs.values()), None) if hs else None
+    if not h:
+        return None
+    c1, c2 = h["preregistered"]["check1_paired"], h["preregistered"]["check2_chosen_iou_ge_075"]
+    return {"chosen": c1["chosen_read"], "bench": c1["bench_read"], "n": c1["n_chars"], "p": c1["mcnemar_p"],
+            "diff_ci": c1["diff_ci"], "hi_chosen": c2["read"], "hi_bench": c2["bench_same_rule"], "check2_pass": c2["pass"],
+            "ab_chosen": h["ab_chars"]["both_chosen"], "ab_bench": h["ab_chars"]["both_bench"]}
 
 
 def main():
@@ -211,7 +224,7 @@ svg text{font-family:var(--f-body)}
       <a href="https://claude.ai/artifact/ChM2otn7JGKKN1sy2yJsY8">Glyph Objective Study <span>· objectives, Ivy judge, overnight research</span></a>
       <a href="https://claude.ai/artifact/HU5HFUjpvTf9BTnkTveK7i">Solver bench <span>· GPU renderer, CMA-ES vs Adam, arm layouts</span></a>
       <a href="https://claude.ai/artifact/DTjJuNUhPWfJN5hRrTWmSX">Shadow picker <span>· where Ivy's labels come from</span></a>
-      <a href="https://claude.ai/artifact/YRfwV5BKayNk9H4aS9e3wu">Shadow reading test <span>· blind test of the font experiment</span></a>
+      <a href="https://claude.ai/artifact/YRfwV5BKayNk9H4aS9e3wu">Shadow reading test <span>· blind test of the font experiment (Ivy done)</span></a>
     </div>
     <p class="foot">Letters and digits only so far: 62 characters, three SO-101 arms, shadows rendered at 128 px and checked in MuJoCo.</p>
   </section>
@@ -226,9 +239,12 @@ const T = D.designer;
 
 const STAGES = [
   {k: 'target', name: 'Target', q: 'What shape should the shadow aim for?', st: 'open',
-   facts: T ? [[f3(T.mean.bench) + ' → ' + f3(T.mean.chosen), 'overlap when each character picks its font'],
+   facts: T ? (T.human ? [[f3(T.mean.bench) + ' → ' + f3(T.mean.chosen), 'overlap when each character picks its font'],
+               [T.human.chosen + ' vs ' + T.human.bench, 'of 62 Ivy read blind: chosen font vs today\u2019s, so no better'],
+               ['keep', 'today\u2019s targets; open: a font rule that tracks reading']]
+             : [[f3(T.mean.bench) + ' → ' + f3(T.mean.chosen), 'overlap when each character picks its font'],
                ['but', 'heavy fonts are just easier to reach; a blob scores ' + f2(T.blob.chosen)],
-               ['next', 'Ivy\u2019s blind reading test decides']] : [['–', 'not started']]},
+               ['next', 'Ivy\u2019s blind reading test decides']]) : [['–', 'not started']]},
   {k: 'search', name: 'Search', q: 'How do we find joint angles?', st: 'done',
    facts: [['CMA-ES', 'on the GPU renderer, 1.2 s per solve (MuJoCo: 3.3 s)'], ['0.705 → 0.754', 'overlap from 1 try to the best of 12'], ['Adam', 'behind at equal time']]},
   {k: 'score', name: 'Score', q: 'What does the search maximize?', st: 'done',
@@ -278,7 +294,8 @@ document.getElementById('stages').innerHTML = STAGES.map(st => `<article class="
 
 // font-free examples
 if (T) {
-  document.getElementById('td_lede').textContent = `Each character picked, from ${T.n_candidates.toLocaleString()} legible targets in ${T.n_fonts} heavy fonts, the one the arms match best. Overlap rose from ${f3(T.mean.bench)} to ${f3(T.mean.chosen)}, but mostly because heavy, solid letters are easy to reach: ${T.top_font[0]} won ${T.top_font[1]} of 62. The glyph classifier reads the new shadows no better (${pc(T.cls_fresh.chosen)} vs ${pc(T.cls_fresh.bench)}).`;
+  document.getElementById('td_lede').textContent = `Each character picked, from ${T.n_candidates.toLocaleString()} legible targets in ${T.n_fonts} heavy fonts, the one the arms match best. Overlap rose from ${f3(T.mean.bench)} to ${f3(T.mean.chosen)}, but mostly because heavy, solid letters are easy to reach: ${T.top_font[0]} won ${T.top_font[1]} of 62. The glyph classifier reads the new shadows no better (${pc(T.cls_fresh.chosen)} vs ${pc(T.cls_fresh.bench)}).` +
+    (T.human ? ` Neither did Ivy, reading blind: ${T.human.chosen} of 62 with the chosen fonts vs ${T.human.bench} with today's, and only ${T.human.hi_chosen[0]} of ${T.human.hi_chosen[1]} chosen shadows above 0.75 overlap (today's: ${T.human.hi_bench[0]} of ${T.human.hi_bench[1]}).` : '');
   document.getElementById('examples').innerHTML = T.examples.map(e => `<div class="excard"><div class="lab head"><b>${e.ch}</b><span class="fn">${e.font}</span></div>
     <div class="row"><img src="${e.bt}" alt="benchmark target ${e.ch}"><img src="${e.bs}" alt="shadow for the benchmark target ${e.ch}"></div>
     <div class="lab"><span>today</span><span>${f2(e.bi)} · ${pc(e.bp)}</span></div>
@@ -370,7 +387,7 @@ if (T) {
 })();
 
 document.getElementById('next').innerHTML = [
-  ['A blind reading test of the new targets', 'Ready (link below). Decides whether choosing fonts makes shadows easier to read, not only to match. Ivy plus one or two people new to the project, so it counts beyond one pair of eyes.'],
+  ['One or two new readers', 'Ivy\u2019s blind test says the chosen fonts read no better. One rater who knew the idea is not enough for a general claim; the same test page, unchanged, takes about 20 minutes.'],
   ['Choose fonts by reading, not reach', 'Holes at least 14 px across after fitting (changes 11 picks), stroke weight near DejaVu\'s, or a score that does not depend on the target, so the search stops rewarding blobs.'],
   ['Any shape, not only letters', 'The same path with targets drawn from text by an image model, and a reader for animals and objects. Needs a few hundred labelled shadows.'],
   ['Animation as one plan', 'Keep a few good poses per frame and choose the smoothest path through all frames, with the arms\' real speed limits.'],
