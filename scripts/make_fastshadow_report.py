@@ -211,6 +211,9 @@ def main():
     from fastshadow.arrangement_report import load as load_arrangement
 
     D["arr"] = load_arrangement(BENCH)  # robot arrangement + spacing study, if run
+    from fastshadow.rail_report import load as load_rail
+
+    D["rail"] = load_rail(BENCH)  # LeSlider rail study (scripts/rail_study.py), if run
     html = render_html(D, feat, allc, par, main_m)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
@@ -421,6 +424,17 @@ table.cmp .optc{font:600 11px var(--f-mono);padding:2px 6px;border-radius:3px;co
     <div class="head"><h2 style="font-size:18px">Every digit</h2></div>
     <div class="legend"><span><i style="background:#0f6e66"></i>CMA-ES (best seed)</span><span><i style="background:#3a3fb0"></i>Adam (best seed)</span><span>top-down sketch: optimized base positions of both, light above, wall below</span><span>⚠ = MuJoCo contact</span></div>
     <div class="scroll"><div class="dgrid" id="arr_digits"></div></div>
+  </section>
+
+  <section id="rail" hidden>
+    <div class="head"><span class="eyebrow">5 · LeSlider · carriages on a rail</span><h2>Slide each arm along the light axis while solving</h2></div>
+    <p class="sub" id="rail_sub"></p>
+    <div class="kpis" id="rail_kpis"></div>
+    <div class="card"><h3>Where the carriages went</h3><p class="note" id="rail_snote"></p><div class="scroll" id="rail_sketch"></div></div>
+    <div class="card"><h3>Same targets, carriages fixed vs free</h3><p class="note" id="rail_tnote"></p><div class="scroll"><table class="cmp" id="rail_table"></table></div></div>
+    <div class="card" id="rail_geo_card" hidden><h3>Where the rail sits matters more</h3><p class="note" id="rail_gnote"></p><div class="scroll"><table class="cmp" id="rail_geo"></table></div></div>
+    <div class="head"><h2 style="font-size:18px">Biggest gains and losses from moving the carriages (CMA-ES, best seed)</h2></div>
+    <div class="scroll"><div class="grid-head" style="grid-template-columns:72px repeat(3,minmax(0,128px));min-width:480px"><span></span><span class="cap">target (fitted to the rail)</span><span class="cap">carriages fixed</span><span class="cap">carriages free</span></div><div id="rail_ex"></div></div>
   </section>
   <p class="foot" id="foot"></p>
 </div>
@@ -682,6 +696,60 @@ document.getElementById('foot').textContent =
   `CMA-ES: popsize 48, 16 + 16 per-arm iterations, 30 joint iterations, ${C.n_seeds} seeds. Adam: 300 steps on blurred soft IoU plus the CMA-ES penalties, ${A.n_seeds} seeds. ` +
   `Paired differences: CMA-ES nvdiffrast − MuJoCo ${sg(D.d_fast[0])} ± ${f3(D.d_fast[1])}; Adam − CMA-ES nvdiffrast ${sg(D.d_adam[0])} ± ${f3(D.d_adam[1])} (SE over targets). ` +
   `Renderer: ${D.tri.toLocaleString()} triangles after 2 mm vertex clustering (from ${D.tri_raw.toLocaleString()}).`;
+
+// ── LeSlider rail ─────────────────────────────────────────────────────
+(function () {
+  const R = D.rail; if (!R) return;
+  document.getElementById('rail').hidden = false;
+  const S = R.summary, C = S.cells, t = R.meta.track, fe = S.free_minus_even;
+  const mag = s => (t.light_dist + t.length + t.screen_dist) / (t.light_dist + s);
+  const k = C['rail_free/cma'].n_seeds, ka = C['rail_free/adam'].n_seeds;
+  document.getElementById('rail_sub').textContent = `${R.meta.n} SO-101s on fleet-shadow-art's 1 m LeSlider (track.leslider_1m): light ${t.light_dist} m before the rail, screen ${t.screen_dist} m after it, base travel ${t.s_min.toFixed(2)}–${t.s_max.toFixed(2)} m from the light end, carriages at least ${t.min_spacing.toFixed(3)} m apart. Each carriage position is one more variable, solved together with the 18 joints on the GPU (CMA-ES populations; Adam gets a gradient through the kinematics). ${R.meta.n_targets} letters and digits, each fitted once to this rail's reach with the carriages evenly spread, the same target for both settings. MuJoCo re-renders and contact-checks every result with the carriages where the solver put them.`;
+  const ci = v => `${sg(v[0])} (95% ${sg(v[1])}…${sg(v[2])}, ${v[3]} up / ${v[4]} down)`;
+  document.getElementById('rail_kpis').innerHTML = [
+    [sg(fe.cma.iou_best[0]), `IoU, best of ${k} CMA-ES seeds: carriages free minus fixed`, 'f'],
+    [sg(fe.adam.iou_best[0]), `IoU, best of ${ka} Adam seeds: carriages free minus fixed`, 'g'],
+    [C['rail_free/cma'].s_mean.map(v => v.toFixed(2)).join(' · '), `m from the light end, where CMA-ES puts the carriages on average (fixed: ${R.meta.s_even.map(v => v.toFixed(2)).join(' · ')})`, ''],
+    [`${mag(t.s_max).toFixed(1)}–${mag(t.s_min).toFixed(1)}×`, 'shadow magnification along this rail (the bench rig: 2.4–3.4×)', ''],
+  ].map(([v, l, c]) => `<div class="kpi"><span class="v ${c}">${v}</span><span class="l">${l}</span></div>`).join('');
+  // top-down sketch: light, rail, screen; fixed carriages; every free solve's carriages
+  (function () {
+    const W = 920, H = 160, L = 60, Rr = 60, y0 = 46;
+    const total = t.light_dist + t.length + t.screen_dist;
+    const x = d => L + (W - L - Rr) * d / total;  // d = metres from the light
+    let b = `<circle cx="${x(0)}" cy="${y0}" r="9" fill="none" stroke="var(--ink)" stroke-width="2.5"/><text x="${x(0)}" y="${y0 - 16}" text-anchor="middle">light</text>`;
+    b += `<line x1="${x(total)}" x2="${x(total)}" y1="${y0 - 26}" y2="${y0 + 26}" stroke="var(--ink)" stroke-width="4"/><text x="${x(total)}" y="${y0 - 32}" text-anchor="middle">screen</text>`;
+    b += `<rect x="${x(t.light_dist)}" y="${y0 - 5}" width="${x(t.light_dist + t.length) - x(t.light_dist)}" height="10" rx="3" fill="var(--rule)"/>`;
+    b += `<line x1="${x(t.light_dist + t.s_min)}" x2="${x(t.light_dist + t.s_max)}" y1="${y0 + 14}" y2="${y0 + 14}" stroke="var(--muted)" stroke-dasharray="3 3"/><text x="${x(t.light_dist + (t.s_min + t.s_max) / 2)}" y="${y0 + 28}" text-anchor="middle">base travel</text>`;
+    R.meta.s_even.forEach(s => { b += `<rect x="${x(t.light_dist + s) - 6}" y="${y0 - 12}" width="12" height="24" rx="2" fill="none" stroke="var(--muted)" stroke-width="2"><title>fixed carriage at ${s.toFixed(3)} m</title></rect>`; });
+    [['cma', 'var(--fast)', 100], ['adam', 'var(--grad)', 134]].forEach(([o, c, yy]) => {
+      b += `<text x="${L - 8}" y="${yy + 4}" text-anchor="end" style="fill:${c}">${o === 'cma' ? 'CMA-ES' : 'Adam'}</text>`;
+      R.spots[o].forEach((ss, j) => ss.forEach((s, i) => { b += `<circle cx="${x(t.light_dist + s)}" cy="${yy + ((j % 5) - 2) * 3}" r="2.6" fill="${c}" opacity="${0.35 + 0.2 * i}"/>`; }));
+    });
+    document.getElementById('rail_sketch').innerHTML = svg(W, H, b);
+    document.getElementById('rail_snote').textContent = `Top-down, to scale. Hollow boxes: the fixed setting (evenly spread). Dots: every free solve's three carriages (darker = further from the light). Closer to the light = bigger shadow.`;
+  })();
+  const lab = {rail_even: 'carriages fixed (evenly spread)', rail_free: 'carriages free'};
+  const rows = Object.entries(C).map(([key, v]) => { const [c, o] = key.split('/');
+    return `<tr><th>${lab[c]} · ${o === 'cma' ? 'CMA-ES' : 'Adam'}</th><td class="n">${f3(v.iou)}</td><td class="n">${f3(v.iou_best)}</td><td class="n">${f3(v.tc_iou)}</td><td class="n">${(100 * v.cls_top1).toFixed(0)}%</td><td class="n">${(100 * v.collision_free).toFixed(0)}% · ${(100 * v.floor_ok).toFixed(0)}%</td><td class="n">${v.seconds.toFixed(1)} s</td></tr>`; });
+  const o = S.old_rig;
+  rows.push(`<tr><td colspan="7" class="grp">The bench rig (fixed 0.2 m column, light 1 m before, screen 3.4 m from the light): its IoU is against a different fitted target, so only shape and reading compare</td></tr>`);
+  rows.push(`<tr><th>bench rig · CMA-ES (nvdiffrast)</th><td class="n">—</td><td class="n">—</td><td class="n">${f3(o.cma_fast.tc_iou)}</td><td class="n">${(100 * o.cma_fast.cls_top1).toFixed(0)}%</td><td class="n">—</td><td class="n">—</td></tr>`);
+  rows.push(`<tr><th>bench rig · Adam, 64 starts</th><td class="n">—</td><td class="n">—</td><td class="n">${f3(o.adam_64.tc_iou)}</td><td class="n">—</td><td class="n">—</td><td class="n">—</td></tr>`);
+  document.getElementById('rail_table').innerHTML = `<thead><tr><th></th><th>IoU per solve</th><th>best of seeds</th><th>tc_iou</th><th>classifier</th><th>contact-free · floor ok</th><th>time</th></tr></thead><tbody>${rows.join('')}</tbody>`;
+  const rmo = S.rail_minus_old_tc || {};
+  document.getElementById('rail_tnote').textContent = `Mean over ${R.meta.n_targets} targets; CMA-ES ${k} seeds, Adam ${ka} seeds of 64 starts. Free minus fixed, paired by target: CMA-ES IoU ${ci(fe.cma.iou)}, best seed ${ci(fe.cma.iou_best)}; Adam IoU ${ci(fe.adam.iou)}, best seed ${ci(fe.adam.iou_best)}. tc_iou is the shape against the original glyph after centring, comparable across rigs: on this rail it is ${sg(rmo['rail_free/cma'][0])} below the bench rig for CMA-ES with free carriages (95% ${sg(rmo['rail_free/cma'][1])}…${sg(rmo['rail_free/cma'][2])}), because the arms sit 1.13–1.95 m from the light here (bench rig 1.0–1.4 m) and the screen is closer, so their shadows are smaller. The rail's placement matters more than sliding on it.`;
+  if (R.variants && R.variants.length > 1) {
+    document.getElementById('rail_geo_card').hidden = false;
+    document.getElementById('rail_geo').innerHTML = '<thead><tr><th>rail placement</th><th>magnification</th><th>best IoU, fixed</th><th>best IoU, free</th><th>tc_iou, free</th><th>tc_iou vs bench rig</th><th>classifier, free</th></tr></thead><tbody>' +
+      R.variants.map(v => { const fc = v.cells['rail_free/cma'], ec = v.cells['rail_even/cma'], d = v.rail_minus_old_tc['rail_free/cma'];
+        return `<tr><th>light ${v.light_dist} m before, screen ${v.screen_dist} m after</th><td class="n">${v.mag[0].toFixed(1)}–${v.mag[1].toFixed(1)}×</td><td class="n">${f3(ec.iou_best)}</td><td class="n">${f3(fc.iou_best)}</td><td class="n">${f3(fc.tc_iou)}</td><td class="n">${d ? sg(d[0]) + ' (' + sg(d[1]) + '…' + sg(d[2]) + ')' : '—'}</td><td class="n">${(100 * fc.cls_top1).toFixed(0)}%</td></tr>`; }).join('') + '</tbody>';
+    document.getElementById('rail_gnote').textContent = 'CMA-ES, best of 3 seeds, same 30 characters, targets fitted to each placement. tc_iou against the bench rig (fixed 0.2 m column, 2.4–3.4×) with its 95% range, paired by character.';
+  }
+  document.getElementById('rail_ex').innerHTML = R.examples.map(e => `<div class="frow" style="grid-template-columns:72px repeat(3,minmax(0,128px));min-width:480px"><div class="glyph"><b>${e.ch}</b><span>${sg(e.gain)}</span></div>` +
+    `<figure class="m"><img src="${e.target}" alt="target ${e.ch}"><figcaption>target</figcaption></figure>` +
+    ['rail_even', 'rail_free'].map(c => `<figure class="m"><img src="${e[c].img}" alt="${c} ${e.ch}"><figcaption><span class="num">${f3(e[c].iou)}</span> · ${e[c].s.map(v => v.toFixed(2)).join('/')} m</figcaption></figure>`).join('') + `</div>`).join('');
+})();
 </script>
 """
 

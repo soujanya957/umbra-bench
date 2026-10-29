@@ -356,9 +356,10 @@ class FastShadowRenderer:
 
             lv0 = self._levels[0]["bodies"].tolist()
             self._root_idx = torch.tensor([lv0.index(r) for r in root_ids(model)], device=kdev)
-            self.n_dof = self.n_joint + 2
-            self.q_lower = np.concatenate([self.q_lower, [0.0, 0.0]])
-            self.q_upper = np.concatenate([self.q_upper, [1.0, 1.0]])
+            k = arrangement.n_vars
+            self.n_dof = self.n_joint + k
+            self.q_lower = np.concatenate([self.q_lower, np.zeros(k)])
+            self.q_upper = np.concatenate([self.q_upper, np.ones(k)])
             self._qlo = torch.tensor(self.q_lower, dtype=dt, device=dev)
             self._qhi = torch.tensor(self.q_upper, dtype=dt, device=dev)
 
@@ -379,7 +380,7 @@ class FastShadowRenderer:
             pb = pp + (Rp @ lv["bp"][..., None])[..., 0]
             if li == 0 and self.arrangement is not None:  # movable bases: roots hang off the world
                 pb = pb.clone()
-                pb[:, self._root_idx, :2] = self.arrangement.positions(Q[:, nj:nj + 2])
+                pb[:, self._root_idx, :2] = self.arrangement.positions(Q[:, nj:nj + self.arrangement.n_vars])
             a = Qz[:, lv["cols"]] - lv["q0"]  # (B,n)
             Rj = self._eye + torch.sin(a)[..., None, None] * lv["K"] + (1 - torch.cos(a))[..., None, None] * lv["K2"]
             anchor = pb + (Rb @ lv["jp"][..., None])[..., 0]

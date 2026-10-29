@@ -13,6 +13,11 @@ robot_a, robot_b, robot_c; yaw stays 0 (they all face the wall as before).
   row       a (-x, -0.2)    b (0, -0.2)        c (y, -0.2)           lateral line
   triangle  a (0, 0)        b (-x/2, -y)       c (x/2, -y)           one front, two back
   diagonal  a (0, 0)        b (x, -x)/√2       c ((x+y), -(x+y))/√2  45° line
+
+RailArrangement is the real LeSlider instead (fleet-shadow-art track.py): every carriage has
+its own position s on one rail along the light axis, in order and at least min_spacing
+apart, with the light and screen fixed to the rail ends (build_scene(track=...)). One
+variable per carriage, u in [0, 1]^n, mapped by stick-breaking onto the feasible layouts.
 """
 
 from __future__ import annotations
@@ -27,6 +32,8 @@ R2 = float(np.sqrt(0.5))
 
 
 class Arrangement:
+    n_vars = 2
+
     def __init__(self, name, label, x_desc, y_desc, lo=(LO, LO), hi=(HI, HI)):
         self.name, self.label, self.x_desc, self.y_desc = name, label, x_desc, y_desc
         self.lo, self.hi = np.array(lo, float), np.array(hi, float)
@@ -69,6 +76,57 @@ ARRANGEMENTS = {
 }
 
 
+class RailArrangement:
+    """n carriages on one LeSlider rail (fleet-shadow-art track.Track). u (B, n) in [0, 1]:
+
+        off_0 = u_0 L,   off_i = off_(i-1) + u_i (L - off_(i-1)),   s_i = s_min + i spacing + off_i
+
+    with L the rail's free slack once the carriages are packed nose to tail. Every u is a
+    feasible layout (in order, spaced) and every feasible layout has a u; the map is smooth,
+    so Adam gets a gradient for the carriages through FK. Bases sit at x = 0, y = front_y - s."""
+
+    name, label = "rail", "LeSlider rail"
+
+    def __init__(self, track, n: int = 3):
+        track.check(n)
+        self.track, self.n_vars = track, n
+        self.slack = float(track.slack(n))
+        self.x_desc = self.y_desc = "carriage position along the rail"
+
+    def s_of(self, u):
+        """u (..., n) -> s (..., n) metres from the light end; numpy or torch."""
+        t = self.track
+        offs, prev = [], u[..., 0] * 0
+        for i in range(self.n_vars):
+            off = u[..., i] * self.slack if i == 0 else prev + u[..., i] * (self.slack - prev)
+            offs.append(off)
+            prev = off
+        base = t.s_min + np.arange(self.n_vars) * t.min_spacing
+        if torch.is_tensor(u):
+            return torch.as_tensor(base, dtype=u.dtype, device=u.device) + torch.stack(offs, -1)
+        return base + np.stack(offs, -1)
+
+    def u_of(self, s):
+        """Inverse of s_of for one feasible layout s (n,)."""
+        t = self.track
+        off = np.asarray(t.repair(s), float) - t.s_min - np.arange(self.n_vars) * t.min_spacing
+        u, prev = np.zeros(self.n_vars), 0.0
+        for i in range(self.n_vars):
+            room = self.slack - prev
+            u[i] = 0.0 if room <= 1e-12 else np.clip((off[i] - prev) / room, 0, 1)
+            prev = off[i]
+        return u
+
+    def gaps(self, u):
+        return self.s_of(u)
+
+    def positions(self, u):
+        """u (B, n) -> base xy (B, n, 2), numpy or torch."""
+        y = self.track.front_y - self.s_of(u)
+        x = y * 0
+        return torch.stack([x, y], -1) if torch.is_tensor(u) else np.stack([x, y], -1)
+
+
 def root_ids(model):
     import mujoco
 
@@ -84,12 +142,15 @@ class SpacedMJ:
 
     def __init__(self, mj, arr: Arrangement, u0=None):
         self._mj, self.arr = mj, arr
-        self._roots = root_ids(mj.model)
+        self._roots = root_ids(mj.model)[: arr.n_vars if isinstance(arr, RailArrangement) else len(ROOTS)]
+        k = arr.n_vars
         self.n_joint = mj.n_dof
-        self.n_dof = mj.n_dof + 2
-        self.q_lower = np.concatenate([mj.q_lower, [0.0, 0.0]])
-        self.q_upper = np.concatenate([mj.q_upper, [1.0, 1.0]])
-        u0 = arr.u_of([DEFAULT_GAP, DEFAULT_GAP]) if u0 is None else np.asarray(u0, float)
+        self.n_dof = mj.n_dof + k
+        self.q_lower = np.concatenate([mj.q_lower, np.zeros(k)])
+        self.q_upper = np.concatenate([mj.q_upper, np.ones(k)])
+        if u0 is None:
+            u0 = arr.u_of(arr.track.evenly_spread(k)) if isinstance(arr, RailArrangement) else arr.u_of([DEFAULT_GAP, DEFAULT_GAP])
+        u0 = np.asarray(u0, float)
         self._q = np.concatenate([mj.get_current_q(), np.clip(u0, 0, 1)])
 
     def __getattr__(self, name):
