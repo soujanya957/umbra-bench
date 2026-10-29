@@ -307,10 +307,13 @@ def main() -> None:
     ap.add_argument("--shards", type=int, default=1,
                     help="parallel solver processes. Measure first: on a machine "
                          "whose render is the bottleneck they do not add up")
-    ap.add_argument("--n-workers", type=int, default=None,
-                    help="render threads per solver process (run_base_optimizer's "
-                         "default: 8 on Linux, 1 on Windows). 1 rules out the "
-                         "threaded renderer pool; parallelise with --shards instead")
+    ap.add_argument("--n-workers", type=int, default=1,
+                    help="render threads per solver process. 1 because the threaded "
+                         "renderer pool (run_base_optimizer's Linux default of 8) "
+                         "returned whole-frame shadow masks under EGL on an RTX 4090 "
+                         "box -- IoU pinned at the target's area fraction, no error "
+                         "raised. Parallelise with --shards instead; 0 restores the "
+                         "optimizer's own default")
     ap.add_argument("--repo", default=None, help="fleet-shadow-art checkout, if not "
                     "beside this one (passed through to run_base_optimizer.py)")
     ap.add_argument("--force", action="store_true", help="re-solve finished placements")
