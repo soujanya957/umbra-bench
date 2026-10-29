@@ -80,6 +80,12 @@ def resolve_artifact(raw: str, bench: str) -> str:
     since that tail is the part that is genuinely repo-relative. The literal
     path is still tried first, so a run dir living outside the repo -- the
     sibling-checkout case the caller documents -- keeps working.
+
+    That literal path is only good on the machine that scored it, though: the
+    v0 clips name `C:/Users/<them>/.../fleet-shadow-art/...`, and on any other
+    machine the sibling checkout sits somewhere else. So as a last resort the
+    path is re-anchored on the first component that names a directory beside
+    the bench, which is where a sibling checkout lives on every machine.
     """
     p = (raw or "").replace("\\", "/").strip()
     if not p:
@@ -94,7 +100,16 @@ def resolve_artifact(raw: str, bench: str) -> str:
             if os.path.exists(cand):
                 return cand
     cand = os.path.normpath(os.path.join(bench, p))
-    return cand if os.path.exists(cand) else ""
+    if os.path.exists(cand):
+        return cand
+    parent = os.path.dirname(os.path.abspath(bench))
+    parts = [s for s in p.split("/") if s]
+    for i, seg in enumerate(parts[:-1]):
+        if os.path.isdir(os.path.join(parent, seg)):
+            cand = os.path.normpath(os.path.join(parent, *parts[i:]))
+            if os.path.exists(cand):
+                return cand
+    return ""
 
 
 def thumb(path: str, px: int) -> str:
