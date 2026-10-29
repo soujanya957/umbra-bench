@@ -147,6 +147,8 @@ def stage_solve(a) -> None:
             "--runs", str(a.runs), "--out", out, *BUDGETS[a.budget]]
     if a.repo:
         base += ["--repo", a.repo]
+    if a.n_workers is not None:
+        base += ["--n-workers", str(a.n_workers)]
     if a.force:
         base.append("--force")
     # run_base_optimizer prints arrows and Greek letters; on Windows a piped
@@ -305,6 +307,10 @@ def main() -> None:
     ap.add_argument("--shards", type=int, default=1,
                     help="parallel solver processes. Measure first: on a machine "
                          "whose render is the bottleneck they do not add up")
+    ap.add_argument("--n-workers", type=int, default=None,
+                    help="render threads per solver process (run_base_optimizer's "
+                         "default: 8 on Linux, 1 on Windows). 1 rules out the "
+                         "threaded renderer pool; parallelise with --shards instead")
     ap.add_argument("--repo", default=None, help="fleet-shadow-art checkout, if not "
                     "beside this one (passed through to run_base_optimizer.py)")
     ap.add_argument("--force", action="store_true", help="re-solve finished placements")
