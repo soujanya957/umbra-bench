@@ -55,6 +55,15 @@ class GradConfig:
     # At each blur-stage boundary, replace the worse half of the restarts with
     # perturbed copies of the better half (fresh Adam state). 0 = independent runs.
     reseed_sigma: float = 0.0
+    # Population variants (solver bench sweep; both off by default):
+    # langevin: Gaussian noise of this size (rad) added after every Adam step, annealed
+    #   with the learning rate, so a start can hop out of a shallow basin early on.
+    # svgd_T: Stein variational gradient descent. Each start's gradient is the kernel-
+    #   weighted mean of the starts' gradients minus a repulsion of this strength, so
+    #   starts that drift into the same basin push each other apart.
+    langevin: float = 0.0
+    svgd_T: float = 0.0
+    svgd_bw: float = 1.0  # kernel bandwidth as a fraction of the median heuristic (smaller = more local)
     seed: int = 0
 
 
@@ -250,6 +259,7 @@ def adam_refine(obj: Objective, Q0: torch.Tensor, cfg: GradConfig, iters: int, s
     n_hard += len(Q0)
     per = max(1, iters // len(sigmas))
     gen = torch.Generator(device="cpu").manual_seed(cfg.seed + 1)
+    gen_noise = torch.Generator(device="cpu").manual_seed(cfg.seed + 2)  # Langevin: keep the reseed draws common
     for it in range(iters):
         sigma = sigmas[min(it // per, len(sigmas) - 1)]
         if cfg.reseed_sigma > 0 and it > 0 and it % per == 0 and it // per < len(sigmas) and len(Q) >= 4:
@@ -271,8 +281,17 @@ def adam_refine(obj: Objective, Q0: torch.Tensor, cfg: GradConfig, iters: int, s
         opt.zero_grad(set_to_none=True)
         loss, _ = obj(Q, soft=True, sigma=sigma)
         loss.sum().backward()
+        if cfg.svgd_T > 0 and len(Q) > 1:
+            with torch.no_grad():
+                diff = Q[:, None, :] - Q[None, :, :]  # q_i - q_j
+                d2 = (diff ** 2).sum(-1)
+                bw = cfg.svgd_bw * d2.median() / math.log(len(Q) + 1) + 1e-12  # median heuristic, scaled
+                K = torch.exp(-d2 / bw)
+                Q.grad = (K @ Q.grad - cfg.svgd_T * (2.0 / bw) * (K[..., None] * diff).sum(1)) / len(Q)
         opt.step()
         with torch.no_grad():
+            if cfg.langevin > 0:
+                Q.add_(torch.randn(Q.shape, generator=gen_noise).to(Q.device) * cfg.langevin * (opt.param_groups[0]["lr"] / lr))
             Q.copy_(fr.clip(Q))
         n_soft += len(Q)
         if (it + 1) % cfg.eval_every == 0 or it == iters - 1:

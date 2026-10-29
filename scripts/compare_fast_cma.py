@@ -42,6 +42,8 @@ def main():
     p.add_argument("--adam-seeds", type=int, default=2)
     p.add_argument("--restarts", type=int, nargs="*", default=[8, 16, 32, 64, 128, 256])
     p.add_argument("--skip-cma", action="store_true")
+    p.add_argument("--cma-methods", nargs="*", default=["cma", "cma_fast"],
+                   help="e.g. cma_fast alone, to add seeds for the best-of-k curve")
     a = p.parse_args()
     root = os.path.abspath(a.results)
     src = os.path.join(BENCH, "results", "fastshadow", f"compare_{a.src}")
@@ -99,7 +101,7 @@ def main():
             T, T0 = targets[tid]
             for s in range(a.seeds):
                 for meth, rend in (("cma", mj), ("cma_fast", br)):
-                    if (tid, meth, s) in done:
+                    if meth not in a.cma_methods or (tid, meth, s) in done:
                         continue
                     t0 = time.perf_counter()
                     with contextlib.redirect_stdout(io.StringIO()):
