@@ -214,6 +214,9 @@ def main():
     from fastshadow.rail_report import load as load_rail
 
     D["rail"] = load_rail(BENCH)  # LeSlider rail study (scripts/rail_study.py), if run
+    from fastshadow.library_report import load as load_library
+
+    D["library"] = load_library(BENCH)  # pose library study (scripts/pose_library_study.py), if run
     html = render_html(D, feat, allc, par, main_m)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
@@ -435,6 +438,13 @@ table.cmp .optc{font:600 11px var(--f-mono);padding:2px 6px;border-radius:3px;co
     <div class="card" id="rail_geo_card" hidden><h3>Where the rail sits matters more than sliding on it</h3><p class="note" id="rail_gnote"></p><div class="scroll"><table class="cmp" id="rail_geo"></table></div></div>
     <div class="head"><h2 style="font-size:18px">Biggest gains and losses from moving the carriages (CMA-ES, best seed)</h2></div>
     <div class="scroll"><div class="grid-head" style="grid-template-columns:72px repeat(3,minmax(0,128px));min-width:480px"><span></span><span class="cap">target (fitted to the rail)</span><span class="cap">carriages fixed</span><span class="cap">carriages free</span></div><div id="rail_ex"></div></div>
+  </section>
+  <section id="lib" hidden>
+    <div class="head"><span class="eyebrow">6 · pose library · stored solves as starts</span><h2>Same quality, faster: start from what the bench already solved</h2></div>
+    <p class="sub" id="lib_sub"></p>
+    <div class="kpis" id="lib_kpis"></div>
+    <div class="card"><h3>Library start vs cold start, paired by target</h3><p class="note" id="lib_pnote"></p><div class="scroll"><table class="cmp" id="lib_pairs"></table></div></div>
+    <div class="card"><h3>Every method, fastest first</h3><p class="note" id="lib_tnote"></p><div class="scroll"><table class="cmp" id="lib_table"></table></div></div>
   </section>
   <p class="foot" id="foot"></p>
 </div>
@@ -696,6 +706,20 @@ document.getElementById('foot').textContent =
   `CMA-ES: popsize 48, 16 + 16 per-arm iterations, 30 joint iterations, ${C.n_seeds} seeds. Adam: 300 steps on blurred soft IoU plus the CMA-ES penalties, ${A.n_seeds} seeds. ` +
   `Paired differences: CMA-ES nvdiffrast − MuJoCo ${sg(D.d_fast[0])} ± ${f3(D.d_fast[1])}; Adam − CMA-ES nvdiffrast ${sg(D.d_adam[0])} ± ${f3(D.d_adam[1])} (SE over targets). ` +
   `Renderer: ${D.tri.toLocaleString()} triangles after 2 mm vertex clustering (from ${D.tri_raw.toLocaleString()}).`;
+
+// ── Pose library ──────────────────────────────────────────────────────
+(() => {
+  const L = D.library; if (!L) return;
+  document.getElementById('lib').hidden = false;
+  const by = Object.fromEntries(L.methods.map(m => [m.m, m])), p0 = L.pairs[0], q = by.lib_only_26999 || L.methods[0];
+  const r3 = c => `${sg(c[0])} (95% ${sg(c[1])}…${sg(c[2])})`;
+  document.getElementById('lib_sub').textContent = `Every stored 3-arm solve on the bench column, deduplicated, re-rendered on this rig and filtered for contacts and the real floor: ${L.lib.toLocaleString()} poses, kept as packed masks on the GPU. A target is scored against all of them by true IoU in a few milliseconds, no training. The best pose then skips the greedy phases and runs only CMA-ES's joint final pass. All ${L.n} test characters are held out in every font and both cases. The rig is the fixed 0.2 m column; a LeSlider library has to be rendered on that rig.`;
+  document.getElementById('lib_kpis').innerHTML = [[`${p0.speedup.toFixed(1)}×`, 'faster than cold CMA-ES at matching quality', ''], [`${(q.sec * 1000).toFixed(0)} ms`, `library lookup alone, IoU ${f3(q.iou)}`, ''], [f3(p0.iou[0] + by.cold_8k.iou), `library + CMA-ES IoU, cold ${f3(by.cold_8k.iou)}`, '']].map(k => `<div class="kpi"><div class="v">${k[0]}</div><div class="l">${k[1]}</div></div>`).join('');
+  document.getElementById('lib_pairs').innerHTML = '<thead><tr><th>library start</th><th>against</th><th>speedup</th><th>IoU difference</th><th>tc_iou difference</th></tr></thead><tbody>' + L.pairs.map(p => `<tr><td>${p.a}</td><td>${p.b}</td><td>${p.speedup.toFixed(1)}×</td><td>${r3(p.iou)}</td><td>${r3(p.tc)}</td></tr>`).join('') + '</tbody>';
+  document.getElementById('lib_pnote').textContent = 'Means over targets; differences are library minus cold, bootstrapped by target. Every interval on tc_iou crosses zero. The widest reach 0.04 below it, so a small loss of shape is not ruled out.';
+  document.getElementById('lib_table').innerHTML = '<thead><tr><th>method</th><th>IoU</th><th>tc_iou</th><th>s/solve</th><th>clean</th></tr></thead><tbody>' + L.methods.map(m => `<tr><td>${m.m}</td><td>${f3(m.iou)}</td><td>${f3(m.tc)}</td><td>${m.sec.toFixed(3)}</td><td>${(m.clean * 100).toFixed(0)}%</td></tr>`).join('') + '</tbody>';
+  document.getElementById('lib_tnote').textContent = 'Three seeds where a method has randomness; every number re-measured by MuJoCo. Clean = no contacts and no point more than 5 mm under the table. The 10 s it takes to render the library once is not counted.';
+})();
 
 // ── LeSlider rail ─────────────────────────────────────────────────────
 (function () {
