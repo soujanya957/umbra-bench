@@ -445,6 +445,7 @@ table.cmp .optc{font:600 11px var(--f-mono);padding:2px 6px;border-radius:3px;co
     <div class="kpis" id="lib_kpis"></div>
     <div class="card"><h3>Library start vs cold start, paired by target</h3><p class="note" id="lib_pnote"></p><div class="scroll"><table class="cmp" id="lib_pairs"></table></div></div>
     <div class="card"><h3>Every method, fastest first</h3><p class="note" id="lib_tnote"></p><div class="scroll"><table class="cmp" id="lib_table"></table></div></div>
+    <div class="card" id="lib_ls_card" hidden><h3>On the LeSlider stage: 4 arms, 28 variables</h3><p class="note" id="lib_lsnote"></p><div class="scroll"><table class="cmp" id="lib_ls_pairs"></table></div><div class="scroll"><table class="cmp" id="lib_ls_table"></table></div></div>
   </section>
   <p class="foot" id="foot"></p>
 </div>
@@ -718,6 +719,13 @@ document.getElementById('foot').textContent =
   document.getElementById('lib_pairs').innerHTML = '<thead><tr><th>library start</th><th>against</th><th>speedup</th><th>IoU difference</th><th>tc_iou difference</th></tr></thead><tbody>' + L.pairs.map(p => `<tr><td>${p.a}</td><td>${p.b}</td><td>${p.speedup.toFixed(1)}×</td><td>${r3(p.iou)}</td><td>${r3(p.tc)}</td></tr>`).join('') + '</tbody>';
   document.getElementById('lib_pnote').textContent = 'Means over targets; differences are library minus cold, bootstrapped by target. Every interval on tc_iou crosses zero. The widest reach 0.04 below it, so a small loss of shape is not ruled out.';
   document.getElementById('lib_table').innerHTML = '<thead><tr><th>method</th><th>IoU</th><th>tc_iou</th><th>s/solve</th><th>clean</th></tr></thead><tbody>' + L.methods.map(m => `<tr><td>${m.m}</td><td>${f3(m.iou)}</td><td>${f3(m.tc)}</td><td>${m.sec.toFixed(3)}</td><td>${(m.clean * 100).toFixed(0)}%</td></tr>`).join('') + '</tbody>';
+  const LS = L.leslider;
+  if (LS) {
+    document.getElementById('lib_ls_card').hidden = false;
+    document.getElementById('lib_lsnote').textContent = 'Combo: stored single-arm poses recombined with random carriages. Grown: 300 real solves on this stage, on targets outside the test characters. Both: the two together. Rnd: 42,583 random legal poses, the control. A random start at the same budget gets close on IoU, so much of the speed comes from skipping the greedy phases; the stored poses add shape (tc_iou). The stage's low lamp (0.67 m) is not settled, and IoU here is well below the bench rig.';
+    document.getElementById('lib_ls_pairs').innerHTML = '<thead><tr><th>library start</th><th>against</th><th>speedup</th><th>IoU difference</th><th>tc_iou difference</th></tr></thead><tbody>' + LS.pairs.map(p => `<tr><td>${p.a}</td><td>${p.b}</td><td>${p.speedup.toFixed(1)}×</td><td>${r3(p.iou)}</td><td>${r3(p.tc)}</td></tr>`).join('') + '</tbody>';
+    document.getElementById('lib_ls_table').innerHTML = '<thead><tr><th>method</th><th>IoU</th><th>tc_iou</th><th>s/solve</th><th>clean</th></tr></thead><tbody>' + LS.methods.map(m => `<tr><td>${m.m}</td><td>${f3(m.iou)}</td><td>${f3(m.tc)}</td><td>${m.sec.toFixed(3)}</td><td>${(m.clean * 100).toFixed(0)}%</td></tr>`).join('') + '</tbody>';
+  }
   document.getElementById('lib_tnote').textContent = 'Three seeds where a method has randomness; every number re-measured by MuJoCo. Clean = no contacts and no point more than 5 mm under the table. The 10 s it takes to render the library once is not counted.';
 })();
 

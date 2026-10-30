@@ -246,6 +246,25 @@ def run(a):
         print(f"[{ti + 1}/{len(ids)}] {tid}", flush=True)
 
 
+def export(a):
+    """The library the solvers start from: every clean solve, then the combo poses."""
+    fleet = fastshadow.use_fleet()
+    d = np.load(os.path.join(OUT, "libraries.npz"))
+    rows = [json.loads(l) for l in open(os.path.join(OUT, "grown.jsonl"), encoding="utf-8")]
+    grown = np.array([r["q"] for r in rows if r["clean"]], np.float32)
+    combo = d["combo"]
+    Q = np.vstack([grown, combo[np.random.default_rng(0).permutation(len(combo))]])
+    st = stage_json()
+    home = np.array([c["s"] for r in st["rails"] for c in r["carriages"]])
+    order = np.argsort([c["arm"] for r in st["rails"] for c in r["carriages"]])
+    out = os.path.join(fleet, "datasets", "pose_library")
+    os.makedirs(out, exist_ok=True)
+    np.savez_compressed(os.path.join(out, "source.npz"), Q=Q, home=home[order],
+                        bases=np.array([[b["lat"], b["dep"]] for b in st["bases"]]),
+                        yaw=np.array([b["yaw_deg"] for b in st["bases"]]))
+    print("exported", len(Q), "poses,", len(grown), "of them real solves")
+
+
 def report(a):
     rows = [json.loads(l) for l in open(os.path.join(OUT, "runs.jsonl"), encoding="utf-8")]
     ms = sorted({r["method"] for r in rows})
@@ -269,9 +288,9 @@ def report(a):
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("cmd", choices=["build", "grow", "run", "report"])
+    p.add_argument("cmd", choices=["build", "grow", "run", "report", "export"])
     p.add_argument("--n", type=int, default=300000)
     p.add_argument("--limit", type=int, default=300)
     p.add_argument("--seeds", type=int, default=3)
     a = p.parse_args()
-    {"build": build, "grow": grow, "run": run, "report": report}[a.cmd](a)
+    {"build": build, "grow": grow, "run": run, "report": report, "export": export}[a.cmd](a)
