@@ -115,7 +115,9 @@ def run(a):
     gcfg = GradConfig(floor_penalty=ocfg["floor_penalty"], collision_penalty=ocfg["collision_penalty"],
                       self_collision_penalty=ocfg["self_collision_penalty"], reseed_sigma=0.15)
     g = np.random.default_rng(0)
-    pen = Penalties(fr, solved_q=Q[g.permutation(len(Q))[:3000]].astype(np.float64))
+    # Adam sees the real lowest point, as CMA-ES does (floor="mesh"), and so does its final pick.
+    pen = Penalties(fr, solved_q=Q[g.permutation(len(Q))[:3000]].astype(np.float64), floor="mesh")
+    mj.floor_mode = "mesh"
     subs = {n: lib.subset(np.sort(g.permutation(len(lib))[:n])) for n in SIZES if n < len(lib)}
 
     ids = bench_ids()
@@ -149,8 +151,10 @@ def run(a):
 
     COLD = {"cold_8k": (48, 16, 16, 30), "cold_3k": (24, 12, 12, 16), "cold_1k": (16, 6, 6, 10), "cold_300": (8, 4, 4, 6)}
     WARM = {"lib_cma_f30": (48, 0, 0, 30), "lib_cma_f16": (24, 0, 0, 16), "lib_cma_f8": (16, 0, 0, 8), "lib_cma_f4": (12, 0, 0, 4)}
-    ADAM = {"adam_64x300": (2048, 64, 300), "adam_16x100": (2048, 16, 100)}
-    LADAM = {"lib_adam_64x100": (64, 100), "lib_adam_16x100": (16, 100), "lib_adam_16x40": (16, 40)}
+    ADAM = {"adam_64x300_m": (2048, 64, 300), "adam_16x100_m": (2048, 16, 100)}
+    LADAM = {"lib_adam_64x100_m": (64, 100), "lib_adam_16x100_m": (16, 100), "lib_adam_16x40_m": (16, 40)}
+    if a.adam_only:
+        COLD, WARM = {}, {}
 
     def log(rec):
         with open(path, "a", encoding="utf-8") as f:
@@ -230,5 +234,6 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("cmd", choices=["build", "run", "report"])
     p.add_argument("--seeds", type=int, default=3)
+    p.add_argument("--adam-only", action="store_true", help="only the Adam methods, with the mesh floor")
     a = p.parse_args()
     {"build": build, "run": run, "report": report}[a.cmd](a)
