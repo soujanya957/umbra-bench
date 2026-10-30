@@ -18,6 +18,7 @@ is re-measured by MuJoCo with the carriages where the solver put them.
     python scripts/pose_library_leslider.py grow  --limit 300
     python scripts/pose_library_leslider.py run   --seeds 3
     python scripts/pose_library_leslider.py report
+    python scripts/pose_library_leslider.py export      (--stage leslider_rot90 | three_in_a_row)
 """
 
 import argparse
@@ -38,10 +39,11 @@ sys.path.insert(0, os.path.join(BENCH, "scripts"))
 from metrics import trimmed_centred  # noqa: E402
 from run_base_optimizer import load_target, save_mask  # noqa: E402
 
-OUT = os.path.join(BENCH, "results", "fastshadow", "pose_library_leslider")
+STAGES = {"leslider": "pose_library_leslider", "leslider_rot90": "pose_library_rot90", "three_in_a_row": "pose_library_row3"}
+CONFIG = "leslider"
+OUT = os.path.join(BENCH, "results", "fastshadow", STAGES[CONFIG])
 ROOT = os.path.join(BENCH, "optimized", "big-budget-grounded")
 FLOOR_TOL = -0.005
-N = 4
 COLD = {"cold_8k": (48, 16, 16, 30), "cold_3k": (24, 12, 12, 16), "cold_300": (8, 4, 4, 6)}
 WARM = {"f30": (48, 0, 0, 30), "f16": (24, 0, 0, 16), "f4": (12, 0, 0, 4)}
 
@@ -52,19 +54,21 @@ def bench_ids():
 
 
 def stage_json():
-    """leslider.json -> the solver rig, as render_server/optimize.py builds it."""
+    """A stage config -> the solver rig, as POST /optimize/scene builds it."""
     fleet = os.path.dirname(fastshadow.use_fleet())
-    c = json.load(open(os.path.join(fleet, "leRobot-control", "configs", "leslider.json"), encoding="utf-8"))
+    c = json.load(open(os.path.join(fleet, "leRobot-control", "configs", f"{CONFIG}.json"), encoding="utf-8"))
     ids = [r["id"] for r in c["robots"]]
     bases = [{"lat": r["base"]["y"], "dep": -r["base"]["x"], "yaw_deg": float(r["base"].get("yaw", 0))} for r in c["robots"]]
+    table_y = 0.55 + float(np.mean([r["base"].get("z", 0) for r in c["robots"]]))
     rails = []
-    for r, sign in zip(c["rails"], (-1.0, 1.0)):  # rail_A runs toward the screen, rail_B toward the light
-        rails.append({"id": r["id"], "dir": [0.0, sign], "s_max": 0.81784, "gap": 0.1786,
+    for r in c.get("rails") or []:
+        a, b = [bases[ids.index(k["robotId"])] for k in r["carriages"][:2]]
+        d = np.array([b["lat"] - a["lat"], b["dep"] - a["dep"]])  # travel direction, carriage 0 to 1
+        rails.append({"id": r["id"], "dir": [float(v) for v in d / np.linalg.norm(d)], "s_max": 0.81784, "gap": 0.1786,
                       "carriages": [{"arm": ids.index(k["robotId"]), "s": max(float(k["s"]), 1e-5), "locked": False}
                                     for k in r["carriages"]]})
-    # light and screen in the solver frame: same numbers as the UI's saved 2-arm stage
-    return {"bases": bases, "light": {"lat": c["scene"]["lightY"], "dep": -c["scene"]["lightX"], "h": 0.0566},
-            "screen": {"dep": 0.0, "half": 1.105, "ch": 0.7366}, "rails": rails}
+    return {"bases": bases, "light": {"lat": c["scene"]["lightY"], "dep": -c["scene"]["lightX"], "h": 0.67 - table_y},
+            "screen": {"dep": 0.0, "half": 1.105, "ch": 1.35 - table_y}, "rails": rails}
 
 
 def rig():
@@ -73,7 +77,8 @@ def rig():
     from renderer import ShadowRenderer, build_scene
 
     stage = stage_json()
-    model, data, n = build_scene("urdf/SO101/so101_new_calib.urdf", N, stage=stage)
+    n_arms = len(stage["bases"])
+    model, data, n = build_scene("urdf/SO101/so101_new_calib.urdf", n_arms, stage=stage)
     mj = ShadowRenderer(model, data, size=128, n_robots=n)
     mj.floor_mode = "mesh"
     br = wrap_renderer(mj, stage, True)
@@ -99,14 +104,19 @@ def build(a):
     os.makedirs(OUT, exist_ok=True)
     arms = np.load(os.path.join(BENCH, "results", "fastshadow", "pose_library", "library_n3.npz"))["Q"].reshape(-1, 6)
     g = np.random.default_rng(0)
-    nj, nv = br.n_joint, br.n_dof - br.n_joint
+    N = len(stage["bases"])
+    nj = 6 * N
+    nv = br.n_dof - nj
     print(f"stage: {N} arms, {nv} free carriages, {br.n_dof} variables; arm pool {len(arms)}", flush=True)
     t0 = time.perf_counter()
     Qa = arms[g.integers(0, len(arms), (a.n, N))].reshape(a.n, nj)
     lo, hi = br.q_lower[nj:], br.q_upper[nj:]
     Ua = g.uniform(lo, hi, (a.n, nv))
+    if N == 3:  # whole stored 3-arm solves come first: they were solved together
+        whole = arms.reshape(-1, 18)
+        Qa, Ua = np.vstack([whole, Qa]), np.vstack([np.zeros((len(whole), nv)), Ua])
     combo, f1 = filtered(br, np.hstack([Qa, Ua]))
-    print(f"combo: {len(combo)} of {a.n} pass ({f1:.3f}), {time.perf_counter() - t0:.0f} s", flush=True)
+    print(f"combo: {len(combo)} of {len(Qa)} pass ({f1:.3f}), {time.perf_counter() - t0:.0f} s", flush=True)
     t0 = time.perf_counter()
     Qr = g.uniform(br.q_lower, br.q_upper, (a.n, br.n_dof))
     rnd, f2 = filtered(br, Qr)
@@ -213,8 +223,8 @@ def run(a):
 
     def rec(tid, meth, s, q, dt):
         m, z, cross, self_ = br.eval_q(np.asarray(q, np.float64))
-        lay = br.rail_arr.layout
-        bad = lay.violations(br.rail_arr.S(np.asarray(q, float)[br.n_joint:]))
+        arr = getattr(br, "rail_arr", None)
+        bad = arr.layout.violations(arr.S(np.asarray(q, float)[br.n_joint:])) if arr else []
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps({"id": tid, "method": meth, "seed": s, "seconds": dt, "iou": float(compute_iou(m, Ts[tid])),
                                 "tc_iou": trimmed_centred(orig[tid] > 0.5, m > 0.5)["tc_iou"], "floor_z": float(z),
@@ -255,11 +265,13 @@ def export(a):
     combo = d["combo"]
     Q = np.vstack([grown, combo[np.random.default_rng(0).permutation(len(combo))]])
     st = stage_json()
-    home = np.array([c["s"] for r in st["rails"] for c in r["carriages"]])
-    order = np.argsort([c["arm"] for r in st["rails"] for c in r["carriages"]])
+    home = np.zeros(len(st["bases"]))
+    for r in st["rails"]:
+        for c in r["carriages"]:
+            home[c["arm"]] = c["s"]
     out = os.path.join(fleet, "datasets", "pose_library")
     os.makedirs(out, exist_ok=True)
-    np.savez_compressed(os.path.join(out, "source.npz"), Q=Q, home=home[order],
+    np.savez_compressed(os.path.join(out, f"source_{CONFIG}.npz"), Q=Q, home=home,
                         bases=np.array([[b["lat"], b["dep"]] for b in st["bases"]]),
                         yaw=np.array([b["yaw_deg"] for b in st["bases"]]))
     print("exported", len(Q), "poses,", len(grown), "of them real solves")
@@ -292,5 +304,7 @@ if __name__ == "__main__":
     p.add_argument("--n", type=int, default=300000)
     p.add_argument("--limit", type=int, default=300)
     p.add_argument("--seeds", type=int, default=3)
+    p.add_argument("--stage", choices=list(STAGES), default="leslider")
     a = p.parse_args()
+    CONFIG, OUT = a.stage, os.path.join(BENCH, "results", "fastshadow", STAGES[a.stage])
     {"build": build, "grow": grow, "run": run, "report": report, "export": export}[a.cmd](a)
