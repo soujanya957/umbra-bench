@@ -46,4 +46,11 @@ def load(bench: str):
     if os.path.exists(q):
         _, m2, p2 = _table(q, LESLIDER)
         out["leslider"] = {"methods": m2, "pairs": p2}
+    out["stages"] = []
+    for name, sub in (("three_in_a_row", "pose_library_row3"), ("leslider", "pose_library_leslider"), ("leslider_rot90", "pose_library_rot90")):
+        q = os.path.join(bench, "results", "fastshadow", sub, "runs.jsonl")
+        if os.path.exists(q):
+            _, m3, p3 = _table(q, [("both_f30", "cold_8k")])
+            by = {m["m"]: m for m in m3}
+            out["stages"].append({"name": name, "cold": by["cold_8k"], "lib": by["both_f30"], "only": by["both_only"], "pair": p3[0]})
     return out

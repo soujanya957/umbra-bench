@@ -445,6 +445,7 @@ table.cmp .optc{font:600 11px var(--f-mono);padding:2px 6px;border-radius:3px;co
     <div class="kpis" id="lib_kpis"></div>
     <div class="card"><h3>Library start vs cold start, paired by target</h3><p class="note" id="lib_pnote"></p><div class="scroll"><table class="cmp" id="lib_pairs"></table></div></div>
     <div class="card"><h3>Every method, fastest first</h3><p class="note" id="lib_tnote"></p><div class="scroll"><table class="cmp" id="lib_table"></table></div></div>
+    <div class="card" id="lib_st_card" hidden><h3>Three stages, one library each</h3><p class="note" id="lib_stnote"></p><div class="scroll"><table class="cmp" id="lib_stages"></table></div></div>
     <div class="card" id="lib_ls_card" hidden><h3>On the LeSlider stage: 4 arms, 28 variables</h3><p class="note" id="lib_lsnote"></p><div class="scroll"><table class="cmp" id="lib_ls_pairs"></table></div><div class="scroll"><table class="cmp" id="lib_ls_table"></table></div></div>
   </section>
   <p class="foot" id="foot"></p>
@@ -719,6 +720,11 @@ document.getElementById('foot').textContent =
   document.getElementById('lib_pairs').innerHTML = '<thead><tr><th>library start</th><th>against</th><th>speedup</th><th>IoU difference</th><th>tc_iou difference</th></tr></thead><tbody>' + L.pairs.map(p => `<tr><td>${p.a}</td><td>${p.b}</td><td>${p.speedup.toFixed(1)}×</td><td>${r3(p.iou)}</td><td>${r3(p.tc)}</td></tr>`).join('') + '</tbody>';
   document.getElementById('lib_pnote').textContent = 'Means over targets; differences are library minus cold, bootstrapped by target. Every interval on tc_iou crosses zero. The widest reach 0.04 below it, so a small loss of shape is not ruled out.';
   document.getElementById('lib_table').innerHTML = '<thead><tr><th>method</th><th>IoU</th><th>tc_iou</th><th>s/solve</th><th>clean</th></tr></thead><tbody>' + L.methods.map(m => `<tr><td>${m.m}</td><td>${f3(m.iou)}</td><td>${f3(m.tc)}</td><td>${m.sec.toFixed(3)}</td><td>${(m.clean * 100).toFixed(0)}%</td></tr>`).join('') + '</tbody>';
+  if (L.stages && L.stages.length) {
+    document.getElementById('lib_st_card').hidden = false;
+    document.getElementById('lib_stnote').textContent = 'Same 30 held-out characters, fitted once to each stage; 3 seeds; MuJoCo-measured. Each library is 300 real solves on that stage plus recombined stored poses. tc_iou compares across stages, IoU less so because the fitted targets differ. leslider_rot90 keeps the table, so both rails stick out 0.15 m past its edges.';
+    document.getElementById('lib_stages').innerHTML = '<thead><tr><th>stage</th><th>cold s</th><th>library s</th><th>speedup</th><th>cold IoU</th><th>library IoU</th><th>cold tc_iou</th><th>library tc_iou</th><th>tc_iou difference</th></tr></thead><tbody>' + L.stages.map(t => `<tr><td>${t.name}</td><td>${t.cold.sec.toFixed(2)}</td><td>${t.lib.sec.toFixed(2)}</td><td>${t.pair.speedup.toFixed(1)}×</td><td>${f3(t.cold.iou)}</td><td>${f3(t.lib.iou)}</td><td>${f3(t.cold.tc)}</td><td>${f3(t.lib.tc)}</td><td>${r3(t.pair.tc)}</td></tr>`).join('') + '</tbody>';
+  }
   const LS = L.leslider;
   if (LS) {
     document.getElementById('lib_ls_card').hidden = false;
