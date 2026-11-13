@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keyframe Annotator</title>
+<!--
+  Mark the keyframes each subject (element) must match; everything between keyframes is free
+  (joint interpolation). Open this file in a browser, pick the story folder, annotate, export.
+  Nothing is uploaded: videos are read from disk by the browser. Progress autosaves locally;
+  Export writes keyframes.json for the solver (format at the bottom of this file).
+-->
+<style>
+:root {
+  --bg: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+  --line: #e1e0d9; --axis: #c3c2b7; --accent: #2a78d6; --sel: #e8f0fb;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+    --line: #2c2c2a; --axis: #383835; --accent: #3987e5; --sel: #1d2a3a;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; gap: 12px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--surface); flex-wrap: wrap; }
+header h1 { font-size: 16px; margin: 0 8px 0 0; }
+button, label.btn { font: inherit; padding: 5px 10px; border: 1px solid var(--axis); border-radius: 6px; background: var(--surface); color: var(--ink); cursor: pointer; }
+button:hover, label.btn:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.status { color: var(--muted); font-size: 13px; }
+main { display: grid; grid-template-columns: 300px 1fr; height: calc(100vh - 54px); }
+#list { overflow-y: auto; border-right: 1px solid var(--line); background: var(--surface); }
+#list .clip { padding: 8px 12px 4px; font-weight: 600; font-size: 13px; color: var(--ink2); border-top: 1px solid var(--line); }
+#list .file { padding: 4px 12px 4px 22px; cursor: pointer; font-size: 13px; display: flex; justify-content: space-between; gap: 6px; }
+#list .file:hover { background: var(--sel); }
+#list .file.active { background: var(--sel); font-weight: 600; }
+#list .file .n { color: var(--muted); font-variant-numeric: tabular-nums; }
+#work { display: flex; flex-direction: column; overflow-y: auto; padding: 12px 16px; gap: 10px; }
+#stage { position: relative; background: #000; border-radius: 6px; display: flex; justify-content: center; max-height: 52vh; }
+video { max-width: 100%; max-height: 52vh; display: block; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+#frameinfo { font-variant-numeric: tabular-nums; min-width: 190px; }
+#timeline { position: relative; height: 46px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; user-select: none; }
+#timeline .lane { position: absolute; left: 0; right: 0; height: 1px; background: var(--line); }
+#timeline .tick { position: absolute; width: 3px; margin-left: -1px; border-radius: 2px; }
+#timeline .head { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--ink); margin-left: -1px; pointer-events: none; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border: 1px solid var(--axis); border-radius: 14px; cursor: pointer; font-size: 13px; }
+.chip.active { border-width: 2px; padding: 2px 8px; font-weight: 600; }
+.chip .dot { width: 10px; height: 10px; border-radius: 50%; }
+.chip .x { color: var(--muted); margin-left: 2px; }
+#thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
+.thumb { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); cursor: pointer; width: 132px; overflow: hidden; }
+.thumb img, .thumb .ph { width: 100%; height: 76px; object-fit: contain; background: #fff; display: block; }
+.thumb .cap { padding: 3px 6px; font-size: 12px; display: flex; gap: 5px; align-items: center; }
+.thumb input { width: 100%; border: 0; border-top: 1px solid var(--line); font: inherit; font-size: 12px; padding: 3px 6px; background: var(--surface); color: var(--ink); }
+.help { color: var(--muted); font-size: 12.5px; }
+kbd { border: 1px solid var(--axis); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; font-size: 12px; background: var(--surface); }
+#empty { margin: 60px auto; max-width: 520px; text-align: center; color: var(--ink2); }
+@media (max-width: 760px) { main { grid-template-columns: 1fr; height: auto; } #list { max-height: 30vh; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Keyframe Annotator</h1>
+  <label class="btn primary">Open story folder<input id="dir" type="file" webkitdirectory multiple hidden></label>
+  <label class="btn">Import JSON<input id="imp" type="file" accept=".json" hidden></label>
+  <button id="exp">Export keyframes.json</button>
+  <span class="status" id="status">No folder open</span>
+</header>
+<main>
+  <nav id="list"></nav>
+  <section id="work">
+    <div id="empty">
+      <p><b>Open the story folder</b> (e.g. <code>ICRA_story_direction</code>). Videos under
+      <code>clips_in_time_order</code> are listed in story order.</p>
+      <p class="help">For each clip, set its subjects (the elements on screen), pick one, scrub to a frame
+      it must match, press <kbd>K</kbd>. Frames between keyframes are free.</p>
+    </div>
+    <div id="editor" hidden>
+      <div id="stage"><video id="v" playsinline muted></video></div>
+      <div class="row">
+        <button id="prev10" title="Shift+←">−10</button>
+        <button id="prev1" title="←">−1</button>
+        <button id="play" title="Space">Play</button>
+        <button id="next1" title="→">+1</button>
+        <button id="next10" title="Shift+→">+10</button>
+        <span id="frameinfo"></span>
+        <button id="mark" class="primary" title="K">Mark keyframe (K)</button>
+        <button id="unmark" title="Delete">Remove (Del)</button>
+      </div>
+      <div id="timeline"></div>
+      <div class="row" id="subjects"></div>
+      <div class="help">
+        <kbd>Space</kbd> play · <kbd>←</kbd><kbd>→</kbd> 1 frame · <kbd>Shift</kbd>+arrows 10 ·
+        <kbd>K</kbd> mark · <kbd>Del</kbd> remove · <kbd>1</kbd>–<kbd>9</kbd> subject ·
+        <kbd>[</kbd><kbd>]</kbd> prev/next mark · <kbd>N</kbd>/<kbd>P</kbd> next/prev video.
+        Subjects belong to the clip, so all parts of a clip share them.
+      </div>
+      <div id="thumbs"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const FPS = 30;
+const COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
+// first guesses from the clip names; edit freely
+const SUGGEST = {
+  1: ["left 1", "right 1", "dot"], 2: ["left 1→2", "right 1"], 3: ["2", "1"], 4: ["2", "1"],
+  5: ["+"], 6: ["2", "+", "1"], 7: ["3"], 8: ["3", "4"], 9: ["3+4→7"], 10: ["7", "1"],
+  11: ["7+1→8"], 12: ["8→∞"],
+};
+const STORE = "keyframe-annotator-v1";
+
+let files = [];          // {path, clip, clipNo, name, url, frames}
+let cur = -1;
+let state = { clips: {}, marks: {} };   // clips[clip] = {subjects:[]}, marks[path] = [{subject, frame, note}]
+let active = 0;          // active subject index
+const thumbCache = {};   // path|frame -> dataURL (session only)
+
+const $ = (id) => document.getElementById(id);
+const v = $("v");
+
+function save() {
+  try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) {}
+  $("status").textContent = `${files.length} videos · ${totalMarks()} keyframes · autosaved`;
+}
+function load() {
+  try { const s = JSON.parse(localStorage.getItem(STORE) || "null"); if (s && s.clips && s.marks) state = s; } catch (e) {}
+}
+function totalMarks() { return Object.values(state.marks).reduce((a, m) => a + m.length, 0); }
+
+function clipKey(path) {
+  const parts = path.split("/");
+  const i = parts.indexOf("clips_in_time_order");
+  if (i >= 0 && i + 1 < parts.length) return parts[i + 1].replace(/\.(mp4|mov|m4v|webm)$/i, "");
+  return parts.length > 1 ? parts[parts.length - 2] : parts[0];
+}
+function clipNo(clip) { const m = clip.match(/clip_(\d+)/); return m ? +m[1] : 999; }
+function partNo(name) { const m = name.match(/-(\d+)\.\w+$/); return m ? +m[1] : 0; }
+
+$("dir").addEventListener("change", (e) => {
+  const all = [...e.target.files].filter((f) => /\.(mp4|mov|m4v|webm)$/i.test(f.name));
+  let pick = all.filter((f) => f.webkitRelativePath.includes("clips_in_time_order/"));
+  if (!pick.length) pick = all;
+  files.forEach((f) => URL.revokeObjectURL(f.url));
+  files = pick.map((f) => {
+    const path = f.webkitRelativePath.split("/").slice(1).join("/") || f.name;
+    const clip = clipKey(path);
+    return { path, clip, clipNo: clipNo(clip), name: f.name, url: URL.createObjectURL(f), frames: null };
+  }).sort((a, b) => a.clipNo - b.clipNo || a.path.split("/").slice(0, -1).join("/").localeCompare(b.path.split("/").slice(0, -1).join("/")) || partNo(a.name) - partNo(b.name) || a.name.localeCompare(b.name));
+  for (const f of files) {
+    if (!state.clips[f.clip]) state.clips[f.clip] = { subjects: [...(SUGGEST[f.clipNo] || ["subject 1"])] };
+    if (!state.marks[f.path]) state.marks[f.path] = [];
+  }
+  $("empty").hidden = !!files.length;
+  $("editor").hidden = !files.length;
+  renderList();
+  if (files.length) open(0);
+  save();
+});
+
+function renderList() {
+  const nav = $("list");
+  nav.innerHTML = "";
+  let last = null;
+  files.forEach((f, i) => {
+    if (f.clip !== last) {
+      const h = document.createElement("div");
+      h.className = "clip";
+      h.textContent = f.clip;
+      nav.appendChild(h);
+      last = f.clip;
+    }
+    const d = document.createElement("div");
+    d.className = "file" + (i === cur ? " active" : "");
+    const label = f.path.split("/").length > 2 ? f.path.split("/").slice(2).join("/") : f.name;
+    d.innerHTML = `<span>${escapeHtml(label.replace(/\.\w+$/, ""))}</span><span class="n">${(state.marks[f.path] || []).length}</span>`;
+    d.onclick = () => open(i);
+    nav.appendChild(d);
+  });
+}
+
+function open(i) {
+  if (i < 0 || i >= files.length) return;
+  cur = i;
+  const f = files[i];
+  const subs = state.clips[f.clip].subjects;
+  if (active >= subs.length) active = 0;
+  v.src = f.url;
+  v.onloadedmetadata = () => {
+    f.frames = Math.max(1, Math.round(v.duration * FPS));
+    seek(0);
+    renderAll();
+  };
+  renderList();
+}
+
+function frameNow() {
+  return Math.max(0, Math.min(Math.round(v.currentTime * FPS - 0.5), (files[cur].frames || 1) - 1));
+}
+function seek(fr) {
+  const f = files[cur];
+  fr = Math.max(0, Math.min((f.frames || 1) - 1, fr));
+  v.pause();
+  v.currentTime = (fr + 0.5) / FPS;
+}
+v.addEventListener("seeked", () => { renderInfo(); renderHead(); });
+v.addEventListener("timeupdate", () => { renderInfo(); renderHead(); });
+v.addEventListener("play", () => $("play").textContent = "Pause");
+v.addEventListener("pause", () => $("play").textContent = "Play");
+
+function renderInfo() {
+  const f = files[cur];
+  if (!f || !f.frames) return;
+  const fr = frameNow();
+  const here = (state.marks[f.path] || []).filter((m) => m.frame === fr).map((m) => m.subject);
+  $("frameinfo").textContent = `frame ${fr} / ${f.frames - 1} · ${(fr / FPS).toFixed(2)} s` + (here.length ? ` · ★ ${here.join(", ")}` : "");
+}
+
+function renderSubjects() {
+  const f = files[cur];
+  const subs = state.clips[f.clip].subjects;
+  const box = $("subjects");
+  box.innerHTML = "<span class='help'>Subject:</span>";
+  subs.forEach((s, i) => {
+    const c = document.createElement("span");
+    c.className = "chip" + (i === active ? " active" : "");
+    c.style.borderColor = i === active ? COLORS[i % 8] : "";
+    c.innerHTML = `<span class="dot" style="background:${COLORS[i % 8]}"></span>${i + 1}. ${escapeHtml(s)}<span class="x" title="rename / remove">✎</span>`;
+    c.onclick = (e) => {
+      if (e.target.classList.contains("x")) return editSubject(i);
+      active = i; renderAll();
+    };
+    box.appendChild(c);
+  });
+  const add = document.createElement("button");
+  add.textContent = "+ subject";
+  add.onclick = () => {
+    const name = prompt("New subject name (e.g. 'left 1', '3', '+')");
+    if (name && name.trim()) { subs.push(name.trim()); active = subs.length - 1; save(); renderAll(); }
+  };
+  box.appendChild(add);
+}
+
+function editSubject(i) {
+  const f = files[cur];
+  const subs = state.clips[f.clip].subjects;
+  const old = subs[i];
+  const name = prompt(`Rename "${old}" (leave empty to remove it and its keyframes in this clip)`, old);
+  if (name === null) return;
+  const clipFiles = files.filter((x) => x.clip === f.clip);
+  if (!name.trim()) {
+    subs.splice(i, 1);
+    clipFiles.forEach((x) => state.marks[x.path] = state.marks[x.path].filter((m) => m.subject !== old));
+    active = 0;
+  } else {
+    subs[i] = name.trim();
+    clipFiles.forEach((x) => state.marks[x.path].forEach((m) => { if (m.subject === old) m.subject = name.trim(); }));
+  }
+  save(); renderAll(); renderList();
+}
+
+function subjectColor(name) {
+  const subs = state.clips[files[cur].clip].subjects;
+  const i = subs.indexOf(name);
+  return COLORS[(i < 0 ? 7 : i) % 8];
+}
+
+function renderTimeline() {
+  const f = files[cur];
+  const tl = $("timeline");
+  tl.innerHTML = "";
+  if (!f.frames) return;
+  const subs = state.clips[f.clip].subjects;
+  const n = Math.max(1, subs.length);
+  const laneH = 40 / n;
+  subs.forEach((s, i) => {
+    const lane = document.createElement("div");
+    lane.className = "lane";
+    lane.style.top = (3 + laneH * (i + 0.5)) + "px";
+    tl.appendChild(lane);
+  });
+  for (const m of state.marks[f.path] || []) {
+    const i = subs.indexOf(m.subject);
+    const t = document.createElement("div");
+    t.className = "tick";
+    t.style.left = ((m.frame + 0.5) / f.frames * 100) + "%";
+    t.style.top = (3 + laneH * Math.max(0, i)) + "px";
+    t.style.height = Math.max(6, laneH - 2) + "px";
+    t.style.background = subjectColor(m.subject);
+    t.title = `${m.subject} @ ${m.frame}`;
+    tl.appendChild(t);
+  }
+  const h = document.createElement("div");
+  h.className = "head";
+  h.id = "head";
+  tl.appendChild(h);
+  renderHead();
+}
+function renderHead() {
+  const f = files[cur], h = $("head");
+  if (!f || !f.frames || !h) return;
+  h.style.left = ((frameNow() + 0.5) / f.frames * 100) + "%";
+}
+(() => {
+  const tl = $("timeline");
+  let drag = false;
+  const go = (e) => {
+    const f = files[cur];
+    if (!f || !f.frames) return;
+    const r = tl.getBoundingClientRect();
+    seek(Math.floor((e.clientX - r.left) / r.width * f.frames));
+  };
+  tl.addEventListener("pointerdown", (e) => { drag = true; tl.setPointerCapture(e.pointerId); go(e); });
+  tl.addEventListener("pointermove", (e) => { if (drag) go(e); });
+  tl.addEventListener("pointerup", () => drag = false);
+})();
+
+function grab() {
+  try {
+    const c = document.createElement("canvas");
+    const s = 152 / Math.max(v.videoWidth, v.videoHeight);
+    c.width = Math.round(v.videoWidth * s); c.height = Math.round(v.videoHeight * s);
+    c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+    return c.toDataURL("image/jpeg", 0.7);
+  } catch (e) { return null; }
+}
+
+function mark() {
+  const f = files[cur];
+  const subs = state.clips[f.clip].subjects;
+  if (!subs.length) return alert("Add a subject first.");
+  const s = subs[active], fr = frameNow();
+  const ms = state.marks[f.path];
+  if (ms.some((m) => m.subject === s && m.frame === fr)) return;
+  ms.push({ subject: s, frame: fr, note: "" });
+  ms.sort((a, b) => a.frame - b.frame);
+  const img = grab();
+  if (img) thumbCache[f.path + "|" + fr] = img;
+  save(); renderAll(); renderList();
+}
+function unmark() {
+  const f = files[cur];
+  const s = state.clips[f.clip].subjects[active], fr = frameNow();
+  state.marks[f.path] = state.marks[f.path].filter((m) => !(m.subject === s && m.frame === fr));
+  save(); renderAll(); renderList();
+}
+
+function renderThumbs() {
+  const f = files[cur];
+  const box = $("thumbs");
+  box.innerHTML = "";
+  for (const m of state.marks[f.path] || []) {
+    const d = document.createElement("div");
+    d.className = "thumb";
+    const src = thumbCache[f.path + "|" + m.frame];
+    d.innerHTML = (src ? `<img src="${src}">` : `<div class="ph"></div>`) +
+      `<div class="cap"><span class="chip" style="padding:0;border:0"><span class="dot" style="background:${subjectColor(m.subject)}"></span></span>${escapeHtml(m.subject)} · ${m.frame}</div>`;
+    const note = document.createElement("input");
+    note.placeholder = "note (optional)";
+    note.value = m.note || "";
+    note.onclick = (e) => e.stopPropagation();
+    note.onkeydown = (e) => e.stopPropagation();
+    note.oninput = () => { m.note = note.value; save(); };
+    d.appendChild(note);
+    d.onclick = () => seek(m.frame);
+    box.appendChild(d);
+  }
+}
+
+function renderAll() {
+  if (cur < 0) return;
+  renderSubjects(); renderTimeline(); renderThumbs(); renderInfo();
+}
+
+function jumpMark(dir) {
+  const f = files[cur], fr = frameNow();
+  const frs = [...new Set((state.marks[f.path] || []).map((m) => m.frame))].sort((a, b) => a - b);
+  const t = dir > 0 ? frs.find((x) => x > fr) : frs.reverse().find((x) => x < fr);
+  if (t !== undefined) seek(t);
+}
+
+$("prev1").onclick = () => seek(frameNow() - 1);
+$("next1").onclick = () => seek(frameNow() + 1);
+$("prev10").onclick = () => seek(frameNow() - 10);
+$("next10").onclick = () => seek(frameNow() + 10);
+$("play").onclick = () => v.paused ? v.play() : v.pause();
+$("mark").onclick = mark;
+$("unmark").onclick = unmark;
+
+document.addEventListener("keydown", (e) => {
+  if (cur < 0 || e.target.tagName === "INPUT") return;
+  const k = e.key;
+  if (k === " ") { e.preventDefault(); v.paused ? v.play() : v.pause(); }
+  else if (k === "ArrowLeft") { e.preventDefault(); seek(frameNow() - (e.shiftKey ? 10 : 1)); }
+  else if (k === "ArrowRight") { e.preventDefault(); seek(frameNow() + (e.shiftKey ? 10 : 1)); }
+  else if (k === "k" || k === "K") mark();
+  else if (k === "Delete" || k === "Backspace") unmark();
+  else if (k === "[") jumpMark(-1);
+  else if (k === "]") jumpMark(1);
+  else if (k === "n" || k === "N") open(cur + 1);
+  else if (k === "p" || k === "P") open(cur - 1);
+  else if (/^[1-9]$/.test(k)) {
+    const subs = state.clips[files[cur].clip].subjects;
+    if (+k <= subs.length) { active = +k - 1; renderAll(); }
+  }
+});
+
+$("exp").onclick = () => {
+  const out = { version: 1, fps: FPS, exported: new Date().toISOString(), clips: {} };
+  for (const f of files) {
+    const c = out.clips[f.clip] || (out.clips[f.clip] = { subjects: state.clips[f.clip].subjects, videos: {} });
+    c.videos[f.path] = { frames: f.frames, keyframes: state.marks[f.path] || [] };
+  }
+  // keep annotations for videos not opened this session
+  for (const [p, ms] of Object.entries(state.marks)) {
+    if (files.some((f) => f.path === p)) continue;
+    const clip = clipKey(p);
+    const c = out.clips[clip] || (out.clips[clip] = { subjects: (state.clips[clip] || {}).subjects || [], videos: {} });
+    c.videos[p] = { frames: null, keyframes: ms };
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 1)], { type: "application/json" }));
+  a.download = "keyframes.json";
+  a.click();
+};
+
+$("imp").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  try {
+    const d = JSON.parse(await f.text());
+    for (const [clip, c] of Object.entries(d.clips || {})) {
+      state.clips[clip] = { subjects: c.subjects || [] };
+      for (const [p, vd] of Object.entries(c.videos || {})) state.marks[p] = vd.keyframes || [];
+    }
+    save(); renderList(); renderAll();
+  } catch (err) { alert("Could not read that JSON: " + err.message); }
+  e.target.value = "";
+});
+
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+load();
+
+/* keyframes.json
+{
+  "version": 1, "fps": 30,
+  "clips": {
+    "clip_2_left1_transform_right1_lean": {
+      "subjects": ["left 1→2", "right 1"],
+      "videos": {
+        "clips_in_time_order/clip_2_.../left_1_transform_2/left_1_transform_2-3.mp4": {
+          "frames": 97,
+          "keyframes": [{"subject": "left 1→2", "frame": 40, "note": "kicks the ball"}]
+        }
+      }
+    }
+  }
+}
+Frame numbers are 0-based at 30 fps, per video file. */
+</script>
+</body>
+</html>
