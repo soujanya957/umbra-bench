@@ -14,6 +14,11 @@ out here. Every subject is centred, displacement comes later.
     python scripts/story_solve.py prep            # square targets + the run list
     python scripts/story_solve.py run [--only c02]
     python scripts/story_solve.py report
+
+--independent (2026-11-13, after the chained run cast every subject small and in the base
+shadows): every keyframe is cropped tight to its own subject and solved on its own, with its
+own fit (scale up to --fit-scale-max) and a pose-library start, into results/icra_story/
+solve_indep/. Sizes then differ between keyframes; poses are no longer chained.
 """
 
 import argparse
@@ -40,6 +45,7 @@ STAGES = {
 SLIDER_CLIPS = {1, 3, 4, 6}
 CUTOUT_CLIPS = {5}
 MARGIN = 40  # film px of white kept around the widest frame of a sequence
+TIGHT = 0.06  # --independent: margin around a keyframe's own subject, as a fraction of its size
 
 
 def part_no(video):
@@ -69,11 +75,20 @@ def prep(a):
         for i, t in enumerate(ts):
             im = cv2.imread(os.path.join(KF, t["id"] + ".png"), cv2.IMREAD_GRAYSCALE)
             H, W = im.shape
-            sq = np.full((side, side), 255, np.uint8)
-            # centred horizontally, ground (canvas bottom row) kept at the square's bottom
-            x0 = (W - side) // 2
-            src = im[max(0, H - side):, max(0, x0):max(0, x0) + min(side, W)]
-            sq[side - src.shape[0]:, (side - src.shape[1]) // 2:(side - src.shape[1]) // 2 + src.shape[1]] = src
+            if a.independent:  # a square just around this keyframe's subject
+                ys, xs = np.nonzero(im < 128)
+                h, w = ys.max() - ys.min() + 1, xs.max() - xs.min() + 1
+                side = int(max(h, w) * (1 + 2 * TIGHT))
+                sq = np.full((side, side), 255, np.uint8)
+                sub = im[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+                y0, x0 = (side - h) // 2, (side - w) // 2
+                sq[y0:y0 + h, x0:x0 + w] = sub
+            else:
+                sq = np.full((side, side), 255, np.uint8)
+                # centred horizontally, ground (canvas bottom row) kept at the square's bottom
+                x0 = (W - side) // 2
+                src = im[max(0, H - side):, max(0, x0):max(0, x0) + min(side, W)]
+                sq[side - src.shape[0]:, (side - src.shape[1]) // 2:(side - src.shape[1]) // 2 + src.shape[1]] = src
             p = os.path.join(d, f"kf_{i:02d}.png")
             cv2.imwrite(p, sq)
             frames.append({"png": p, **{k: t[k] for k in ("id", "video", "frame", "subject")}})
@@ -89,34 +104,48 @@ def run(a):
     if a.only:
         runs = [r for r in runs if r["name"].startswith(a.only)]
     for r in runs:
-        out = os.path.join(OUT, r["name"], "solve")
-        if glob.glob(os.path.join(out, "summary_*.json")) and not a.force:
-            print(f"{r['name']}: done, skipped", flush=True)
-            continue
         stage = json.load(open(STAGES[r["stage"]], encoding="utf-8"))
-        cmd = [PY, "scripts/run_sequence.py", "--urdf", "urdf/SO101/so101_new_calib.urdf",
-               "--stage-json", STAGES[r["stage"]], "--n-robots", str(len(stage["bases"])),
-               "--renderer", "nvdiffrast", "--floor", "mesh", "--fit-target",
-               "--pose-library", "auto", "--outdir", out,
-               "--targets", *[f["png"] for f in r["frames"]]]
-        t0 = time.time()
-        print(f"{r['name']}: {len(r['frames'])} keyframes on {r['stage']} ...", flush=True)
-        log = open(os.path.join(OUT, r["name"], "solve.log"), "w", encoding="utf-8")
-        p = subprocess.run(cmd, cwd=FLEET, stdout=log, stderr=subprocess.STDOUT)
-        print(f"{r['name']}: exit {p.returncode} in {time.time() - t0:.0f} s", flush=True)
+        jobs = ([(os.path.join(OUT, r["name"], f"solve_k{i:02d}"), [f["png"]]) for i, f in enumerate(r["frames"])]
+                if a.independent else [(os.path.join(OUT, r["name"], "solve"), [f["png"] for f in r["frames"]])])
+        for out, pngs in jobs:
+            if glob.glob(os.path.join(out, "summary_*.json")) and not a.force:
+                print(f"{os.path.relpath(out, OUT)}: done, skipped", flush=True)
+                continue
+            cmd = [PY, "scripts/run_sequence.py", "--urdf", "urdf/SO101/so101_new_calib.urdf",
+                   "--stage-json", STAGES[r["stage"]], "--n-robots", str(len(stage["bases"])),
+                   "--renderer", "nvdiffrast", "--floor", "mesh", "--fit-target",
+                   "--fit-scale-max", str(a.fit_scale_max),
+                   "--pose-library", "auto", "--outdir", out, "--targets", *pngs]
+            t0 = time.time()
+            os.makedirs(out, exist_ok=True)
+            log = open(os.path.join(out, "solve.log"), "w", encoding="utf-8")
+            p = subprocess.run(cmd, cwd=FLEET, stdout=log, stderr=subprocess.STDOUT)
+            print(f"{os.path.relpath(out, OUT)}: {len(pngs)} target(s) on {r['stage']}, exit {p.returncode} "
+                  f"in {time.time() - t0:.0f} s", flush=True)
+
+
+def solved_frames(name, out=None):
+    """The solved keyframes of a sequence in order (summary frame records), chained or not."""
+    out = out or OUT
+    one = sorted(glob.glob(os.path.join(out, name, "solve", "summary_*.json")))
+    if one:
+        return json.load(open(one[-1], encoding="utf-8"))["frames"]
+    fr = []
+    for d in sorted(glob.glob(os.path.join(out, name, "solve_k*"))):
+        s = sorted(glob.glob(os.path.join(d, "summary_*.json")))
+        if s:
+            fr += json.load(open(s[-1], encoding="utf-8"))["frames"]
+    return fr
 
 
 def report(a):
     runs = json.load(open(os.path.join(OUT, "runs.json"), encoding="utf-8"))
     print(f"{'sequence':<22}{'stage':<16}{'kf':>3}  IoU per keyframe")
     for r in runs:
-        s = sorted(glob.glob(os.path.join(OUT, r["name"], "solve", "summary_*.json")))
-        if not s:
+        ious = [f["iou"] for f in solved_frames(r["name"])]
+        if not ious:
             print(f"{r['name']:<22}{r['stage']:<16}{len(r['frames']):>3}  (not solved)")
             continue
-        d = json.load(open(s[-1], encoding="utf-8"))
-        fr = d.get("frames", [])
-        ious = [f.get("best_iou", f.get("iou")) for f in fr]
         print(f"{r['name']:<22}{r['stage']:<16}{len(r['frames']):>3}  " + " ".join(f"{x:.2f}" for x in ious if x is not None))
 
 
@@ -125,5 +154,9 @@ if __name__ == "__main__":
     p.add_argument("cmd", choices=["prep", "run", "report"])
     p.add_argument("--only", default=None, help="run: sequences whose name starts with this")
     p.add_argument("--force", action="store_true")
+    p.add_argument("--independent", action="store_true", help="tight crop and one solve per keyframe")
+    p.add_argument("--fit-scale-max", type=float, default=1.6)
     a = p.parse_args()
+    if a.independent:
+        OUT = os.path.join(BENCH, "results", "icra_story", "solve_indep")
     {"prep": prep, "run": run, "report": report}[a.cmd](a)
