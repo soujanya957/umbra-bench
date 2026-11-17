@@ -11,6 +11,11 @@ server-side safety gate (velocity ceiling, joint clamping, ramp floor) and
 its E-stop semantics apply unchanged. Clips play in the order given, each
 with its own start ramp from the fleet's current pose.
 
+LeSlider carriages: a clip's lanes may carry carriage_s (e.g. shadow_traj.choreography
+clips). With --drive-carriages the server drives each arm's carriage along it
+(render_server/carriage.py: the rails must be homed with leslider_rail.py first);
+without it the arms play alone and the carriages stay where they are.
+
 SAFETY: closing this window (or Ctrl+C) disconnects the socket, and the
 server's contract for a disconnect is E-STOP — the fleet freezes in place
 with torque held. The Play page's E-STOP button also remains available.
@@ -29,7 +34,7 @@ CHOREO = FSA / "choreographies"
 
 
 async def deploy_clip(name: str, arms: str, hz: int, ramp_s: float,
-                      backend: str) -> bool:
+                      backend: str, drive_carriages: bool = False) -> bool:
     import websockets
     clip = json.loads((CHOREO / f"{name}.json").read_text(encoding="utf-8"))
     fleet_ids = [a.split("|")[0] for a in arms.split(",") if a]
@@ -55,7 +60,9 @@ async def deploy_clip(name: str, arms: str, hz: int, ramp_s: float,
               "missing arms to --arms or deploy a smaller clip.")
         return False
     payload = [{"id": fid, "start_frame": r.get("start_frame", 0),
-                "frames": r["frames"]} for fid, r in mapping]
+                "frames": r["frames"],
+                **({"carriage_s": r["carriage_s"]} if r.get("carriage_s") else {})}
+               for fid, r in mapping]
     if not payload:
         print(f"  {name}: clip carries no frames, skipped")
         return True
@@ -80,10 +87,17 @@ async def deploy_clip(name: str, arms: str, hz: int, ramp_s: float,
             t = m.get("type")
             if t == "connected":
                 await ws.send(json.dumps({"type": "start", "ramp_s": ramp_s,
-                                          "loop": False, "robots": payload}))
-                print("  connected — ramping to start pose")
+                                          "loop": False, "robots": payload,
+                                          "drive_carriages": drive_carriages}))
+                print("  connected — " + ("carriages, then " if drive_carriages else "")
+                      + "ramping to start pose")
+            elif t == "planned":
+                for w in m.get("warnings") or []:
+                    print(f"  warning: {w}")
             elif t == "progress":
-                if m.get("phase") == "play":
+                if m.get("phase") == "carriages":
+                    print("  moving the carriages to the start")
+                elif m.get("phase") == "play":
                     fr = m.get("frame", 0)
                     print(f"\r  playing frame {fr}/{m.get('n', '?')}   ",
                           end="", flush=True)
@@ -119,7 +133,8 @@ async def main_async(a) -> int:
             print(f"[!] {name}: not in {CHOREO}")
             return 1
     for i, name in enumerate(a.clip):
-        ok = await deploy_clip(name, a.arms, a.hz, a.ramp, a.backend)
+        ok = await deploy_clip(name, a.arms, a.hz, a.ramp, a.backend,
+                               a.drive_carriages)
         if not ok:
             print("stopping the sequence here.")
             return 1
@@ -141,6 +156,9 @@ def main():
                          "authored -- every packed clip is 30)")
     ap.add_argument("--ramp", type=float, default=2.0)
     ap.add_argument("--backend", default="ws://127.0.0.1:8001")
+    ap.add_argument("--drive-carriages", action="store_true",
+                    help="drive the LeSlider carriages along the clip's "
+                         "carriage_s (rails homed with leslider_rail.py)")
     a = ap.parse_args()
     print("Close this window or Ctrl+C at ANY time = E-STOP "
           "(fleet freezes in place, torque held).")
